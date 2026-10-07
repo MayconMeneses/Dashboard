@@ -1,4 +1,7 @@
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+const BUNDLED_BOUNDARY = resolve(import.meta.dirname, '../../boundary/croata-ibge.geojson');
 
 export interface Config {
   port: number;
@@ -32,8 +35,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     sessionHours: Number(env.SESSION_HOURS ?? 12),
     webDist: resolve(import.meta.dirname, '../../web/dist'),
     // Limite municipal oficial (GeoJSON) opcional, ex.: malha municipal do IBGE. Nunca é desenhado um limite "inventado".
-    boundaryFile: env.BOUNDARY_FILE ? resolve(env.BOUNDARY_FILE) : null,
-    boundarySource: env.BOUNDARY_SOURCE ?? 'Limite municipal fornecido pelo administrador',
+    boundaryFile: env.BOUNDARY_FILE ? resolve(env.BOUNDARY_FILE) : existsSync(BUNDLED_BOUNDARY) ? BUNDLED_BOUNDARY : null,
+    boundarySource:
+      env.BOUNDARY_SOURCE ??
+      (env.BOUNDARY_FILE
+        ? 'Limite municipal fornecido pelo administrador'
+        : 'IBGE – Mapa Municipal de Croatá-CE (2304236), Malha Territorial ed. 04/2021; contorno vetorizado do PDF (precisão aproximada)'),
     ...overrides,
   };
 }

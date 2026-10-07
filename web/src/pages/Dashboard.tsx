@@ -7,6 +7,7 @@ import { ChartPanel } from '../components/ChartPanel';
 import { DetailPanel } from '../components/DetailPanel';
 import { DEFAULT_FILTERS, FilterBar } from '../components/FilterBar';
 import { Kpis } from '../components/Kpis';
+import { LocationMaps } from '../components/LocationMaps';
 import { MapPanel } from '../components/MapPanel';
 
 function fromUrl(): Filters {
@@ -53,6 +54,7 @@ export function DashboardPage({ me, epoch, goImport }: { me: Me; epoch: number; 
       {summary.error && <div className="notice erro" role="alert">{summary.error} <button className="small" onClick={summary.reload}>Tentar de novo</button></div>}
       <Kpis summary={summary.data} loading={summary.loading} />
       <FilterBar filters={filters} onChange={setFilters} localities={localities} />
+      <LocationMaps filters={filters} epoch={epoch} selected={filters.locality} onSelect={select} />
       <div className="grid main-grid">
         <ChartPanel filters={filters} epoch={epoch} selected={filters.locality} onSelect={select} />
         <MapPanel me={me} filters={filters} epoch={epoch} selected={filters.locality} onSelect={select} focus={focus} />

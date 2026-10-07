@@ -186,12 +186,19 @@ export function getChart(db: Db, f: Filters, mode: 'busca' | 'exame', sort: 'nom
   };
 }
 
-export function getLocalities(db: Db) {
+export function getLocalities(db: Db, f: Filters = {}) {
   const { sql } = ctx(db);
+  const params: (string | number)[] = [];
+  // O filtro de localidade não se aplica aqui: a lista serve para escolher a localidade.
+  const w = where({ ...f, locality: undefined, layers: undefined, q: undefined }, params);
+  const full = w ? `${w} AND locality_key IS NOT NULL` : ' WHERE locality_key IS NOT NULL';
   return db
     .prepare(
       `${sql} SELECT locality_key AS key, MIN(locality_raw) AS name, COUNT(*) AS registros,
-        SUM(type = 'captura') AS capturas, SUM(type = 'visita') AS visitas FROM rec WHERE locality_key IS NOT NULL GROUP BY locality_key ORDER BY name COLLATE NOCASE`,
+        SUM(type = 'captura') AS capturas, SUM(type = 'visita') AS visitas,
+        SUM(type = 'captura' AND exam_result = 'positivo') AS positivos,
+        SUM(type = 'captura' AND exam_result = 'negativo') AS negativos
+       FROM rec${full} GROUP BY locality_key ORDER BY name COLLATE NOCASE`,
     )
     .all();
 }

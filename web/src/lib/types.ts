@@ -28,6 +28,8 @@ export interface Locality {
   registros: number;
   capturas: number;
   visitas: number;
+  positivos?: number;
+  negativos?: number;
 }
 export interface Filters {
   from?: string;

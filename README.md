@@ -63,6 +63,12 @@ O leitor foi ajustado ao arquivo real da campanha:
 
 Campos com possíveis dados pessoais (morador, proprietário, telefone, CPF…) são **descartados** na importação (o arquivo original os preserva).
 
+## Mapas
+
+- **Onde fica Croatá:** três mapas — Brasil (Ceará em destaque), Ceará (posição de Croatá) e Croatá com o limite do IBGE e as **áreas das localidades desenhadas por você no KML** (pasta “Area das Localidades”). Passe o mouse sobre uma área para ver o nome e as contagens (capturas, positivos, negativos); clique para selecionar a localidade (o gráfico, o mapa e a tabela acompanham). As cores seguem os filtros: vermelho = com exame positivo, azul = só negativos/sem resultado, cinza = sem capturas.
+- Brasil e Ceará são mapas **esquemáticos** (© @svg-maps/brazil, CC BY 4.0); a posição de Croatá no mapa do Ceará é aproximada. O mapa de Croatá usa dados reais (limite do IBGE + suas áreas).
+- **Mapa interativo** (Leaflet): as mesmas áreas, com zoom, nome ao passar o mouse e camadas de capturas, PITs, visitas e pontos de referência.
+
 ## Regras de significado dos dados
 
 - **Busca** e **exame** são medidas separadas e nunca são somadas. Unidades: o gráfico da busca conta *registros* (capturas e visitas); o do exame conta *registros de captura*. A soma de triatomíneos usa só registros com quantidade informada.
@@ -82,7 +88,7 @@ Campos com possíveis dados pessoais (morador, proprietário, telefone, CPF…) 
 ## Limitações atuais
 
 - Sem arquivo real da campanha para validar: o reconhecimento de campos é heurístico. Confirme com a equipe quais campos/pastas o sistema de origem exporta e use o mapeamento.
-- **Limite municipal:** não é inventado. O arquivo da campanha não traz o limite de Croatá. Para exibi-lo, baixe a malha oficial (IBGE, malha municipal; confirme o código do município de Croatá/CE no site do IBGE), salve como GeoJSON e inicie com `BOUNDARY_FILE=/caminho/croata.geojson BOUNDARY_SOURCE="IBGE – Malha Municipal"`. Sem isso, o mapa enquadra os dados importados e avisa que o limite não foi carregado. (O ambiente em que o projeto foi construído não tinha acesso ao IBGE, então isso não foi baixado nem testado com o arquivo oficial.)
+- **Limite municipal:** o arquivo da campanha não traz o limite de Croatá. O projeto inclui `boundary/croata-ibge.geojson`, extraído do **PDF oficial do IBGE** (Mapa Municipal de Croatá-CE, código 2304236, Malha Territorial ed. 04/2021): o traçado dos limites foi lido do vetor do PDF e georreferenciado pelas graduações da moldura. Não é o arquivo oficial em GeoJSON/shapefile: a precisão é aproximada (algumas dezenas de metros). Conferências feitas: área ≈ 699 km², todos os 58 registros de captura e os 12 PITs do arquivo da campanha caem dentro do limite; alguns pontos de localidades na divisa podem ficar logo fora. Para usar a malha oficial em GeoJSON (IBGE, Malhas Territoriais), inicie com `BOUNDARY_FILE=/caminho/croata.geojson BOUNDARY_SOURCE="IBGE – Malha Municipal"`.
 - Não há exportação KML/KMZ derivada, tela de gestão de usuários (use o comando acima) nem backup/restauração de banco.
 - Visitas manuais não têm edição (só anular).
 - `node:sqlite` ainda é marcado como experimental pelo Node 22 (aviso no console).
