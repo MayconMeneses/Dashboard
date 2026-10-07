@@ -160,8 +160,13 @@ export function LocationMaps({ filters, epoch, selected, onSelect }: Props) {
               )}
             </div>
           )}
+          <span className="legend-row" role="group" aria-label="Legenda das áreas" style={{ margin: '6px 0' }}>
+            <span className="swatch-item"><span className="swatch" style={{ background: COLORS.positivo }} aria-hidden="true" />Área com exame positivo</span>
+            <span className="swatch-item"><span className="swatch" style={{ background: COLORS.negativo }} aria-hidden="true" />Área só com negativos ou sem resultado</span>
+            <span className="swatch-item"><span className="swatch" style={{ background: '#94a3b8' }} aria-hidden="true" />Área sem capturas</span>
+          </span>
           <p className="small muted">
-            Passe o mouse sobre uma área para ver o nome; clique para selecionar. Vermelho: com exame positivo · azul: só negativos/sem resultado · cinza: sem capturas.{' '}
+            Passe o mouse sobre uma área para ver o nome; clique para selecionar.{' '}
             {boundary.data?.source ? `Limite: ${boundary.data.source}.` : 'Limite municipal não carregado.'}
           </p>
         </figure>
