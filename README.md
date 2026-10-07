@@ -81,6 +81,10 @@ O leitor foi ajustado ao arquivo real da campanha:
 
 Campos com possíveis dados pessoais (morador, proprietário, telefone, CPF…) são **descartados** na importação (o arquivo original os preserva).
 
+## Relatório completo (PDF) e dados em CSV
+
+A aba **Relatório / PDF** reúne **tudo em sequência** (indicadores, mapas, todos os gráficos com “como ler” e avisos, lista de registros e notas). O botão **Baixar PDF** abre a janela de impressão do navegador: escolha *Salvar como PDF* (A4, retrato). Os gráficos saem como na tela. No arquivo HTML compartilhável também há **Baixar dados (CSV)** (sem endereço nem número do imóvel). O relatório respeita os filtros ativos (a lista de filtros aparece no topo).
+
 ## Análises (gráficos)
 
 Seção **Análises**, logo abaixo dos filtros. Cada gráfico tem título, a unidade (o que está sendo contado), **“Como ler”**, avisos sobre os dados, e botões para **ver como tabela**, **baixar PNG** e **baixar CSV**. São interativos: clique em barra, fatia, mês ou célula para filtrar o painel inteiro. Cada gráfico ignora o filtro da própria dimensão, para permitir comparar e trocar a seleção.
