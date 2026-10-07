@@ -48,7 +48,10 @@ export interface Analytics {
   semDataCaptura: number;
   porOrigem: ({ chave: 'captura' | 'pit' | 'nao_informado' } & ExamCounts)[];
   porAmbiente: ({ chave: 'intra' | 'peri' | 'intra_peri' | 'nao_informado' } & ExamCounts)[];
-  faseSexo: { categoria: string; total: number }[];
+  /** quantos registros têm cada tipo (um registro com mais de um tipo conta em cada um) */
+  faseSexo: { categoria: 'Ninfa' | 'Macho' | 'Fêmea' | 'Não informado'; total: number }[];
+  /** combinações exatas dentro do mesmo registro (ex.: "Macho e Fêmea", "Ninfa e Macho") */
+  faseSexoCombinacoes: { combinacao: string; total: number }[];
   especieAmbiente: { especie: string; intra: number; peri: number; intra_peri: number; nao_informado: number; total: number }[];
   tempoAteResultado: {
     faixas: { faixa: string; total: number }[];
@@ -69,11 +72,19 @@ export interface Analytics {
 
 const captures = (rec: SnapshotRec[], f: Filters) => select(rec, { ...f, layers: undefined, q: f.q }).filter((r) => r.type === 'captura');
 
-export function stageSexCategory(r: Pick<SnapshotRec, 'stage' | 'sex'>): string {
-  if (r.stage === 'Ninfa') return 'Ninfa';
-  if (r.stage === 'Ninfa e adulto') return 'Ninfa e adulto';
-  if (r.sex) return r.sex; // Macho, Fêmea, Macho e Fêmea (adultos)
-  return r.stage ?? 'Não informado';
+/** Quais tipos de inseto o registro tem: ninfa, macho e/ou fêmea (a fase/sexo pode vir combinada, ex.: "Ninfa e Macho"). */
+export function stageSexFlags(r: Pick<SnapshotRec, 'stage' | 'sex'>): { ninfa: boolean; macho: boolean; femea: boolean } {
+  const stage = (r.stage ?? '').toLowerCase();
+  const sex = (r.sex ?? '').toLowerCase();
+  return { ninfa: stage.includes('ninfa'), macho: sex.includes('macho'), femea: sex.includes('fêmea') || sex.includes('femea') };
+}
+
+export function stageSexCombination(r: Pick<SnapshotRec, 'stage' | 'sex'>): string {
+  const f = stageSexFlags(r);
+  const parts = [f.ninfa && 'Ninfa', f.macho && 'Macho', f.femea && 'Fêmea'].filter(Boolean) as string[];
+  if (parts.length === 0) return 'Não informado';
+  if (parts.length === 1) return parts[0]!;
+  return parts.length === 2 ? `${parts[0]} e ${parts[1]}` : `${parts[0]}, ${parts[1]} e ${parts[2]}`;
 }
 
 export function analytics(rec: SnapshotRec[], f: Filters): Analytics {
@@ -145,10 +156,20 @@ export function analytics(rec: SnapshotRec[], f: Filters): Analytics {
   const ambienteOrder = ['intra', 'peri', 'intra_peri', 'nao_informado'] as const;
   const ambiente = group(captures(rec, { ...f, environment: undefined }), (r) => (r.environment ?? 'nao_informado') as (typeof ambienteOrder)[number]);
 
-  // --- fase/sexo
-  const fs = new Map<string, number>();
-  for (const r of all) fs.set(stageSexCategory(r), (fs.get(stageSexCategory(r)) ?? 0) + 1);
-  const faseSexo = [...fs].map(([categoria, total]) => ({ categoria, total })).sort((a, b) => b.total - a.total || a.categoria.localeCompare(b.categoria, 'pt-BR'));
+  // --- fase/sexo: presença de cada tipo e combinações exatas
+  const presence = { Ninfa: 0, Macho: 0, 'Fêmea': 0, 'Não informado': 0 };
+  const combos = new Map<string, number>();
+  for (const r of all) {
+    const f = stageSexFlags(r);
+    if (f.ninfa) presence.Ninfa++;
+    if (f.macho) presence.Macho++;
+    if (f.femea) presence['Fêmea']++;
+    if (!f.ninfa && !f.macho && !f.femea) presence['Não informado']++;
+    const c = stageSexCombination(r);
+    combos.set(c, (combos.get(c) ?? 0) + 1);
+  }
+  const faseSexo = (['Fêmea', 'Macho', 'Ninfa', 'Não informado'] as const).map((categoria) => ({ categoria, total: presence[categoria] }));
+  const faseSexoCombinacoes = [...combos].map(([combinacao, total]) => ({ combinacao, total })).sort((a, b) => b.total - a.total || a.combinacao.localeCompare(b.combinacao, 'pt-BR'));
 
   // --- espécie × ambiente
   const se = new Map<string, { intra: number; peri: number; intra_peri: number; nao_informado: number; total: number }>();
@@ -222,6 +243,7 @@ export function analytics(rec: SnapshotRec[], f: Filters): Analytics {
     porOrigem: origemOrder.filter((k) => origem.has(k)).map((chave) => ({ chave, ...origem.get(chave)! })),
     porAmbiente: ambienteOrder.filter((k) => ambiente.has(k)).map((chave) => ({ chave, ...ambiente.get(chave)! })),
     faseSexo,
+    faseSexoCombinacoes,
     especieAmbiente,
     tempoAteResultado: {
       faixas: bins.map(([faixa, fn]) => ({ faixa, total: days.filter(fn).length })),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analytics, stageSexCategory } from '../../web/src/static/analytics.js';
+import { analytics, stageSexCombination, stageSexFlags } from '../../web/src/static/analytics.js';
 import type { SnapshotRec } from '../../web/src/static/engine.js';
 
 let n = 0;
@@ -45,7 +45,9 @@ describe('análises', () => {
   it('origem, ambiente, fase/sexo e espécie × ambiente', () => {
     expect(a.porOrigem.map((x) => [x.chave, x.total])).toEqual([['captura', 2], ['pit', 2], ['nao_informado', 1]]);
     expect(a.porAmbiente.map((x) => [x.chave, x.total])).toEqual([['intra', 2], ['peri', 1], ['intra_peri', 1], ['nao_informado', 1]]);
-    expect(Object.fromEntries(a.faseSexo.map((x) => [x.categoria, x.total]))).toEqual({ 'Fêmea': 1, Ninfa: 1, Macho: 1, 'Ninfa e adulto': 1, 'Não informado': 1 });
+    // presença: um registro com mais de um tipo conta em cada um
+    expect(Object.fromEntries(a.faseSexo.map((x) => [x.categoria, x.total]))).toEqual({ 'Fêmea': 2, Macho: 2, Ninfa: 2, 'Não informado': 1 });
+    expect(Object.fromEntries(a.faseSexoCombinacoes.map((x) => [x.combinacao, x.total]))).toEqual({ 'Fêmea': 1, Macho: 1, Ninfa: 1, 'Ninfa, Macho e Fêmea': 1, 'Não informado': 1 });
     expect(a.especieAmbiente[0]).toMatchObject({ especie: 'Triatoma brasiliensis', intra: 1, peri: 1, intra_peri: 1, total: 3 });
   });
   it('tempo até o resultado: faixas, mediana e exame antes da captura', () => {
@@ -78,8 +80,13 @@ describe('análises', () => {
     const g = analytics(DATA, { species: ['Triatoma brasiliensis'], from: '2026-07-01', to: '2026-07-31' });
     expect(g.linhaDoTempo.map((x) => x.mes)).toEqual(['2026-06', '2026-07']); // o período não restringe a linha do tempo
   });
-  it('fase/sexo', () => {
-    expect(stageSexCategory({ stage: 'Adulto', sex: null })).toBe('Adulto');
-    expect(stageSexCategory({ stage: null, sex: null })).toBe('Não informado');
+  it('fase/sexo: interpreta as combinações do campo', () => {
+    expect(stageSexFlags({ stage: 'Adulto', sex: null })).toEqual({ ninfa: false, macho: false, femea: false });
+    expect(stageSexFlags({ stage: 'Ninfa e adulto', sex: 'Macho' })).toEqual({ ninfa: true, macho: true, femea: false });
+    expect(stageSexFlags({ stage: 'Ninfa e adulto', sex: 'Fêmea' })).toEqual({ ninfa: true, macho: false, femea: true });
+    expect(stageSexCombination({ stage: 'Adulto', sex: 'Macho e Fêmea' })).toBe('Macho e Fêmea');
+    expect(stageSexCombination({ stage: 'Ninfa e adulto', sex: 'Macho' })).toBe('Ninfa e Macho');
+    expect(stageSexCombination({ stage: 'Ninfa e adulto', sex: 'Macho e Fêmea' })).toBe('Ninfa, Macho e Fêmea');
+    expect(stageSexCombination({ stage: null, sex: null })).toBe('Não informado');
   });
 });

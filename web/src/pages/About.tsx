@@ -10,7 +10,7 @@ const FIELD_USE: [string, string][] = [
   ['Data do exame', 'Tempo entre a captura e o resultado do exame.'],
   ['Resultado do Exame a Fresco', 'Positivo/negativo/pendente em todos os gráficos, indicadores e cores. Em branco = “não informado”.'],
   ['Nome do registro (espécie)', 'Espécie do triatomíneo (gráficos de espécie, positividade e mapa de calor).'],
-  ['Ninfa_Macho ou Femea', 'Gráfico de fase e sexo.'],
+  ['Ninfa_Macho ou Femea', 'Gráfico de fase e sexo: ninfa, macho e fêmea (um registro pode ter mais de um tipo) e as combinações.'],
   ['INTRA ou PERI', 'Gráfico de ambiente, filtro e mapa de calor espécie × ambiente.'],
   ['Campanha_Captura ou PIT', 'Origem da captura (campanha × PIT): gráfico, filtro e tabela.'],
   ['Quantidade de Imoveis', 'Indicador de imóveis e gráfico de capturas por 100 imóveis.'],
