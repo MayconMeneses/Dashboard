@@ -32,7 +32,7 @@ export interface ColProfile {
   top?: { value: string; count: number }[];
 }
 
-export type ChartKind = 'bar' | 'hbar' | 'donut' | 'line' | 'hist' | 'stacked' | 'map';
+export type ChartKind = 'bar' | 'hbar' | 'donut' | 'line' | 'hist' | 'stacked' | 'map' | 'scatter';
 
 export interface ChartSpec {
   id: string;
@@ -51,4 +51,9 @@ export interface Kpi {
   label: string;
   value: string;
   hint?: string;
+}
+
+export interface Alert {
+  level: 'info' | 'aviso';
+  text: string;
 }

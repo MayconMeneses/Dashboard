@@ -1,5 +1,5 @@
 import { toDate, toNumber } from './profile.js';
-import type { ChartSpec, ColProfile, Kpi, Row, Table } from './types.js';
+import type { Alert, ChartSpec, ColProfile, Kpi, Row, Table } from './types.js';
 
 export const fmtNum = (n: number) => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(n);
 
@@ -7,7 +7,7 @@ export const fmtNum = (n: number) => new Intl.NumberFormat('pt-BR', { maximumFra
 export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpec[] {
   const out: ChartSpec[] = [];
   const cats = prof.filter((p) => p.type === 'category' && p.unique >= 2).sort((a, b) => a.unique - b.unique);
-  const nums = prof.filter((p) => p.type === 'number' || p.type === 'integer');
+  const nums = prof.filter((p) => (p.type === 'number' || p.type === 'integer') && p.unique > 1);
   const dates = prof.filter((p) => p.type === 'date');
   const bools = prof.filter((p) => p.type === 'boolean');
   const lat = prof.find((p) => p.type === 'lat');
@@ -35,7 +35,68 @@ export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpe
   const c1 = cats.find((c) => c.name !== c0?.name && c.unique <= 8);
   if (c0 && c1 && c0.unique <= 15 && level >= 3) out.push({ id: id('stack'), kind: 'stacked', x: c0.name, stack: c1.name, agg: 'count', title: `${c0.name} × ${c1.name}`, description: `Cruzamento entre “${c0.name}” e “${c1.name}”.`, score: 55 });
 
-  return out.sort((a, b) => b.score - a.score).slice(0, level === 1 ? 4 : level === 2 ? 8 : 14);
+  if (level >= 2) {
+    const pair = bestCorrelation(t, nums.filter((c) => c.unique > 2));
+    if (pair) out.push({ id: id('sc'), kind: 'scatter', x: pair.a, y: pair.b, title: `${pair.a} × ${pair.b}`, description: `Cada ponto é um registro. Correlação de Pearson ${pair.r.toFixed(2).replace('.', ',')} (${Math.abs(pair.r) >= 0.7 ? 'forte' : 'moderada'}); correlação não prova causa.`, score: 65 });
+  }
+
+  return out.sort((a, b) => b.score - a.score).slice(0, level === 1 ? 4 : level === 2 ? 9 : 15);
+}
+
+function pearson(xs: number[], ys: number[]): number {
+  const n = xs.length;
+  const mx = xs.reduce((a, b) => a + b, 0) / n;
+  const my = ys.reduce((a, b) => a + b, 0) / n;
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < n; i++) {
+    sxy += (xs[i]! - mx) * (ys[i]! - my);
+    sxx += (xs[i]! - mx) ** 2;
+    syy += (ys[i]! - my) ** 2;
+  }
+  return sxx && syy ? sxy / Math.sqrt(sxx * syy) : 0;
+}
+
+/** Par de colunas numéricas com maior |correlação| (≥ 0,5), usando só linhas em que ambas têm valor. */
+export function bestCorrelation(t: Table, nums: ColProfile[]): { a: string; b: string; r: number } | null {
+  let best: { a: string; b: string; r: number } | null = null;
+  const cols = nums.slice(0, 8);
+  for (let i = 0; i < cols.length; i++) {
+    for (let j = i + 1; j < cols.length; j++) {
+      const xs: number[] = [];
+      const ys: number[] = [];
+      for (const r of t.rows) {
+        const a = toNumber(r[cols[i]!.name] ?? null);
+        const b = toNumber(r[cols[j]!.name] ?? null);
+        if (a != null && b != null) (xs.push(a), ys.push(b));
+      }
+      if (xs.length < 8) continue;
+      const r = pearson(xs, ys);
+      if (Math.abs(r) >= 0.5 && (!best || Math.abs(r) > Math.abs(best.r))) best = { a: cols[i]!.name, b: cols[j]!.name, r };
+    }
+  }
+  return best;
+}
+
+/** Alertas de qualidade dos dados (ausentes, colunas constantes, duplicadas, valores extremos). */
+export function qualityAlerts(t: Table, prof: ColProfile[]): Alert[] {
+  const out: Alert[] = [];
+  const dup = t.rows.length - new Set(t.rows.map((r) => JSON.stringify(t.columns.map((c) => r[c])))).size;
+  if (dup > 0) out.push({ level: 'aviso', text: `${dup} linha(s) idêntica(s) a outra (possíveis duplicatas).` });
+  for (const p of prof) {
+    if (p.filled === 0) out.push({ level: 'aviso', text: `“${p.name}” está totalmente vazia.` });
+    else if (p.missing / t.rows.length >= 0.3) out.push({ level: 'aviso', text: `“${p.name}” tem ${Math.round((p.missing / t.rows.length) * 100)}% de células vazias; os gráficos usam só as preenchidas.` });
+    if (p.filled > 1 && p.unique === 1) out.push({ level: 'info', text: `“${p.name}” tem um único valor em todas as linhas; não gera gráfico.` });
+    if ((p.type === 'number' || p.type === 'integer') && p.filled >= 8) {
+      const v = t.rows.map((r) => toNumber(r[p.name] ?? null)).filter((x): x is number => x != null).sort((a, b) => a - b);
+      const q = (f: number) => v[Math.floor((v.length - 1) * f)]!;
+      const iqr = q(0.75) - q(0.25);
+      const out_ = iqr > 0 ? v.filter((x) => x < q(0.25) - 3 * iqr || x > q(0.75) + 3 * iqr).length : 0;
+      if (out_) out.push({ level: 'info', text: `“${p.name}” tem ${out_} valor(es) muito distante(s) dos demais (confira se são erros de digitação).` });
+    }
+  }
+  return out;
 }
 
 export function kpis(t: Table, prof: ColProfile[]): Kpi[] {

@@ -24,3 +24,4 @@ main{max-width:1200px;margin:0 auto;padding:16px}
 table{border-collapse:collapse;width:100%;font-size:.85rem}th,td{padding:4px 8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
 th{position:sticky;top:0;background:var(--surface)}
 @media print{.top .actions,.drop,.x{display:none}.chart{break-inside:avoid}}
+#alertsBox{margin-bottom:16px}#alerts{margin:0;padding-left:18px}#alerts li.aviso::marker{color:#d97706}#alerts li.info::marker{color:var(--accent)}

@@ -58,3 +58,26 @@ describe('perfil e gráficos', () => {
     expect(mean.labels).not.toContain('2024-04-05');
   });
 });
+
+import { bestCorrelation, qualityAlerts } from '../src/suggest.js';
+describe('qualidade e correlação', () => {
+  it('detecta correlação, duplicatas, vazias e constantes', async () => {
+    const L = ['a,b,c,k'];
+    for (let i = 0; i < 20; i++) L.push(`${i},${i * 2 + (i % 3)},,x`);
+    L.push('1,3,,x');
+    const t = (await parseFile('q.csv', enc(L.join('\n')))).tables[0]!;
+    const p = profileTable(t);
+    const c = bestCorrelation(t, p.filter((x) => x.type === 'integer' && x.unique > 2));
+    expect(c).toMatchObject({ a: 'a', b: 'b' });
+    expect(c!.r).toBeGreaterThan(0.95);
+    const txt = qualityAlerts(t, p).map((a) => a.text).join('|');
+    expect(txt).toMatch(/idêntica/);
+    expect(txt).toMatch(/“c” está totalmente vazia/);
+    expect(txt).toMatch(/“k” tem um único valor/);
+  });
+  it('permite forçar o tipo de uma coluna', async () => {
+    const t = (await parseFile('f.csv', enc('cod,v\n1,a\n2,b\n3,a\n1,b\n2,a\n3,b\n1,a\n'))).tables[0]!;
+    expect(profileTable(t).find((x) => x.name === 'cod')!.type).not.toBe('text');
+    expect(profileTable(t, { cod: 'text' }).find((x) => x.name === 'cod')!.type).toBe('text');
+  });
+});
