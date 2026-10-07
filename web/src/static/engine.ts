@@ -54,6 +54,7 @@ interface Filters {
   search?: string[];
   exam?: string[];
   channel?: string[];
+  species?: string[];
   q?: string;
 }
 
@@ -74,6 +75,7 @@ export function parseFilters(p: URLSearchParams): Filters {
   f.search = list(p.get('search'))?.filter((x) => SEARCH.includes(x));
   f.exam = list(p.get('exam'))?.filter((x) => EXAM.includes(x));
   f.channel = list(p.get('channel'))?.filter((x) => ['captura', 'pit'].includes(x));
+  f.species = list(p.get('species'))?.filter((x) => x.length <= 60).slice(0, 20);
   const q = p.get('q');
   if (q && q.trim()) f.q = q.trim().slice(0, 80);
   return f;
@@ -89,6 +91,7 @@ function select(rec: SnapshotRec[], f: Filters, opts: { skipLocality?: boolean }
     if (f.search?.length && !f.search.includes(r.search_result)) return false;
     if (f.exam?.length && !f.exam.includes(r.exam_result)) return false;
     if (f.channel?.length && !(r.channel !== null && f.channel.includes(r.channel))) return false;
+    if (f.species?.length && !(r.species !== null && f.species.includes(r.species))) return false;
     if (q && ![r.name, r.locality_raw, r.species].some((v) => v !== null && v.toLowerCase().includes(q))) return false;
     return true;
   });
@@ -205,8 +208,13 @@ export function localities(s: Snapshot, f: Filters) {
   return [...by.values()].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase(), 'pt-BR'));
 }
 
+const GEO_TYPES = ['localidade', 'area', 'rota'];
+
 export function mapFeatures(s: Snapshot, f: Filters) {
-  const rows = select(s.rec, { ...f, locality: undefined, q: undefined }).slice(0, 20000);
+  // Áreas, localidades e rotas fazem parte do desenho do mapa: só a escolha de camadas as afeta.
+  const geo = s.rec.filter((r) => GEO_TYPES.includes(r.type) && (!f.layers?.length || f.layers.includes(r.type)));
+  const points = select(s.rec, { ...f, locality: undefined, q: undefined }).filter((r) => !GEO_TYPES.includes(r.type));
+  const rows = [...geo, ...points].slice(0, 20000);
   const features = [];
   for (const r of rows) {
     const geometry = r.geometry ?? (r.lat != null && r.lng != null ? { type: 'Point', coordinates: [r.lng, r.lat] } : null);
@@ -221,6 +229,12 @@ export function mapFeatures(s: Snapshot, f: Filters) {
     });
   }
   return { type: 'FeatureCollection', features };
+}
+
+export function facets(s: Snapshot) {
+  const by = new Map<string, number>();
+  for (const r of s.rec) if (r.type === 'captura' && r.species) by.set(r.species, (by.get(r.species) ?? 0) + 1);
+  return { species: [...by].map(([value, count]) => ({ value, count })).sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)) };
 }
 
 const SORTABLE = new Set(['channel', 'environment', 'type', 'name', 'locality_raw', 'visit_date', 'search_result', 'exam_result', 'triatomine_count', 'species', 'origin']);
@@ -260,6 +274,8 @@ export function handle(s: Snapshot, url: string): unknown {
       return summary(s, f);
     case '/api/chart':
       return chart(s, f, p.get('mode') === 'exame' ? 'exame' : 'busca', p.get('sort') === 'total' ? 'total' : 'nome', p.get('hideEmpty') === 'true');
+    case '/api/facets':
+      return facets(s);
     case '/api/localities':
       return localities(s, f);
     case '/api/map':

@@ -10,6 +10,7 @@ export interface Filters {
   search?: string[];
   exam?: string[];
   channel?: string[];
+  species?: string[];
   q?: string;
 }
 
@@ -29,6 +30,7 @@ export function parseFilters(query: Record<string, unknown>): Filters {
   f.search = list(query.search)?.filter((x) => SEARCH.includes(x));
   f.exam = list(query.exam)?.filter((x) => EXAM.includes(x));
   f.channel = list(query.channel)?.filter((x) => ['captura', 'pit'].includes(x));
+  f.species = list(query.species)?.filter((x) => x.length <= 60).slice(0, 20);
   if (typeof query.q === 'string' && query.q.trim()) f.q = query.q.trim().slice(0, 80);
   return f;
 }
@@ -62,6 +64,7 @@ function where(f: Filters, params: (string | number)[], opts: { skipLocality?: b
   inList('search_result', f.search);
   inList('exam_result', f.exam);
   inList('channel', f.channel);
+  inList('species', f.species);
   if (f.q) {
     w.push("(name LIKE ? OR locality_raw LIKE ? OR species LIKE ? OR property_ref LIKE ?)");
     const like = `%${f.q.replace(/[%_]/g, '')}%`;
@@ -205,12 +208,19 @@ export function getLocalities(db: Db, f: Filters = {}) {
 
 export function getMapFeatures(db: Db, f: Filters) {
   const { sql } = ctx(db);
+  // Áreas, localidades e rotas fazem parte do desenho do mapa: só a escolha de camadas as afeta.
+  // Os demais filtros (período, resultado, origem, espécie) valem para os registros (pontos).
+  const GEO = "('localidade','area','rota')";
+  const geoParams: (string | number)[] = [];
+  const geoWhere = f.layers?.length ? ` WHERE type IN (${f.layers.map(() => '?').join(',')}) AND type IN ${GEO}` : ` WHERE type IN ${GEO}`;
+  if (f.layers?.length) geoParams.push(...f.layers);
   const params: (string | number)[] = [];
-  // Camadas geométricas (localidade/área/rota) aparecem sempre que a camada estiver ligada; filtros de data/resultado só se aplicam aos registros.
   const w = where({ ...f, locality: undefined, q: undefined }, params);
+  const recWhere = w ? `${w} AND type NOT IN ${GEO}` : ` WHERE type NOT IN ${GEO}`;
+  const cols = 'rid, origin, type, name, locality_key, locality_raw, visit_date, search_result, exam_result, triatomine_count, species, channel, environment, lat, lng, geometry, is_boundary';
   const rows = db
-    .prepare(`${sql} SELECT rid, origin, type, name, locality_key, locality_raw, visit_date, search_result, exam_result, triatomine_count, species, channel, environment, lat, lng, geometry, is_boundary FROM rec${w} LIMIT 20000`)
-    .all(...params) as Record<string, unknown>[];
+    .prepare(`${sql} SELECT ${cols} FROM rec${geoWhere} UNION ALL SELECT ${cols} FROM rec${recWhere} LIMIT 20000`)
+    .all(...geoParams, ...params) as Record<string, unknown>[];
   const features = [];
   for (const r of rows) {
     let geometry: unknown = r.geometry ? JSON.parse(r.geometry as string) : null;
@@ -223,6 +233,14 @@ export function getMapFeatures(db: Db, f: Filters) {
     features.push({ type: 'Feature', geometry, properties: { ...props, is_boundary: !!props.is_boundary } });
   }
   return { type: 'FeatureCollection', features };
+}
+
+export function getFacets(db: Db) {
+  const { sql } = ctx(db);
+  const species = db
+    .prepare(`${sql} SELECT species AS value, COUNT(*) AS count FROM rec WHERE type = 'captura' AND species IS NOT NULL GROUP BY species ORDER BY count DESC, species`)
+    .all();
+  return { species };
 }
 
 const SORTABLE = new Set(['channel', 'environment', 'type', 'name', 'locality_raw', 'visit_date', 'search_result', 'exam_result', 'triatomine_count', 'species', 'origin']);

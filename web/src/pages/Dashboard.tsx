@@ -13,7 +13,7 @@ import { MapPanel } from '../components/MapPanel';
 function fromUrl(): Filters {
   const p = new URLSearchParams(window.location.search);
   const list = (k: string) => p.get(k)?.split(',').filter(Boolean) ?? [];
-  return { from: p.get('from') ?? undefined, to: p.get('to') ?? undefined, locality: p.get('locality') ?? undefined, layers: list('layers'), search: list('search'), exam: list('exam'), channel: list('channel') };
+  return { from: p.get('from') ?? undefined, to: p.get('to') ?? undefined, locality: p.get('locality') ?? undefined, layers: list('layers'), search: list('search'), exam: list('exam'), channel: list('channel'), species: list('species') };
 }
 
 export function DashboardPage({ me, epoch, goImport }: { me: Me; epoch: number; goImport: () => void }) {
@@ -53,7 +53,7 @@ export function DashboardPage({ me, epoch, goImport }: { me: Me; epoch: number; 
     <div className="stack">
       {summary.error && <div className="notice erro" role="alert">{summary.error} <button className="small" onClick={summary.reload}>Tentar de novo</button></div>}
       <Kpis summary={summary.data} loading={summary.loading} />
-      <FilterBar filters={filters} onChange={setFilters} localities={localities} />
+      <FilterBar filters={filters} onChange={setFilters} localities={localities} epoch={epoch} />
       <LocationMaps filters={filters} epoch={epoch} selected={filters.locality} onSelect={select} />
       <div className="grid main-grid">
         <ChartPanel filters={filters} epoch={epoch} selected={filters.locality} onSelect={select} />

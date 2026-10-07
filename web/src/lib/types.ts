@@ -39,6 +39,7 @@ export interface Filters {
   search: string[];
   exam: string[];
   channel: string[];
+  species: string[];
   q?: string;
 }
 export interface RecordRow {

@@ -35,6 +35,13 @@ const URLS = [
   '/api/records?pageSize=50&sort=locality_raw&dir=asc&layers=captura',
   '/api/records?pageSize=2&page=2&sort=species&dir=asc',
   '/api/records?q=lutzi&layers=captura',
+  '/api/facets',
+  '/api/summary?species=Triatoma%20brasiliensis',
+  '/api/chart?mode=exame&sort=total&hideEmpty=true&species=Panstrongylus%20lutzi',
+  '/api/localities?species=Triatoma%20brasiliensis',
+  '/api/map?species=Triatoma%20brasiliensis',
+  '/api/map?exam=positivo&from=2026-07-01',
+  '/api/records?species=Triatoma%20brasiliensis&layers=captura&pageSize=50',
 ];
 
 const sortKeys = (v: unknown): unknown => {
@@ -79,6 +86,8 @@ describe.each([
       expect(l.total).toBe(s.total);
       const strip = (rows: unknown[]) => rows.map((r) => ({ ...(norm(r) as object), property_ref: null, pit_ref: null }));
       expect(sortKeys(strip(l.rows))).toEqual(sortKeys(strip(s.rows)));
+    } else if (url.startsWith('/api/facets')) {
+      expect(sortKeys(norm(local))).toEqual(sortKeys(norm(server)));
     } else {
       expect(sortKeys(norm(local))).toEqual(sortKeys(norm(server)));
     }

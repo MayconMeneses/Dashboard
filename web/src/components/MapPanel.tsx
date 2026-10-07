@@ -15,6 +15,28 @@ interface Props {
   focus?: { lat: number; lng: number; n: number };
 }
 
+interface Basemap {
+  id: string;
+  label: string;
+  url: string;
+  attribution: string;
+  subdomains?: string;
+}
+/** Mapas-base abertos. Cada um só é carregado se escolhido; "Sem mapa-base" não faz nenhuma requisição a terceiros. */
+const BASEMAPS: Basemap[] = [
+  { id: 'carto', label: 'Claro (OpenStreetMap/CARTO)', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', attribution: '© colaboradores do OpenStreetMap © CARTO', subdomains: 'abcd' },
+  { id: 'esri', label: 'Satélite (Esri)', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Imagens © Esri, Maxar, Earthstar Geographics e comunidade GIS' },
+  { id: 'osm', label: 'OpenStreetMap padrão', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© colaboradores do OpenStreetMap' },
+];
+
+function storedBasemap(): string | null {
+  try {
+    return window.localStorage.getItem('basemap');
+  } catch {
+    return null;
+  }
+}
+
 const CROATA_APPROX: L.LatLngTuple = [-4.4, -40.9]; // posição aproximada, usada só quando não há dados
 const TYPES = ['localidade', 'area', 'rota', 'visita', 'captura', 'pit', 'outro'] as const;
 const TYPE_LABEL: Record<string, string> = { localidade: 'Localidades', area: 'Áreas', rota: 'Rotas', visita: 'Visitas', captura: 'Capturas', pit: 'PITs', outro: 'Pontos de referência' };
@@ -40,6 +62,9 @@ function popupHtml(p: MapFeature['properties']): string {
 export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Props) {
   const [colorByExam, setColorByExam] = useState(true);
   const [colorAreas, setColorAreas] = useState(true);
+  const enabled = !!me.map.tileUrl;
+  const [basemap, setBasemap] = useState<string>(() => (enabled ? (storedBasemap() ?? 'carto') : 'none'));
+  const tileRef = useRef<L.TileLayer | null>(null);
   const [on, setOn] = useState<Record<Layer, boolean>>({ localidade: true, area: true, rota: true, visita: true, captura: true, pit: true, outro: true });
   const q = filtersToQuery({ ...filters, locality: undefined, q: undefined, layers: [] });
   const { data, loading, error, reload } = useAsync(() => api.get<{ features: MapFeature[] }>(`/api/map?${q}`), [q, epoch]);
@@ -60,7 +85,6 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
   useEffect(() => {
     if (!el.current || map.current) return;
     const m = L.map(el.current, { zoomControl: true, minZoom: 8, maxZoom: 19 }).setView(CROATA_APPROX, 10);
-    if (me.map.tileUrl) L.tileLayer(me.map.tileUrl, { attribution: me.map.attribution, maxZoom: 19 }).addTo(m);
     L.control.scale({ imperial: false }).addTo(m);
     map.current = m;
     return () => {
@@ -68,6 +92,20 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
       map.current = null;
     };
   }, [me.map.tileUrl, me.map.attribution]);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    tileRef.current?.remove();
+    tileRef.current = null;
+    const b = BASEMAPS.find((x) => x.id === basemap);
+    if (enabled && b) tileRef.current = L.tileLayer(b.url, { attribution: b.attribution, maxZoom: 19, subdomains: b.subdomains ?? 'abc' }).addTo(m);
+    try {
+      window.localStorage.setItem('basemap', basemap);
+    } catch {
+      /* preferência não salva; segue funcionando */
+    }
+  }, [basemap, enabled]);
 
   // (Re)desenha as camadas quando os dados, a seleção ou o modo de cor mudam.
   useEffect(() => {
@@ -208,6 +246,13 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
             </label>
           </div>
         </fieldset>
+        <label className="field">
+          Mapa-base
+          <select value={basemap} onChange={(e) => setBasemap(e.target.value)} disabled={!enabled}>
+            {BASEMAPS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+            <option value="none">Sem mapa-base (nenhuma requisição externa)</option>
+          </select>
+        </label>
         <button className="small" onClick={reset}>
           Voltar ao município
         </button>
@@ -232,7 +277,7 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
       </div>
       <p className="small muted" style={{ margin: '8px 0 0' }}>
         {official ? `Limite municipal: ${official}.` : hasBoundary ? 'Limite municipal: polígono presente no arquivo importado.' : 'Limite municipal não carregado: o arquivo não o traz e nenhum limite oficial foi configurado. O mapa enquadra os dados importados.'}{' '}
-        {me.map.tileUrl ? `Mapa-base: ${me.map.attribution}.` : 'Mapa-base desativado pelo administrador.'}
+        {enabled ? (basemap === 'none' ? 'Sem mapa-base.' : `Mapa-base: ${BASEMAPS.find((b) => b.id === basemap)?.attribution}. A região visualizada é pedida ao provedor do mapa.`) : 'Mapa-base desativado pelo administrador.'}
       </p>
     </section>
   );
