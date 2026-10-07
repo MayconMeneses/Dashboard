@@ -21,6 +21,12 @@ export interface SnapshotRec {
   lng: number | null;
   channel: string | null;
   environment: string | null;
+  /** nº de imóveis (só em registros de localidade) */
+  property_count?: number | null;
+  /** zona do PIT (Urbano/Rural) */
+  zone?: string | null;
+  /** unidade/nome do PIT (só em registros de PIT) */
+  pit_ref?: string | null;
   geometry: { type: string; coordinates: unknown } | null;
   is_boundary: boolean;
   duplicate_of: number | null;
@@ -48,7 +54,7 @@ export interface Snapshot {
   };
 }
 
-interface Filters {
+export interface Filters {
   from?: string;
   to?: string;
   locality?: string;
@@ -57,6 +63,7 @@ interface Filters {
   exam?: string[];
   channel?: string[];
   species?: string[];
+  environment?: string[];
   q?: string;
 }
 
@@ -78,12 +85,13 @@ export function parseFilters(p: URLSearchParams): Filters {
   f.exam = list(p.get('exam'))?.filter((x) => EXAM.includes(x));
   f.channel = list(p.get('channel'))?.filter((x) => ['captura', 'pit'].includes(x));
   f.species = list(p.get('species'))?.filter((x) => x.length <= 60).slice(0, 20);
+  f.environment = list(p.get('environment'))?.filter((x) => ['intra', 'peri', 'intra_peri'].includes(x));
   const q = p.get('q');
   if (q && q.trim()) f.q = q.trim().slice(0, 80);
   return f;
 }
 
-function select(rec: SnapshotRec[], f: Filters, opts: { skipLocality?: boolean } = {}): SnapshotRec[] {
+export function select(rec: SnapshotRec[], f: Filters, opts: { skipLocality?: boolean } = {}): SnapshotRec[] {
   const q = f.q ? f.q.replace(/[%_]/g, '').toLowerCase() : null;
   return rec.filter((r) => {
     if (f.from && !(r.visit_date !== null && r.visit_date >= f.from)) return false;
@@ -94,6 +102,7 @@ function select(rec: SnapshotRec[], f: Filters, opts: { skipLocality?: boolean }
     if (f.exam?.length && !f.exam.includes(r.exam_result)) return false;
     if (f.channel?.length && !(r.channel !== null && f.channel.includes(r.channel))) return false;
     if (f.species?.length && !(r.species !== null && f.species.includes(r.species))) return false;
+    if (f.environment?.length && !(r.environment !== null && f.environment.includes(r.environment))) return false;
     if (q && ![r.name, r.locality_raw, r.species].some((v) => v !== null && v.toLowerCase().includes(q))) return false;
     return true;
   });
@@ -266,6 +275,8 @@ export function records(s: Snapshot, f: Filters, o: { page: number; pageSize: nu
   };
 }
 
+import { analytics } from './analytics.js';
+
 /** Atende as mesmas URLs `/api/...` que o painel usa quando está ligado ao servidor. */
 export function handle(s: Snapshot, url: string): unknown {
   const u = new URL(url, 'http://local');
@@ -278,6 +289,8 @@ export function handle(s: Snapshot, url: string): unknown {
       return chart(s, f, p.get('mode') === 'exame' ? 'exame' : 'busca', p.get('sort') === 'total' ? 'total' : 'nome', p.get('hideEmpty') === 'true');
     case '/api/facets':
       return facets(s);
+    case '/api/analytics':
+      return analytics(s.rec, f);
     case '/api/localities':
       return localities(s, f);
     case '/api/map':

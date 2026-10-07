@@ -81,6 +81,26 @@ O leitor foi ajustado ao arquivo real da campanha:
 
 Campos com possíveis dados pessoais (morador, proprietário, telefone, CPF…) são **descartados** na importação (o arquivo original os preserva).
 
+## Análises (gráficos)
+
+Seção **Análises**, logo abaixo dos filtros. Cada gráfico tem título, a unidade (o que está sendo contado), **“Como ler”**, avisos sobre os dados, e botões para **ver como tabela**, **baixar PNG** e **baixar CSV**. São interativos: clique em barra, fatia, mês ou célula para filtrar o painel inteiro. Cada gráfico ignora o filtro da própria dimensão, para permitir comparar e trocar a seleção.
+
+| Gráfico | O que mostra | Clique |
+|---|---|---|
+| Capturas por localidade (barras finas empilhadas) | capturas e resultado do exame por localidade | filtra a localidade |
+| Espécies encontradas (barras empilhadas) | capturas e exame por espécie | filtra a espécie |
+| Positividade por espécie | positivos ÷ (positivos + negativos), com o n de cada uma | — |
+| Capturas ao longo do tempo (colunas por mês) | meses pela data de captura | filtra o período |
+| Origem da captura (rosca) | campanha × PIT | filtra a origem |
+| Onde o inseto foi encontrado (rosca) | intra × peridomicílio | filtra o ambiente |
+| Fase e sexo | ninfa, macho, fêmea… | — |
+| Tempo entre a captura e o resultado | faixas de dias; mediana | — |
+| Capturas por 100 imóveis | usa “Quantidade de Imóveis” do KML | filtra a localidade |
+| Espécie × ambiente (mapa de calor) | contagem por célula | filtra espécie e ambiente |
+| PITs | unidade, zona e localidade (sem endereço) | filtra a localidade |
+
+Os números dessas análises são calculados pelo **mesmo código** no servidor e no arquivo HTML compartilhável (`web/src/static/analytics.ts`), com testes de paridade. A aba “Sobre os dados” (no HTML) lista cada campo do KML e onde ele é usado.
+
 ## Mapas
 
 - **Mapa-base:** o seletor “Mapa-base” oferece, quando há `CARTO_API_KEY`, Ruas e relevo (CARTO Voyager, padrão) e Claro (CARTO Positron); além disso Satélite (Esri), OpenStreetMap padrão e “Sem mapa-base”. Sem chave da CARTO, o padrão é Satélite em arquivo local ou OpenStreetMap quando servido por http(s). Só o escolhido é carregado; o provedor recebe a região que está sendo vista. No servidor, `TILE_URL=` (vazio) desliga todos.

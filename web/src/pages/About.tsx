@@ -3,6 +3,22 @@ import type { Snapshot } from '../static/engine';
 
 const TYPE_LABEL: Record<string, string> = { localidade: 'Localidades (pontos e áreas)', captura: 'Registros de captura', pit: 'PITs', visita: 'Visitas', area: 'Áreas', rota: 'Rotas', outro: 'Pontos de referência / outros' };
 
+const FIELD_USE: [string, string][] = [
+  ['Pasta/nome da localidade, Localidade', 'Agrupa os registros por localidade (gráficos de localidade, mapas e tabela).'],
+  ['Area das Localidades (polígonos)', 'Áreas desenhadas nos mapas; nome ao passar o mouse; cores pela positividade.'],
+  ['Data de Captura', 'Linha do tempo, filtro de período e tempo até o resultado.'],
+  ['Data do exame', 'Tempo entre a captura e o resultado do exame.'],
+  ['Resultado do Exame a Fresco', 'Positivo/negativo/pendente em todos os gráficos, indicadores e cores. Em branco = “não informado”.'],
+  ['Nome do registro (espécie)', 'Espécie do triatomíneo (gráficos de espécie, positividade e mapa de calor).'],
+  ['Ninfa_Macho ou Femea', 'Gráfico de fase e sexo.'],
+  ['INTRA ou PERI', 'Gráfico de ambiente, filtro e mapa de calor espécie × ambiente.'],
+  ['Campanha_Captura ou PIT', 'Origem da captura (campanha × PIT): gráfico, filtro e tabela.'],
+  ['Quantidade de Imoveis', 'Indicador de imóveis e gráfico de capturas por 100 imóveis.'],
+  ['Pasta pits: Nome do PIT, Zona', 'Lista de PITs (unidade e zona).'],
+  ['Endereço, Numero da Residencia, Nº da Etiqueta', 'Não aparecem neste painel (dado restrito); a etiqueta e o imóvel só servem para detectar cópias.'],
+  ['Resultado da busca (com/sem captura), Quantidade de triatomíneos', 'Não constam no arquivo atual; os indicadores correspondentes aparecem como “Sem dado”.'],
+];
+
 export function AboutPage({ snapshot }: { snapshot: Snapshot | null }) {
   if (!snapshot) return <div className="notice erro">Este arquivo não contém dados.</div>;
   const s = snapshot.sobre;
@@ -45,6 +61,18 @@ export function AboutPage({ snapshot }: { snapshot: Snapshot | null }) {
       <section className="card stack">
         <h3>Privacidade</h3>
         <p className="small" style={{ margin: 0 }}>Não constam neste painel: {s.camposRestritosRemovidos.join('; ')}.{s.camposDescartados.length ? ` Campos descartados por possível dado pessoal: ${s.camposDescartados.join(', ')}.` : ''} As coordenadas dos pontos aparecem arredondadas (cerca de 1 metro).</p>
+      </section>
+
+      <section className="card">
+        <h3>Campos do arquivo e onde são usados</h3>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Campo do KML</th><th>Como é usado no painel</th></tr></thead>
+            <tbody>
+              {FIELD_USE.map(([c, u]) => <tr key={c}><td style={{ whiteSpace: 'normal' }}>{c}</td><td style={{ whiteSpace: 'normal' }}>{u}</td></tr>)}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {s.avisos.length > 0 && (

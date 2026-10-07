@@ -42,6 +42,10 @@ const URLS = [
   '/api/map?species=Triatoma%20brasiliensis',
   '/api/map?exam=positivo&from=2026-07-01',
   '/api/records?species=Triatoma%20brasiliensis&layers=captura&pageSize=50',
+  '/api/analytics',
+  '/api/analytics?exam=positivo',
+  '/api/analytics?species=Triatoma%20brasiliensis&channel=pit',
+  '/api/analytics?environment=intra&from=2026-06-15',
 ];
 
 const sortKeys = (v: unknown): unknown => {
@@ -86,6 +90,11 @@ describe.each([
       expect(l.total).toBe(s.total);
       const strip = (rows: unknown[]) => rows.map((r) => ({ ...(norm(r) as object), property_ref: null, pit_ref: null }));
       expect(sortKeys(strip(l.rows))).toEqual(sortKeys(strip(s.rows)));
+    } else if (url.startsWith('/api/analytics')) {
+      const strip = (x: unknown) => JSON.parse(JSON.stringify(x)) as { pits: unknown[] };
+      // a lista de PITs é igual nos dois modos; a ordem dos grupos empatados pode variar, então comparamos ordenados
+      const canon = (o: unknown) => sortKeys(norm(o));
+      expect(canon(strip(local))).toEqual(canon(strip(server)));
     } else if (url.startsWith('/api/facets')) {
       expect(sortKeys(norm(local))).toEqual(sortKeys(norm(server)));
     } else {

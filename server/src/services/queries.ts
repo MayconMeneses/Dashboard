@@ -11,6 +11,7 @@ export interface Filters {
   exam?: string[];
   channel?: string[];
   species?: string[];
+  environment?: string[];
   q?: string;
 }
 
@@ -31,6 +32,7 @@ export function parseFilters(query: Record<string, unknown>): Filters {
   f.exam = list(query.exam)?.filter((x) => EXAM.includes(x));
   f.channel = list(query.channel)?.filter((x) => ['captura', 'pit'].includes(x));
   f.species = list(query.species)?.filter((x) => x.length <= 60).slice(0, 20);
+  f.environment = list(query.environment)?.filter((x) => ['intra', 'peri', 'intra_peri'].includes(x));
   if (typeof query.q === 'string' && query.q.trim()) f.q = query.q.trim().slice(0, 80);
   return f;
 }
@@ -39,11 +41,11 @@ export function parseFilters(query: Record<string, unknown>): Filters {
 function recSql(activeId: number | null): string {
   const file = activeId
     ? `SELECT 'f' || id AS rid, 'arquivo' AS origin, type, name, locality_key, locality_raw, visit_date, exam_date, search_result, exam_result,
-        triatomine_count, stage, sex, species, lat, lng, property_ref, pit_ref, channel, environment, address, geometry, is_boundary, duplicate_of, NULL AS notes
+        triatomine_count, stage, sex, species, lat, lng, property_ref, pit_ref, channel, environment, property_count, zone, address, geometry, is_boundary, duplicate_of, NULL AS notes
        FROM features WHERE import_id = ${activeId} AND excluded = 0 UNION ALL `
     : '';
   const manual = `SELECT 'm' || id AS rid, 'manual' AS origin, 'visita' AS type, NULL AS name, locality_key, locality_raw, visit_date, NULL AS exam_date, search_result, 'nao_informado' AS exam_result,
-        NULL AS triatomine_count, NULL AS stage, NULL AS sex, NULL AS species, lat, lng, NULL AS property_ref, NULL AS pit_ref, NULL AS channel, NULL AS environment, NULL AS address, NULL AS geometry, 0 AS is_boundary, NULL AS duplicate_of, notes
+        NULL AS triatomine_count, NULL AS stage, NULL AS sex, NULL AS species, lat, lng, NULL AS property_ref, NULL AS pit_ref, NULL AS channel, NULL AS environment, NULL AS property_count, NULL AS zone, NULL AS address, NULL AS geometry, 0 AS is_boundary, NULL AS duplicate_of, notes
        FROM manual_visits WHERE voided_at IS NULL`;
   return `WITH rec AS (${file}${manual})`;
 }
@@ -65,6 +67,7 @@ function where(f: Filters, params: (string | number)[], opts: { skipLocality?: b
   inList('exam_result', f.exam);
   inList('channel', f.channel);
   inList('species', f.species);
+  inList('environment', f.environment);
   if (f.q) {
     w.push("(name LIKE ? OR locality_raw LIKE ? OR species LIKE ? OR property_ref LIKE ?)");
     const like = `%${f.q.replace(/[%_]/g, '')}%`;
@@ -262,4 +265,16 @@ export function getRecords(db: Db, f: Filters, opts: { page: number; pageSize: n
 
 export function getAllRecordsForExport(db: Db, f: Filters, includeAddress: boolean) {
   return getRecords(db, f, { page: 1, pageSize: 100000, sort: 'locality_raw', dir: 'asc', includeAddress }).rows as Record<string, unknown>[];
+}
+
+/** Linhas do arquivo ativo no formato do painel compartilhável (para os gráficos de análise, calculados pelo mesmo código nos dois modos). */
+export function getRecForAnalytics(db: Db) {
+  const { sql } = ctx(db);
+  return db
+    .prepare(
+      `${sql} SELECT rid, origin, type, name, locality_key, locality_raw, visit_date, exam_date, search_result, exam_result, triatomine_count,
+        stage, sex, species, lat, lng, channel, environment, property_count, zone, pit_ref, is_boundary, duplicate_of FROM rec`,
+    )
+    .all()
+    .map((r) => ({ ...(r as object), geometry: null, is_boundary: !!(r as { is_boundary: number }).is_boundary }));
 }

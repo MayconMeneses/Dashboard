@@ -54,6 +54,9 @@ export function buildSnapshot(bytes: Uint8Array, filename: string, opts: Snapsho
     lng: f.lng === null ? null : round(f.lng, precision),
     channel: f.channel,
     environment: f.environment,
+    property_count: f.propertyCount,
+    zone: f.zone,
+    pit_ref: f.type === 'pit' ? f.pitRef : null, // nome da unidade do PIT (não é endereço)
     geometry: f.geometry ? roundGeometry(f.geometry, precision) : null,
     is_boundary: f.isBoundary,
     duplicate_of: f.duplicateOf,

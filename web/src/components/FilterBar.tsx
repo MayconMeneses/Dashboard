@@ -7,7 +7,7 @@ const LAYERS = ['localidade', 'visita', 'captura', 'pit', 'area', 'rota'];
 const SEARCH = ['com_captura', 'sem_captura', 'nao_informado'];
 const EXAM = ['positivo', 'negativo', 'pendente', 'nao_realizado', 'nao_informado'];
 
-export const DEFAULT_FILTERS: Filters = { layers: [], search: [], exam: [], channel: [], species: [] };
+export const DEFAULT_FILTERS: Filters = { layers: [], search: [], exam: [], channel: [], species: [], environment: [] };
 
 function toggle(list: string[], v: string): string[] {
   return list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
@@ -21,6 +21,7 @@ export function activeChips(f: Filters, localities: Locality[]): { label: string
   for (const v of f.search) chips.push({ label: `Busca: ${LABEL[v]}`, clear: (x) => ({ ...x, search: x.search.filter((s) => s !== v) }) });
   for (const v of f.exam) chips.push({ label: `Exame: ${LABEL[v]}`, clear: (x) => ({ ...x, exam: x.exam.filter((s) => s !== v) }) });
   for (const v of f.channel) chips.push({ label: `Origem: ${CHANNEL_LABEL[v]}`, clear: (x) => ({ ...x, channel: x.channel.filter((s) => s !== v) }) });
+  for (const v of f.environment) chips.push({ label: `Ambiente: ${LABEL[v] ?? v}`, clear: (x) => ({ ...x, environment: x.environment.filter((s) => s !== v) }) });
   for (const v of f.species) chips.push({ label: `Espécie: ${v}`, clear: (x) => ({ ...x, species: x.species.filter((s) => s !== v) }) });
   for (const v of f.layers) chips.push({ label: `Camada: ${LABEL[v]}`, clear: (x) => ({ ...x, layers: x.layers.filter((s) => s !== v) }) });
   return chips;
@@ -81,6 +82,17 @@ export function FilterBar({ filters, onChange, localities, epoch = 0 }: { filter
               <label key={sp.value}>
                 <input type="checkbox" checked={filters.species.includes(sp.value)} onChange={() => onChange({ ...filters, species: toggle(filters.species, sp.value) })} />
                 <i>{sp.value}</i> ({sp.count})
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Ambiente da captura</legend>
+          <div className="checks">
+            {['intra', 'peri', 'intra_peri'].map((v) => (
+              <label key={v}>
+                <input type="checkbox" checked={filters.environment.includes(v)} onChange={() => onChange({ ...filters, environment: toggle(filters.environment, v) })} />
+                {LABEL[v]}
               </label>
             ))}
           </div>
