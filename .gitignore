@@ -7,3 +7,6 @@ data/
 web/dist-static
 compartilhar/
 *.painel.html
+
+universal/node_modules/
+universal/dist/
