@@ -40,13 +40,13 @@ export const getActiveImport = (db: Db) => db.prepare("SELECT * FROM imports WHE
 
 function insertFeatures(db: Db, importId: number, features: NormalizedFeature[]): void {
   const stmt = db.prepare(`INSERT INTO features (import_id, idx, source_id, type, name, folder_path, locality_raw, locality_key, geometry, lat, lng,
-    visit_date, exam_date, search_result, exam_result, triatomine_count, stage, sex, species, property_ref, pit_ref, address, is_boundary, duplicate_of, raw_json, issues_json)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    visit_date, exam_date, search_result, exam_result, triatomine_count, stage, sex, species, property_ref, pit_ref, channel, environment, address, is_boundary, duplicate_of, raw_json, issues_json)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   for (const f of features) {
     stmt.run(
       importId, f.index, f.sourceId, f.type, f.name, f.folderPath.join(' / '), f.localityRaw, f.localityKey,
       f.geometry ? JSON.stringify(f.geometry) : null, f.lat, f.lng, f.visitDate, f.examDate, f.searchResult, f.examResult,
-      f.triatomineCount, f.stage, f.sex, f.species, f.propertyRef, f.pitRef, f.address, f.isBoundary ? 1 : 0, f.duplicateOf,
+      f.triatomineCount, f.stage, f.sex, f.species, f.propertyRef, f.pitRef, f.channel, f.environment, f.address, f.isBoundary ? 1 : 0, f.duplicateOf,
       JSON.stringify(f.raw), JSON.stringify(f.issues),
     );
   }

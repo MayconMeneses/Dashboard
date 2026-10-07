@@ -12,7 +12,7 @@ import { MapPanel } from '../components/MapPanel';
 function fromUrl(): Filters {
   const p = new URLSearchParams(window.location.search);
   const list = (k: string) => p.get(k)?.split(',').filter(Boolean) ?? [];
-  return { from: p.get('from') ?? undefined, to: p.get('to') ?? undefined, locality: p.get('locality') ?? undefined, layers: list('layers'), search: list('search'), exam: list('exam') };
+  return { from: p.get('from') ?? undefined, to: p.get('to') ?? undefined, locality: p.get('locality') ?? undefined, layers: list('layers'), search: list('search'), exam: list('exam'), channel: list('channel') };
 }
 
 export function DashboardPage({ me, epoch, goImport }: { me: Me; epoch: number; goImport: () => void }) {

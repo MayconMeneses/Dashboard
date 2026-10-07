@@ -12,6 +12,8 @@ export interface Config {
   tileAttribution: string;
   sessionHours: number;
   webDist: string | null;
+  boundaryFile: string | null;
+  boundarySource: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Partial<Config> = {}): Config {
@@ -29,6 +31,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     tileAttribution: env.TILE_ATTRIBUTION ?? '© colaboradores do OpenStreetMap',
     sessionHours: Number(env.SESSION_HOURS ?? 12),
     webDist: resolve(import.meta.dirname, '../../web/dist'),
+    // Limite municipal oficial (GeoJSON) opcional, ex.: malha municipal do IBGE. Nunca é desenhado um limite "inventado".
+    boundaryFile: env.BOUNDARY_FILE ? resolve(env.BOUNDARY_FILE) : null,
+    boundarySource: env.BOUNDARY_SOURCE ?? 'Limite municipal fornecido pelo administrador',
     ...overrides,
   };
 }

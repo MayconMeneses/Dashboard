@@ -32,7 +32,7 @@ export function ImportPage({ me, onChanged }: { me: Me; onChanged: () => void })
   const [over, setOver] = useState(false);
   const [excludeRepeats, setExcludeRepeats] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [mapping, setMapping] = useState<{ fields: Record<string, string>; folders: Record<string, string> }>({ fields: {}, folders: {} });
+  const [mapping, setMapping] = useState<{ fields: Record<string, string>; folders: Record<string, string>; aliases: Record<string, string> }>({ fields: {}, folders: {}, aliases: {} });
   const input = useRef<HTMLInputElement>(null);
   const versions = useAsync(() => api.get<ImportInfo[]>('/api/imports'), [done, current?.id]);
 
@@ -46,7 +46,8 @@ export function ImportPage({ me, onChanged }: { me: Me; onChanged: () => void })
     try {
       const info = await api.post<ImportInfo>('/api/imports', fd);
       setCurrent(info);
-      setMapping({ fields: {}, folders: {} });
+      setMapping({ fields: {}, folders: {}, aliases: {} });
+      setExcludeRepeats(!!info.report && info.report.duplicates.length > 0 && info.report.duplicates.every((d) => d.crossFolder));
     } catch (e) {
       if (e instanceof ApiError && e.body && typeof e.body === 'object' && 'id' in (e.body as object)) setCurrent(e.body as ImportInfo);
       else setCurrent(null);
@@ -67,10 +68,11 @@ export function ImportPage({ me, onChanged }: { me: Me; onChanged: () => void })
     if (!current) return;
     const fields = Object.fromEntries(Object.entries(mapping.fields).filter(([, v]) => v));
     const folders = Object.fromEntries(Object.entries(mapping.folders).filter(([, v]) => v));
+    const localityAliases = Object.fromEntries(Object.entries(mapping.aliases).filter(([, v]) => v));
     setBusy(true);
     setError(null);
     try {
-      setCurrent(await api.put<ImportInfo>(`/api/imports/${current.id}/mapping`, { fields, folders }));
+      setCurrent(await api.put<ImportInfo>(`/api/imports/${current.id}/mapping`, { fields, folders, localityAliases }));
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Não foi possível reprocessar.');
       if (e instanceof ApiError && e.body && typeof e.body === 'object' && 'id' in (e.body as object)) setCurrent(e.body as ImportInfo);
@@ -207,15 +209,35 @@ export function ImportPage({ me, onChanged }: { me: Me; onChanged: () => void })
                   </select>
                 </label>
               ))}
+              <h3>Unificar localidades com grafia diferente</h3>
+              {r.unmatchedLocalities.length === 0 && r.similarLocalities.length === 0 && <p className="small muted">Nenhuma localidade com grafia suspeita.</p>}
+              {r.unmatchedLocalities.map((name) => (
+                <label key={name} className="field">
+                  “{name}” não existe entre as localidades mapeadas. É a mesma que…
+                  <select value={mapping.aliases[name] ?? ''} onChange={(e) => setMapping((m) => ({ ...m, aliases: { ...m.aliases, [name]: e.target.value } }))}>
+                    <option value="">— manter como localidade nova —</option>
+                    {r.localities.filter((l) => l.name !== name).map((l) => <option key={l.key} value={l.name}>{l.name}</option>)}
+                  </select>
+                </label>
+              ))}
+              {r.similarLocalities.map(([a, b]) => (
+                <label key={a + b} className="field">
+                  “{b}” parece a mesma que “{a}”
+                  <select value={mapping.aliases[b] ?? ''} onChange={(e) => setMapping((m) => ({ ...m, aliases: { ...m.aliases, [b]: e.target.value } }))}>
+                    <option value="">— manter separadas —</option>
+                    <option value={a}>Unificar em “{a}”</option>
+                  </select>
+                </label>
+              ))}
               <div><button onClick={remap} disabled={busy}>Reprocessar com este mapeamento</button></div>
             </div>
           </details>
 
           {r.duplicates.length > 0 && (
             <fieldset>
-              <legend>{r.duplicates.length} grupo(s) com possíveis duplicatas</legend>
+              <legend>{r.duplicates.length} grupo(s) com possíveis duplicatas{r.duplicates.every((d) => d.crossFolder) ? ' (cópias em outras pastas, como Resultados/Positivos/Negativos)' : ''}</legend>
               <div className="checks">
-                <label><input type="radio" name="dup" checked={!excludeRepeats} onChange={() => setExcludeRepeats(false)} /> Manter todos (padrão)</label>
+                <label><input type="radio" name="dup" checked={!excludeRepeats} onChange={() => setExcludeRepeats(false)} /> Manter todos</label>
                 <label><input type="radio" name="dup" checked={excludeRepeats} onChange={() => setExcludeRepeats(true)} /> Excluir as repetições e manter o primeiro de cada grupo</label>
               </div>
               <p className="small muted" style={{ marginBottom: 0 }}>Nada é apagado: as repetições excluídas continuam no arquivo original e na versão guardada.</p>

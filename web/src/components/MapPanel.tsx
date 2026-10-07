@@ -16,7 +16,8 @@ interface Props {
 }
 
 const CROATA_APPROX: L.LatLngTuple = [-4.4, -40.9]; // posição aproximada, usada só quando não há dados
-const TYPES = ['localidade', 'area', 'rota', 'visita', 'captura', 'pit'] as const;
+const TYPES = ['localidade', 'area', 'rota', 'visita', 'captura', 'pit', 'outro'] as const;
+const TYPE_LABEL: Record<string, string> = { localidade: 'Localidades', area: 'Áreas', rota: 'Rotas', visita: 'Visitas', captura: 'Capturas', pit: 'PITs', outro: 'Pontos de referência' };
 type Layer = (typeof TYPES)[number];
 
 function esc(s: unknown): string {
@@ -27,6 +28,8 @@ function popupHtml(p: MapFeature['properties']): string {
   const rows: string[] = [`<strong>${esc(p.name || LABEL[p.type] || p.type)}</strong>`, `${esc(LABEL[p.type] ?? p.type)}${p.locality_raw ? ' · ' + esc(p.locality_raw) : ''}`];
   if (p.type === 'captura' || p.type === 'visita') rows.push(`Busca: ${esc(LABEL[p.search_result])}`);
   if (p.type === 'captura') rows.push(`Exame: ${esc(LABEL[p.exam_result])}`);
+  if (p.channel) rows.push(`Origem: ${p.channel === 'pit' ? 'PIT' : 'Captura em campanha'}`);
+  if (p.environment) rows.push(`Ambiente: ${esc(LABEL[p.environment])}`);
   if (p.visit_date) rows.push(`Data: ${formatDate(p.visit_date)}`);
   if (p.species) rows.push(`Espécie: ${esc(p.species)}`);
   if (p.triatomine_count != null) rows.push(`Quantidade: ${p.triatomine_count}`);
@@ -36,10 +39,11 @@ function popupHtml(p: MapFeature['properties']): string {
 
 export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Props) {
   const [colorByExam, setColorByExam] = useState(true);
-  const [on, setOn] = useState<Record<Layer, boolean>>({ localidade: true, area: true, rota: true, visita: true, captura: true, pit: true });
+  const [on, setOn] = useState<Record<Layer, boolean>>({ localidade: true, area: true, rota: true, visita: true, captura: true, pit: true, outro: true });
   const q = filtersToQuery({ ...filters, locality: undefined, q: undefined, layers: [] });
   const { data, loading, error, reload } = useAsync(() => api.get<{ features: MapFeature[] }>(`/api/map?${q}`), [q, epoch]);
 
+  const boundaryCfg = useAsync(() => api.get<{ geojson: GeoJSON.GeoJsonObject | null; source: string | null }>('/api/boundary'), []);
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const groups = useRef<Partial<Record<Layer, L.LayerGroup>>>({});
@@ -70,7 +74,7 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
     groups.current = {};
     markerByRid.current.clear();
     const mk = (t: Layer) => {
-      const g: L.LayerGroup = t === 'captura' || t === 'visita' || t === 'pit' ? L.markerClusterGroup({ maxClusterRadius: 40 }) : L.layerGroup();
+      const g: L.LayerGroup = t === 'captura' || t === 'visita' || t === 'pit' || t === 'localidade' || t === 'outro' ? L.markerClusterGroup({ maxClusterRadius: 40 }) : L.layerGroup();
       groups.current[t] = g;
       return g;
     };
@@ -98,8 +102,9 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
         if (t === 'pit') layer = L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="pit-icon"></div>', iconSize: [14, 14] }), opacity: dimmed ? 0.35 : 1 });
         else if (t === 'visita') layer = L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="visit-icon"></div>', iconSize: [16, 14] }), opacity: dimmed ? 0.35 : 1 });
         else {
-          const color = t === 'captura' && colorByExam ? (COLORS[p.exam_result] ?? '#6b7280') : '#0f766e';
-          layer = L.circleMarker(ll, { radius: isSel ? 9 : 7, color: '#ffffff', weight: 2, fillColor: color, fillOpacity: dimmed ? 0.3 : 0.95, opacity: dimmed ? 0.4 : 1 });
+          const ref = t === 'localidade' || t === 'outro';
+          const color = t === 'captura' && colorByExam ? (COLORS[p.exam_result] ?? '#6b7280') : t === 'localidade' ? '#334155' : t === 'outro' ? '#94a3b8' : '#0f766e';
+          layer = L.circleMarker(ll, { radius: ref ? 4 : isSel ? 9 : 7, color: '#ffffff', weight: 2, fillColor: color, fillOpacity: dimmed ? 0.3 : 0.95, opacity: dimmed ? 0.4 : 1 });
         }
       } else {
         const gj = L.geoJSON({ type: 'Feature', geometry: f.geometry, properties: {} } as GeoJSON.Feature, {
@@ -125,8 +130,9 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
       markerByRid.current.set(p.rid, layer);
       g.addLayer(layer);
     }
-    if (boundaryFeatures.length) {
-      boundary.current = L.geoJSON(boundaryFeatures.map((f) => ({ type: 'Feature', geometry: f.geometry, properties: {} })) as GeoJSON.Feature[], {
+    const official = boundaryCfg.data?.geojson;
+    if (boundaryFeatures.length || official) {
+      boundary.current = L.geoJSON((official ?? boundaryFeatures.map((f) => ({ type: 'Feature', geometry: f.geometry, properties: {} }))) as GeoJSON.GeoJsonObject, {
         style: { color: '#1e293b', weight: 3, dashArray: '8 6', fill: true, fillOpacity: 0.02 },
         interactive: false,
       }).addTo(m);
@@ -139,7 +145,7 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
       fitted.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, selected, colorByExam]);
+  }, [data, selected, colorByExam, boundaryCfg.data]);
 
   useEffect(() => {
     const m = map.current;
@@ -157,6 +163,7 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
   }, [focus]);
 
   const hasBoundary = !!data?.features.some((f) => f.properties.is_boundary);
+  const official = boundaryCfg.data?.source;
   const reset = () => {
     onSelect(undefined);
     fitted.current = false;
@@ -173,7 +180,7 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
             {TYPES.map((t) => (
               <label key={t}>
                 <input type="checkbox" checked={on[t]} onChange={() => setOn((o) => ({ ...o, [t]: !o[t] }))} />
-                {t === 'area' ? 'Áreas' : t === 'rota' ? 'Rotas' : t === 'localidade' ? 'Localidades' : t === 'visita' ? 'Visitas' : t === 'captura' ? 'Capturas' : 'PITs'}
+                {TYPE_LABEL[t]}
               </label>
             ))}
             <label>
@@ -198,10 +205,11 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
         <span><span className="dot" style={{ background: COLORS.pendente }} />Pendente</span>
         <span><span className="dot" style={{ background: COLORS.nao_realizado }} />Não realizado / não informado</span>
         <span>▲ Visita</span>
+        <span><span className="dot" style={{ background: '#334155', width: 8, height: 8 }} />Localidade (ponto)</span>
         <span>■ PIT</span>
       </div>
       <p className="small muted" style={{ margin: '8px 0 0' }}>
-        {hasBoundary ? 'Limite municipal: polígono presente no arquivo importado.' : 'O arquivo não traz o limite municipal; o mapa mostra só os dados importados.'}{' '}
+        {official ? `Limite municipal: ${official}.` : hasBoundary ? 'Limite municipal: polígono presente no arquivo importado.' : 'Limite municipal não carregado: o arquivo não o traz e nenhum limite oficial foi configurado. O mapa enquadra os dados importados.'}{' '}
         {me.map.tileUrl ? `Mapa-base: ${me.map.attribution}.` : 'Mapa-base desativado pelo administrador.'}
       </p>
     </section>

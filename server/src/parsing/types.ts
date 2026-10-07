@@ -43,6 +43,8 @@ export interface FieldMapping {
   fields?: Record<string, CanonicalField>;
   /** caminho da pasta ("A / B") ou nome da pasta -> tipo */
   folders?: Record<string, FeatureType>;
+  /** grafia de localidade (qualquer) -> nome de localidade de destino */
+  localityAliases?: Record<string, string>;
 }
 
 export type CanonicalField =
@@ -59,6 +61,9 @@ export type CanonicalField =
   | 'imovel'
   | 'pit'
   | 'id_origem'
+  | 'canal'
+  | 'ambiente'
+  | 'fase_sexo'
   | 'ignorar';
 
 export interface NormalizedFeature {
@@ -84,6 +89,9 @@ export interface NormalizedFeature {
   species: string | null;
   propertyRef: string | null;
   pitRef: string | null;
+  /** como o registro chegou: captura em campanha ou entregue/atendido em PIT */
+  channel: 'captura' | 'pit' | null;
+  environment: 'intra' | 'peri' | 'intra_peri' | null;
   /** dado de endereço: restrito */
   address: string | null;
   isBoundary: boolean;
@@ -121,7 +129,9 @@ export interface ParseReport {
   folderTypes: Record<string, FeatureType>;
   localities: { key: string; name: string }[];
   similarLocalities: [string, string][];
-  duplicates: { key: string; indexes: number[] }[];
+  duplicates: { key: string; indexes: number[]; crossFolder: boolean }[];
+  /** localidades dos registros que não casaram com nenhuma localidade conhecida */
+  unmatchedLocalities: string[];
   issues: Issue[];
 }
 

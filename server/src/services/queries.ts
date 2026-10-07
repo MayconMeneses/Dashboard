@@ -9,6 +9,7 @@ export interface Filters {
   layers?: string[];
   search?: string[];
   exam?: string[];
+  channel?: string[];
   q?: string;
 }
 
@@ -27,6 +28,7 @@ export function parseFilters(query: Record<string, unknown>): Filters {
   f.layers = list(query.layers)?.filter((x) => TYPES.includes(x));
   f.search = list(query.search)?.filter((x) => SEARCH.includes(x));
   f.exam = list(query.exam)?.filter((x) => EXAM.includes(x));
+  f.channel = list(query.channel)?.filter((x) => ['captura', 'pit'].includes(x));
   if (typeof query.q === 'string' && query.q.trim()) f.q = query.q.trim().slice(0, 80);
   return f;
 }
@@ -35,11 +37,11 @@ export function parseFilters(query: Record<string, unknown>): Filters {
 function recSql(activeId: number | null): string {
   const file = activeId
     ? `SELECT 'f' || id AS rid, 'arquivo' AS origin, type, name, locality_key, locality_raw, visit_date, exam_date, search_result, exam_result,
-        triatomine_count, stage, sex, species, lat, lng, property_ref, pit_ref, address, geometry, is_boundary, duplicate_of, NULL AS notes
+        triatomine_count, stage, sex, species, lat, lng, property_ref, pit_ref, channel, environment, address, geometry, is_boundary, duplicate_of, NULL AS notes
        FROM features WHERE import_id = ${activeId} AND excluded = 0 UNION ALL `
     : '';
   const manual = `SELECT 'm' || id AS rid, 'manual' AS origin, 'visita' AS type, NULL AS name, locality_key, locality_raw, visit_date, NULL AS exam_date, search_result, 'nao_informado' AS exam_result,
-        NULL AS triatomine_count, NULL AS stage, NULL AS sex, NULL AS species, lat, lng, NULL AS property_ref, NULL AS pit_ref, NULL AS address, NULL AS geometry, 0 AS is_boundary, NULL AS duplicate_of, notes
+        NULL AS triatomine_count, NULL AS stage, NULL AS sex, NULL AS species, lat, lng, NULL AS property_ref, NULL AS pit_ref, NULL AS channel, NULL AS environment, NULL AS address, NULL AS geometry, 0 AS is_boundary, NULL AS duplicate_of, notes
        FROM manual_visits WHERE voided_at IS NULL`;
   return `WITH rec AS (${file}${manual})`;
 }
@@ -59,6 +61,7 @@ function where(f: Filters, params: (string | number)[], opts: { skipLocality?: b
   inList('type', f.layers);
   inList('search_result', f.search);
   inList('exam_result', f.exam);
+  inList('channel', f.channel);
   if (f.q) {
     w.push("(name LIKE ? OR locality_raw LIKE ? OR species LIKE ? OR property_ref LIKE ?)");
     const like = `%${f.q.replace(/[%_]/g, '')}%`;
@@ -199,7 +202,7 @@ export function getMapFeatures(db: Db, f: Filters) {
   // Camadas geométricas (localidade/área/rota) aparecem sempre que a camada estiver ligada; filtros de data/resultado só se aplicam aos registros.
   const w = where({ ...f, locality: undefined, q: undefined }, params);
   const rows = db
-    .prepare(`${sql} SELECT rid, origin, type, name, locality_key, locality_raw, visit_date, search_result, exam_result, triatomine_count, species, lat, lng, geometry, is_boundary FROM rec${w} LIMIT 20000`)
+    .prepare(`${sql} SELECT rid, origin, type, name, locality_key, locality_raw, visit_date, search_result, exam_result, triatomine_count, species, channel, environment, lat, lng, geometry, is_boundary FROM rec${w} LIMIT 20000`)
     .all(...params) as Record<string, unknown>[];
   const features = [];
   for (const r of rows) {
@@ -215,7 +218,7 @@ export function getMapFeatures(db: Db, f: Filters) {
   return { type: 'FeatureCollection', features };
 }
 
-const SORTABLE = new Set(['type', 'name', 'locality_raw', 'visit_date', 'search_result', 'exam_result', 'triatomine_count', 'species', 'origin']);
+const SORTABLE = new Set(['channel', 'environment', 'type', 'name', 'locality_raw', 'visit_date', 'search_result', 'exam_result', 'triatomine_count', 'species', 'origin']);
 
 export function getRecords(db: Db, f: Filters, opts: { page: number; pageSize: number; sort?: string; dir?: string; includeAddress: boolean }) {
   const { sql } = ctx(db);
@@ -225,7 +228,7 @@ export function getRecords(db: Db, f: Filters, opts: { page: number; pageSize: n
   const total = (db.prepare(`${sql} SELECT COUNT(*) AS n FROM rec${w}`).get(...params) as { n: number }).n;
   const sort = opts.sort && SORTABLE.has(opts.sort) ? opts.sort : 'visit_date';
   const dir = opts.dir === 'asc' ? 'ASC' : 'DESC';
-  const cols = `rid, origin, type, name, locality_raw, visit_date, exam_date, search_result, exam_result, triatomine_count, stage, sex, species, property_ref, pit_ref, lat, lng, duplicate_of, notes${opts.includeAddress ? ', address' : ''}`;
+  const cols = `rid, origin, type, name, locality_raw, visit_date, exam_date, search_result, exam_result, triatomine_count, stage, sex, species, property_ref, pit_ref, channel, environment, lat, lng, duplicate_of, notes${opts.includeAddress ? ', address' : ''}`;
   const rows = db
     .prepare(`${sql} SELECT ${cols} FROM rec${w} ORDER BY ${sort} IS NULL, ${sort} ${dir}, rid LIMIT ? OFFSET ?`)
     .all(...params, opts.pageSize, (opts.page - 1) * opts.pageSize);
