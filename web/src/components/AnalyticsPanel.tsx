@@ -21,7 +21,29 @@ const mesLabel = (m: string) => `${MESES[Number(m.slice(5, 7)) - 1]}/${m.slice(2
 const pct = (n: number, d: number) => (d ? `${Math.round((n / d) * 100)}%` : '—');
 const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
-const NOTA_EXAME = 'Cores: vermelho = positivo, azul = negativo, âmbar = pendente, cinza = não realizado, cinza claro = exame não informado (em branco no arquivo, nunca tratado como negativo).';
+function Swatch({ color, label, title }: { color: string; label: string; title?: string }) {
+  return (
+    <span className="swatch-item" title={title}>
+      <span className="swatch" style={{ background: color }} aria-hidden="true" />
+      {label}
+    </span>
+  );
+}
+
+/** Legenda de cores do resultado do exame: blocos coloridos no lugar de texto corrido. */
+export function ExamLegend() {
+  return (
+    <span className="legend-row" role="group" aria-label="Legenda de cores do resultado do exame">
+      <Swatch color={COLORS.positivo!} label="Positivo" />
+      <Swatch color={COLORS.negativo!} label="Negativo" />
+      <Swatch color={COLORS.pendente!} label="Pendente" />
+      <Swatch color={COLORS.nao_realizado!} label="Não realizado" />
+      <Swatch color={COLORS.nao_informado!} label="Exame não informado" title="Campo em branco no arquivo: nunca é tratado como negativo" />
+    </span>
+  );
+}
+
+const NOTA_EXAME = <ExamLegend />;
 
 type OrigView = 'localidade' | 'especie' | 'ambiente';
 
@@ -235,7 +257,7 @@ export function AnalyticsPanel({ filters, epoch, onChange, reportMode = false }:
           unit="registros de captura"
           how="cada barra é uma localidade; o comprimento é o número de capturas e as cores mostram o resultado do exame. O número no fim da barra é o total."
           hint="Clique em uma barra para filtrar o painel por aquela localidade; clique de novo para desfazer."
-          note={<>{NOTA_EXAME} {a.porLocalidade.length > 15 && !allLoc ? `Mostrando as 15 localidades com mais capturas de ${a.porLocalidade.length}.` : ''}</>}
+          note={<>{NOTA_EXAME}{a.porLocalidade.length > 15 && !allLoc ? <span className="legend-extra">Mostrando as 15 localidades com mais capturas de {a.porLocalidade.length}.</span> : null}</>}
           table={examTable(a.porLocalidade, (i) => a.porLocalidade[i]!.name, 'Localidade')}
           wide
         >
@@ -260,7 +282,7 @@ export function AnalyticsPanel({ filters, epoch, onChange, reportMode = false }:
           unit="registros de captura"
           how="cada barra é uma espécie; as cores mostram o resultado do exame para aquela espécie. A espécie é lida do nome do registro (ex.: “Brasiliensis”, “P. Lutzi”)."
           hint="Clique em uma espécie para filtrar o painel."
-          note={<>{NOTA_EXAME} “Não identificada” = registro sem espécie reconhecida no nome.</>}
+          note={<>{NOTA_EXAME}<span className="legend-extra">“Não identificada” = registro sem espécie reconhecida no nome.</span></>}
           table={examTable(spRows, (i) => spRows[i]!.especie, 'Espécie')}
         >
           <BarChart labels={spLabels} series={spSeries} unit="registros de captura" stacked totals dimmed={spDim} onPick={spPick} ariaLabel="Barras horizontais: capturas por espécie e resultado do exame" rowHeight={30} thickness={14} />
