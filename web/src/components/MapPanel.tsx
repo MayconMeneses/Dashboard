@@ -46,6 +46,7 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
   const basemaps = useMemo(() => getBasemaps(me.map.cartoKey), [me.map.cartoKey]);
   const [basemap, setBasemap] = useState<string>(() => (enabled ? initialBasemap(basemaps, me.map.cartoKey) : 'none'));
   const tileRef = useRef<L.TileLayer | null>(null);
+  const [tileFail, setTileFail] = useState(false);
   const [on, setOn] = useState<Record<Layer, boolean>>({ localidade: true, area: true, rota: true, visita: true, captura: true, pit: true, outro: true });
   const q = filtersToQuery({ ...filters, locality: undefined, q: undefined, layers: [] });
   const { data, loading, error, reload } = useAsync(() => api.get<{ features: MapFeature[] }>(`/api/map?${q}`), [q, epoch]);
@@ -91,7 +92,18 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
     tileRef.current?.remove();
     tileRef.current = null;
     const b = basemaps.find((x) => x.id === basemap);
-    if (enabled && b) tileRef.current = L.tileLayer(b.url, { attribution: b.attribution, maxZoom: 19, subdomains: b.subdomains ?? 'abc' }).addTo(m);
+    setTileFail(false);
+    if (enabled && b) {
+      const t = L.tileLayer(b.url, { attribution: b.attribution, maxZoom: 19, subdomains: b.subdomains ?? 'abc' });
+      let ok = 0;
+      let bad = 0;
+      t.on('tileload', () => ok++);
+      t.on('tileerror', () => {
+        bad++;
+        if (bad >= 4 && ok === 0) setTileFail(true);
+      });
+      tileRef.current = t.addTo(m);
+    }
     try {
       window.localStorage.setItem('basemap', basemap);
     } catch {
@@ -255,6 +267,7 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
           {error} <button className="small" onClick={reload}>Tentar de novo</button>
         </div>
       )}
+      {tileFail && <div className="notice aviso no-print" role="alert">Não foi possível carregar o mapa-base (sem internet, bloqueio de rede ou chave inválida). As áreas e os pontos continuam aparecendo. Tente outro “Mapa-base” ou escolha “Sem mapa-base”.</div>}
       <div ref={el} id="map" role="region" aria-label="Mapa interativo" aria-busy={loading} />
       <div className="legend" aria-label="Legenda">
         <span><span className="dot" style={{ background: COLORS.positivo }} />Captura – exame positivo</span>

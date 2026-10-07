@@ -49,13 +49,14 @@ export function decodeXmlBytes(bytes: Uint8Array, issues: Issue[]): string {
   return text.replace(/^\uFEFF/, '');
 }
 
+/** Texto de um nó. As entidades XML padrão (&amp; &lt; &gt; &quot; &apos;) são decodificadas aqui: o parser não as expande (segurança contra XXE). */
 function text(node: unknown): string {
   if (node == null) return '';
-  if (typeof node === 'string') return node;
+  if (typeof node === 'string') return decodeEntities(node);
   if (Array.isArray(node)) return text(node[0]);
   if (typeof node === 'object') {
     const t = (node as Record<string, unknown>)['#text'];
-    return typeof t === 'string' ? t : '';
+    return typeof t === 'string' ? decodeEntities(t) : '';
   }
   return String(node);
 }
@@ -172,12 +173,12 @@ export function parseKml(xml: string, extraIssues: Issue[] = []): RawKml {
       const structured: Record<string, string> = {};
       const ext = arr<Record<string, unknown>>(pm['ExtendedData'])[0];
       for (const d of arr<Record<string, unknown>>(ext?.['Data'])) {
-        const k = String(d['@_name'] ?? '').trim();
+        const k = decodeEntities(String(d['@_name'] ?? '')).trim();
         if (k && !(k in structured)) structured[k] = text(d['value']).trim();
       }
       for (const sd of arr<Record<string, unknown>>(ext?.['SchemaData'])) {
         for (const s of arr<Record<string, unknown>>(sd['SimpleData'])) {
-          const k = String(s['@_name'] ?? '').trim();
+          const k = decodeEntities(String(s['@_name'] ?? '')).trim();
           if (k && !(k in structured)) structured[k] = text(s).trim();
         }
       }

@@ -12,6 +12,7 @@ export interface SnapshotOptions {
   /** casas decimais das coordenadas (5 ≈ 1 m) */
   precision?: number;
   boundary?: { geojson: unknown; source: string } | null;
+  mapas?: { brasil: unknown; ceara: unknown };
   now?: Date;
 }
 
@@ -62,6 +63,37 @@ export function buildSnapshot(bytes: Uint8Array, filename: string, opts: Snapsho
     duplicate_of: f.duplicateOf,
   }));
 
+  // Pendências: o que a equipe deve conferir no KML de origem (sem endereço, imóvel nem identificadores restritos).
+  const pendencias: Snapshot['sobre']['pendencias'] = [];
+  const hasExamField = !!report.seenFields.resultado_exame;
+  for (const { f } of kept) {
+    const label = [f.type === 'captura' ? 'Captura' : f.type === 'pit' ? 'PIT' : f.type === 'visita' ? 'Visita' : null, f.name || f.species].filter(Boolean).join(' · ') || `Registro ${f.index}`;
+    const add = (problema: string) => pendencias.push({ indice: f.index + 1, registro: label, localidade: f.localityRaw, data: f.visitDate, problema });
+    const codes = new Set(f.issues.map((i) => i.code));
+    if (codes.has('exame_antes_da_captura')) add('Data do exame anterior à data de captura (confira as datas)');
+    if (codes.has('localidade_nao_reconhecida') && ['captura', 'visita', 'pit'].includes(f.type)) add(`Localidade "${f.localityRaw ?? '?'}" não existe entre as áreas do mapa (confira a grafia)`);
+    if (codes.has('data_invalida')) add('Data inválida');
+    if (codes.has('fora_da_area')) add('Coordenada fora da região esperada (latitude/longitude podem estar trocadas)');
+    if (f.type === 'captura') {
+      if (hasExamField && f.examResult === 'nao_informado') add('Sem resultado de exame');
+      if (!f.visitDate && !codes.has('data_invalida')) add('Sem data de captura');
+      if (!f.species) add('Espécie não identificada pelo nome do registro');
+    }
+  }
+
+  // Localidades com registros, mas sem área desenhada em "Area das Localidades" (uma pendência por localidade).
+  const polyKeys = new Set(features.filter((f) => f.type === 'localidade' && f.geometry?.type === 'Polygon' && f.localityKey).map((f) => f.localityKey));
+  if (polyKeys.size > 0) {
+    const flagged = new Set(pendencias.filter((p) => p.problema.startsWith('Localidade "')).map((p) => p.localidade));
+    const seenKeys = new Set<string>();
+    for (const { f } of kept) {
+      if (!['captura', 'visita', 'pit'].includes(f.type) || !f.localityKey || polyKeys.has(f.localityKey) || seenKeys.has(f.localityKey) || flagged.has(f.localityRaw)) continue;
+      seenKeys.add(f.localityKey);
+      pendencias.push({ indice: f.index + 1, registro: `Localidade ${f.localityRaw}`, localidade: f.localityRaw, data: null, problema: 'A localidade tem registros, mas não tem área desenhada na pasta "Area das Localidades"' });
+    }
+  }
+  pendencias.sort((a, b) => a.indice - b.indice);
+
   const byCode = new Map<string, { mensagem: string; quantidade: number }>();
   for (const i of report.issues) {
     if (i.severity === 'info') continue;
@@ -80,11 +112,13 @@ export function buildSnapshot(bytes: Uint8Array, filename: string, opts: Snapsho
     seenFields: report.seenFields as unknown as Record<string, boolean>,
     rec,
     boundary: opts.boundary ?? null,
+    ...(opts.mapas && (opts.mapas.brasil || opts.mapas.ceara) ? { mapas: opts.mapas } : {}),
     sobre: {
       registrosLidos: features.length,
       duplicatasExcluidas: features.length - kept.length,
       avisos: [...byCode].map(([codigo, v]) => ({ codigo, mensagem: v.mensagem, quantidade: v.quantidade })),
       camposDescartados: report.droppedPersonalFields,
+      pendencias: pendencias.slice(0, 1000),
       camposRestritosRemovidos: ['Endereço', 'Número do imóvel/residência', 'Identificador de origem (nº da etiqueta)', 'Valores brutos do arquivo original'],
     },
   };

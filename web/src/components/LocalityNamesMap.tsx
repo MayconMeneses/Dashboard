@@ -23,6 +23,7 @@ export function LocalityNamesMap({ me }: { me: Me }) {
   const basemaps = useMemo(() => getBasemaps(me.map.cartoKey), [me.map.cartoKey]);
   const [basemap, setBasemap] = useState<string>(() => (enabled ? initialBasemap(basemaps, me.map.cartoKey) : 'none'));
   const [hovered, setHovered] = useState<string | null>(null);
+  const [tileFail, setTileFail] = useState(false);
   const areas = useAsync(() => api.get<{ features: AreaFeature[] }>('/api/map?layers=localidade'), []);
   const boundary = useAsync(() => api.get<{ geojson: GeoJSON.GeoJsonObject | null; source: string | null }>('/api/boundary'), []);
   const polys = useMemo(() => (areas.data?.features ?? []).filter((f) => f.geometry.type === 'Polygon'), [areas.data]);
@@ -62,7 +63,18 @@ export function LocalityNamesMap({ me }: { me: Me }) {
     tile.current?.remove();
     tile.current = null;
     const b = basemaps.find((x) => x.id === basemap);
-    if (enabled && b) tile.current = L.tileLayer(b.url, { attribution: b.attribution, maxZoom: 19, subdomains: b.subdomains ?? 'abc' }).addTo(m);
+    setTileFail(false);
+    if (enabled && b) {
+      const t = L.tileLayer(b.url, { attribution: b.attribution, maxZoom: 19, subdomains: b.subdomains ?? 'abc' });
+      let ok = 0;
+      let bad = 0;
+      t.on('tileload', () => ok++);
+      t.on('tileerror', () => {
+        bad++;
+        if (bad >= 4 && ok === 0) setTileFail(true);
+      });
+      tile.current = t.addTo(m);
+    }
   }, [basemap, enabled, basemaps]);
 
   useEffect(() => {
@@ -123,6 +135,7 @@ export function LocalityNamesMap({ me }: { me: Me }) {
       </div>
       {areas.error && <div className="notice erro" role="alert">{areas.error} <button className="small" onClick={areas.reload}>Tentar de novo</button></div>}
       {areas.data && polys.length === 0 && <div className="notice info">O arquivo ativo não tem áreas de localidades (pasta “Area das Localidades”).</div>}
+      {tileFail && <div className="notice aviso no-print" role="alert">Não foi possível carregar o mapa-base (sem internet, bloqueio de rede ou chave inválida). As áreas continuam aparecendo. Tente outro “Mapa-base” ou escolha “Sem mapa-base”.</div>}
       <div ref={el} id="map-names" role="region" aria-label="Mapa com as áreas das localidades; passe o mouse para ver o nome" aria-busy={areas.loading} />
       <details style={{ marginTop: 8 }}>
         <summary className="small">Ver a lista de localidades ({names.length})</summary>

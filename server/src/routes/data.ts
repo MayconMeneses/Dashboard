@@ -6,6 +6,7 @@ import { getAllRecordsForExport } from '../services/queries.js';
 import { analytics } from '../../../web/src/static/analytics.js';
 import type { SnapshotRec } from '../../../web/src/static/engine.js';
 import { getRecForAnalytics } from '../services/queries.js';
+import { buildKml } from '../services/kml-export.js';
 import { getChart, getFacets, getLocalities, getMapFeatures, getRecords, getSummary, parseFilters } from '../services/queries.js';
 import { getActiveImport } from '../services/importer.js';
 
@@ -93,6 +94,20 @@ export function registerDataRoutes(app: FastifyInstance, db: Db): void {
     }
     audit(db, user, 'exportacao_registros', undefined, { filters, linhas: rows.length, includeAddress });
     return reply.header('Content-Type', 'text/csv; charset=utf-8').header('Content-Disposition', 'attachment; filename="registros.csv"').send('﻿' + lines.join('\r\n') + '\r\n');
+  });
+
+  app.get('/api/export/records.kml', async (req, reply) => {
+    const user = requirePermission(req, reply, 'exportar');
+    if (!user) return;
+    const filters = parseFilters(req.query as Record<string, unknown>);
+    const active = getActiveImport(db);
+    const rows = getAllRecordsForExport(db, { ...filters, layers: filters.layers?.length ? filters.layers : ['captura', 'visita', 'pit'] }, false);
+    const areas = (getMapFeatures(db, { layers: ['localidade'] }).features as unknown as { geometry: { type: string; coordinates: unknown }; properties: { name: string | null; locality_raw: string | null } }[])
+      .filter((f) => f.geometry.type === 'Polygon')
+      .map((f) => ({ name: f.properties.name ?? f.properties.locality_raw ?? '', rings: f.geometry.coordinates as [number, number][][] }));
+    const kml = buildKml(rows as never, areas, { title: 'Vigilância de triatomíneos – Croatá/CE', source: active?.filename ?? 'registros manuais', generatedAt: new Date().toISOString() });
+    audit(db, user, 'exportacao_kml', undefined, { filters, registros: rows.length });
+    return reply.header('Content-Type', 'application/vnd.google-earth.kml+xml; charset=utf-8').header('Content-Disposition', 'attachment; filename="registros.kml"').send(kml);
   });
 
   app.get('/api/export/summary.csv', async (req, reply) => {

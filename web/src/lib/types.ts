@@ -2,7 +2,7 @@ export type Role = 'admin' | 'analista' | 'leitor';
 export interface Me {
   username: string;
   role: Role;
-  permissions: { importar: boolean; manual: boolean; exportar: boolean; restrito: boolean; auditoria: boolean };
+  permissions: { importar: boolean; manual: boolean; exportar: boolean; restrito: boolean; auditoria: boolean; administrar?: boolean };
   map: { tileUrl: string | null; attribution: string; maxUploadMb: number; cartoKey?: string | null };
 }
 export interface Kpi {

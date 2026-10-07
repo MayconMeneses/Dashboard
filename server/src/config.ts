@@ -19,6 +19,9 @@ export interface Config {
   boundarySource: string;
   /** chave da API de mapas-base CARTO (opcional; nunca fica no código) */
   cartoKey: string | null;
+  /** GeoJSON oficial opcional do Brasil (com UFs) e do Ceará, para os mapas de localização */
+  brasilGeojson: string | null;
+  cearaGeojson: string | null;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Partial<Config> = {}): Config {
@@ -38,6 +41,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     webDist: resolve(import.meta.dirname, '../../web/dist'),
     // Limite municipal oficial (GeoJSON) opcional, ex.: malha municipal do IBGE. Nunca é desenhado um limite "inventado".
     cartoKey: env.CARTO_API_KEY?.trim() || null,
+    brasilGeojson: env.BRASIL_GEOJSON ? resolve(env.BRASIL_GEOJSON) : null,
+    cearaGeojson: env.CEARA_GEOJSON ? resolve(env.CEARA_GEOJSON) : null,
     boundaryFile: env.BOUNDARY_FILE ? resolve(env.BOUNDARY_FILE) : existsSync(BUNDLED_BOUNDARY) ? BUNDLED_BOUNDARY : null,
     boundarySource:
       env.BOUNDARY_SOURCE ??

@@ -33,6 +33,50 @@ function polygonsOf(g: GeoJSON.GeoJsonObject | null | undefined): Ring[][] {
   return [];
 }
 
+type Props2 = Record<string, unknown>;
+
+/** Identifica a UF do Ceará numa feição oficial (IBGE: codarea 23, SIGLA/sigla CE ou nome). */
+function isCeara(props: Props2 | null | undefined): boolean {
+  if (!props) return false;
+  return Object.values(props).some((v) => {
+    const t = String(v ?? '').trim().toUpperCase();
+    return t === 'CE' || t === '23' || t === 'CEARÁ' || t === 'CEARA';
+  });
+}
+
+interface Official {
+  paths: { d: string; ce: boolean }[];
+  vb: string;
+  marker: { x: number; y: number };
+  r: number;
+}
+
+/** Projeta um GeoJSON oficial (equiretangular corrigido pela latitude) e já posiciona o marcador de Croatá. */
+function projectOfficial(g: GeoJSON.GeoJsonObject | null | undefined, mark: { lon: number; lat: number }): Official | null {
+  const feats: { props: Props2 | null; polys: Ring[][] }[] =
+    g?.type === 'FeatureCollection'
+      ? (g as GeoJSON.FeatureCollection).features.map((f) => ({ props: f.properties as Props2 | null, polys: polygonsOf(f.geometry) }))
+      : g
+        ? [{ props: (g as GeoJSON.Feature).properties as Props2 | null, polys: polygonsOf(g) }]
+        : [];
+  const rings = feats.flatMap((f) => f.polys.flat());
+  if (!rings.length) return null;
+  const pts = rings.flat();
+  const [w, e] = [Math.min(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[0]))];
+  const [s, n] = [Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[1]))];
+  const k = Math.cos((((s + n) / 2) * Math.PI) / 180);
+  const proj = (lon: number, lat: number): [number, number] => [(lon - w) * k * 100, (n - lat) * 100];
+  const width = (e - w) * k * 100;
+  const height = (n - s) * 100;
+  const [mx, my] = proj(mark.lon, mark.lat);
+  return {
+    paths: feats.map((f) => ({ d: ringsToPath(f.polys.flat(), proj), ce: isCeara(f.props) })),
+    vb: `${-width * 0.03} ${-height * 0.03} ${width * 1.06} ${height * 1.06}`,
+    marker: { x: mx, y: my },
+    r: Math.max(width, height) * 0.02,
+  };
+}
+
 export function LocationMaps({ filters, epoch, selected, onSelect }: Props) {
   const ceRef = useRef<SVGPathElement>(null);
   const [ceBox, setCeBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
@@ -56,6 +100,9 @@ export function LocationMaps({ filters, epoch, selected, onSelect }: Props) {
   const map = useAsync(() => api.get<{ features: MapFeature[] }>(`/api/map?${q}`), [q, epoch]);
   const locs = useAsync(() => api.get<Locality[]>(`/api/localities?${q}`), [q, epoch]);
   const stat = useMemo(() => new Map((locs.data ?? []).map((l) => [l.key, l])), [locs.data]);
+  const ctx = useAsync(() => api.get<{ brasil: GeoJSON.GeoJsonObject | null; ceara: GeoJSON.GeoJsonObject | null }>('/api/context-maps'), []);
+  const offBr = useMemo(() => projectOfficial(ctx.data?.brasil, CROATA), [ctx.data]);
+  const offCe = useMemo(() => projectOfficial(ctx.data?.ceara, CROATA), [ctx.data]);
   const [hover, setHover] = useState<{ key: string; name: string; x: number; y: number } | null>(null);
 
   const view = useMemo(() => {
@@ -85,24 +132,44 @@ export function LocationMaps({ filters, epoch, selected, onSelect }: Props) {
       <div className="loc-grid">
         <figure className="loc">
           <figcaption>Brasil</figcaption>
-          <svg viewBox="0 0 613 639" role="img" aria-label="Mapa do Brasil com o Ceará destacado">
-            {states.states.map((s) => (
-              <path key={s.id} d={s.path} fill={s.id === 'ce' ? 'var(--accent)' : 'var(--border)'} stroke="var(--surface)" strokeWidth={0.8} />
-            ))}
-          </svg>
-          <p className="small muted">Ceará em destaque (mapa esquemático).</p>
+          {offBr ? (
+            <svg viewBox={offBr.vb} role="img" aria-label="Mapa do Brasil com o Ceará destacado">
+              {offBr.paths.map((p, i) => (
+                <path key={i} d={p.d} fill={p.ce ? 'var(--accent)' : 'var(--border)'} stroke="var(--surface)" strokeWidth={0.4} />
+              ))}
+            </svg>
+          ) : (
+            <svg viewBox="0 0 613 639" role="img" aria-label="Mapa do Brasil com o Ceará destacado">
+              {states.states.map((s) => (
+                <path key={s.id} d={s.path} fill={s.id === 'ce' ? 'var(--accent)' : 'var(--border)'} stroke="var(--surface)" strokeWidth={0.8} />
+              ))}
+            </svg>
+          )}
+          <p className="small muted">{offBr ? 'Ceará em destaque (limites oficiais).' : 'Ceará em destaque (mapa esquemático).'}</p>
         </figure>
 
         <figure className="loc">
           <figcaption>Ceará</figcaption>
-          <svg viewBox={`${box.x - 6} ${box.y - 6} ${box.width + 12} ${box.height + 12}`} role="img" aria-label="Mapa do Ceará com a posição de Croatá">
-            <path ref={ceRef} d={ce.path} fill="var(--border)" stroke="var(--muted)" strokeWidth={0.6} />
-            <circle cx={marker.x} cy={marker.y} r={box.width * 0.035} fill={COLORS.positivo} stroke="#fff" strokeWidth={0.8} />
-            <text x={marker.x + box.width * 0.06} y={marker.y + 1.5} fontSize={box.width * 0.075} fill="var(--text)" fontWeight="600">
-              Croatá
-            </text>
-          </svg>
-          <p className="small muted">Mapa esquemático; posição de Croatá aproximada.</p>
+          {offCe ? (
+            <svg viewBox={offCe.vb} role="img" aria-label="Mapa do Ceará com a posição de Croatá">
+              {offCe.paths.map((p, i) => (
+                <path key={i} d={p.d} fill="var(--border)" stroke="var(--muted)" strokeWidth={0.3} />
+              ))}
+              <circle cx={offCe.marker.x} cy={offCe.marker.y} r={offCe.r} fill={COLORS.positivo} stroke="#fff" strokeWidth={0.5} />
+              <text x={offCe.marker.x + offCe.r * 1.6} y={offCe.marker.y + offCe.r * 0.5} fontSize={offCe.r * 3} fill="var(--text)" fontWeight="600">
+                Croatá
+              </text>
+            </svg>
+          ) : (
+            <svg viewBox={`${box.x - 6} ${box.y - 6} ${box.width + 12} ${box.height + 12}`} role="img" aria-label="Mapa do Ceará com a posição de Croatá">
+              <path ref={ceRef} d={ce.path} fill="var(--border)" stroke="var(--muted)" strokeWidth={0.6} />
+              <circle cx={marker.x} cy={marker.y} r={box.width * 0.035} fill={COLORS.positivo} stroke="#fff" strokeWidth={0.8} />
+              <text x={marker.x + box.width * 0.06} y={marker.y + 1.5} fontSize={box.width * 0.075} fill="var(--text)" fontWeight="600">
+                Croatá
+              </text>
+            </svg>
+          )}
+          <p className="small muted">{offCe ? 'Limites oficiais; posição de Croatá pelas coordenadas da sede.' : 'Mapa esquemático; posição de Croatá aproximada.'}</p>
         </figure>
 
         <figure className="loc loc-croata">
@@ -171,7 +238,7 @@ export function LocationMaps({ filters, epoch, selected, onSelect }: Props) {
           </p>
         </figure>
       </div>
-      <p className="small muted" style={{ marginBottom: 0 }}>Brasil e Ceará: mapa esquemático © @svg-maps/brazil (CC BY 4.0).</p>
+      <p className="small muted" style={{ marginBottom: 0 }}>{offBr || offCe ? 'Brasil/Ceará: GeoJSON oficial informado na geração.' : 'Brasil e Ceará: mapa esquemático © @svg-maps/brazil (CC BY 4.0).'}</p>
     </section>
   );
 }
