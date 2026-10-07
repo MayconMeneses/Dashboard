@@ -184,6 +184,7 @@ export function AnalyticsPanel({ filters, epoch, onChange, reportMode = false }:
 
   // --- fase/sexo
   const fs = a?.faseSexo ?? EMPTY;
+  const fsCombos = a?.faseSexoCombinacoes ?? EMPTY;
   // --- positividade por espécie
   const posRows = spRows.filter((r) => r.positivo + r.negativo > 0);
   // --- positividade por localidade (só localidades com exame)
@@ -402,11 +403,14 @@ export function AnalyticsPanel({ filters, epoch, onChange, reportMode = false }:
           id="fase-e-sexo"
           title="Fase e sexo dos triatomíneos"
           unit="registros de captura"
-          how="ninfa = inseto jovem; adultos são separados em macho e fêmea. Registros com mais de um tipo aparecem em “Ninfa e adulto” ou “Macho e Fêmea”."
-          note="Lido do campo “Ninfa_Macho ou Femea”. “Não informado” = campo em branco."
-          table={{ head: ['Categoria', 'Registros'], rows: fs.map((r) => [r.categoria, r.total]) }}
+          how="mostra quais tipos de inseto apareceram: ninfa (jovem), macho e fêmea (adultos). Um mesmo registro pode ter mais de um tipo (ex.: macho e fêmea, ou ninfa e macho): nesse caso ele conta em cada tipo, por isso a soma das barras pode passar do total de registros."
+          note={<>Lido do campo “Ninfa_Macho ou Femea”. “Não informado” = campo em branco. As combinações exatas dentro de cada registro aparecem no segundo gráfico.</>}
+          table={{ head: ['Tipo', 'Registros em que aparece'], rows: [...fs.map((r) => [r.categoria, r.total]), ...fsCombos.map((r) => [`Combinação: ${r.combinacao}`, r.total])] }}
         >
-          <BarChart labels={fs.map((r) => r.categoria)} series={[{ label: 'Registros', data: fs.map((r) => r.total), color: '#0f766e' }]} unit="registros de captura" totals ariaLabel="Barras horizontais: fase e sexo" rowHeight={28} thickness={14} />
+          <p className="small" style={{ margin: '0 0 4px', fontWeight: 600 }}>Registros em que cada tipo aparece</p>
+          <BarChart labels={fs.map((r) => r.categoria)} series={[{ label: 'Registros', data: fs.map((r) => r.total), color: '#0f766e' }]} unit="registros de captura" totals ariaLabel="Barras horizontais: registros com ninfa, macho, fêmea ou não informado" rowHeight={28} thickness={14} />
+          <p className="small" style={{ margin: '12px 0 4px', fontWeight: 600 }}>Combinações dentro do mesmo registro</p>
+          <BarChart labels={fsCombos.map((r) => r.combinacao)} series={[{ label: 'Registros', data: fsCombos.map((r) => r.total), color: '#0891b2' }]} unit="registros de captura" totals ariaLabel="Barras horizontais: combinações de ninfa, macho e fêmea no mesmo registro" rowHeight={26} thickness={12} />
         </ChartCard>
 
         <ChartCard
