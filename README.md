@@ -27,6 +27,7 @@ Outros usuários: `npm run user:create -- <usuario> <senha(>=10)> <admin|analist
 | `TILE_URL` | OpenStreetMap | Mapa-base. `TILE_URL=` (vazio) desativa e não faz nenhuma requisição a terceiros. |
 | `COOKIE_SECURE` | `false` | Marque `true` atrás de HTTPS. |
 | `SESSION_HOURS` | `12` | Duração da sessão. |
+| `CARTO_API_KEY` | — | Chave dos mapas-base CARTO (https://carto.com/basemaps/apikey). Sem ela os mapas CARTO mostram marca d'água; com ela o padrão passa a ser o “Voyager”. **Nunca grave a chave no código/repositório.** |
 | `BOUNDARY_FILE`, `BOUNDARY_SOURCE` | — | GeoJSON do limite municipal oficial (ex.: malha municipal do IBGE de Croatá) e o texto da fonte exibido no mapa. |
 
 ## Painel compartilhável (um único arquivo HTML)
@@ -38,11 +39,12 @@ npm install
 npm run build:static          # uma vez (gera o modelo web/dist-static/index.html)
 npm run gerar-html -- "C:\caminho\MAPA DE CROATÁ.kml" painel-croata.html --nome="MAPA DE CROATÁ.kml"
 ```
+Chave de mapas: `--carto-key=SUACHAVE` (ou a variável `CARTO_API_KEY`). **Atenção:** a chave fica gravada dentro do HTML e quem receber o arquivo pode vê-la; restrinja/revogue no painel da CARTO se preciso.
 Opções: `--excluir-duplicatas` / `--manter-duplicatas` (padrão: exclui só quando todas as cópias estão em outras pastas, como Resultados/Positivos/Negativos).
 
 - Os números são os mesmos do painel com servidor (há testes de paridade entre os dois).
 - **Privacidade:** o arquivo gerado **não leva** endereço, número do imóvel/residência, nº da etiqueta nem os valores brutos do KML; as coordenadas são arredondadas (~1 m). Mesmo assim contém as posições de capturas e PITs: compartilhe só com quem pode ver esses dados.
-- O mapa-base precisa de internet; sem ela, áreas e limite continuam aparecendo. Padrão: mapa claro OpenStreetMap/CARTO (funciona em arquivo aberto do disco). O OpenStreetMap padrão é bloqueado pelo provedor quando a página é um arquivo local (erro 403), por isso não é o padrão.
+- O mapa-base precisa de internet; sem ela, áreas e limite continuam aparecendo. O OpenStreetMap padrão é bloqueado pelo provedor quando a página é um arquivo local (erro 403); a CARTO exige chave (sem ela mostra marca d'água).
 - A aba **Sobre os dados** explica o arquivo de origem, o que foi excluído e como ler os números.
 
 ## Perfis
@@ -81,7 +83,7 @@ Campos com possíveis dados pessoais (morador, proprietário, telefone, CPF…) 
 
 ## Mapas
 
-- **Mapa-base:** o seletor “Mapa-base” oferece Claro (OpenStreetMap/CARTO, padrão), Satélite (Esri), OpenStreetMap padrão e “Sem mapa-base”. Só o escolhido é carregado; o provedor recebe a região que está sendo vista. No servidor, `TILE_URL=` (vazio) desliga todos.
+- **Mapa-base:** o seletor “Mapa-base” oferece, quando há `CARTO_API_KEY`, Ruas e relevo (CARTO Voyager, padrão) e Claro (CARTO Positron); além disso Satélite (Esri), OpenStreetMap padrão e “Sem mapa-base”. Sem chave da CARTO, o padrão é Satélite em arquivo local ou OpenStreetMap quando servido por http(s). Só o escolhido é carregado; o provedor recebe a região que está sendo vista. No servidor, `TILE_URL=` (vazio) desliga todos.
 - **Filtro de espécie:** lista as espécies encontradas (com contagem) e filtra indicadores, gráfico, mapa e tabela. As áreas das localidades continuam desenhadas quando há filtros de registros.
 
 - **Onde fica Croatá:** três mapas — Brasil (Ceará em destaque), Ceará (posição de Croatá) e Croatá com o limite do IBGE e as **áreas das localidades desenhadas por você no KML** (pasta “Area das Localidades”). Passe o mouse sobre uma área para ver o nome e as contagens (capturas, positivos, negativos); clique para selecionar a localidade (o gráfico, o mapa e a tabela acompanham). As cores seguem os filtros: vermelho = com exame positivo, azul = só negativos/sem resultado, cinza = sem capturas.

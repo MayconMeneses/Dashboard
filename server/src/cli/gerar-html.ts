@@ -5,11 +5,12 @@ import { buildSnapshot } from '../snapshot.js';
 // Uso: npm run gerar-html -- <arquivo.kml|kmz> [saida.html] [--manter-duplicatas|--excluir-duplicatas]
 const base = process.env.INIT_CWD ?? process.cwd();
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
-const flags = new Set(process.argv.slice(2).filter((a) => a.startsWith('--') && !a.startsWith('--nome=')));
+const flags = new Set(process.argv.slice(2).filter((a) => a.startsWith('--') && !a.startsWith('--nome=') && !a.startsWith('--carto-key=')));
+const cartoKey = process.argv.slice(2).find((a) => a.startsWith('--carto-key='))?.slice(12) || process.env.CARTO_API_KEY || undefined;
 const nome = process.argv.slice(2).find((a) => a.startsWith('--nome='))?.slice(7);
 const [input, output = 'painel-triatomineos-croata.html'] = args;
 if (!input) {
-  console.error('Uso: npm run gerar-html -- <arquivo.kml|kmz> [saida.html] [--nome="Nome exibido.kml"] [--manter-duplicatas|--excluir-duplicatas]');
+  console.error('Uso: npm run gerar-html -- <arquivo.kml|kmz> [saida.html] [--nome="Nome exibido.kml"] [--carto-key=CHAVE (ou variável CARTO_API_KEY)] [--manter-duplicatas|--excluir-duplicatas]');
   process.exit(1);
 }
 const template = resolve(import.meta.dirname, '../../../web/dist-static/index.html');
@@ -30,6 +31,7 @@ const snap = buildSnapshot(readFileSync(inPath), nome ?? basename(inPath), {
   boundary,
   excludeRepeats: flags.has('--excluir-duplicatas') ? true : flags.has('--manter-duplicatas') ? false : undefined,
 });
+if (cartoKey) snap.cartoKey = cartoKey;
 const json = JSON.stringify(snap).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 let html = readFileSync(template, 'utf8');
 const re = /<script id="snapshot" type="application\/json">[\s\S]*?<\/script>/;
@@ -40,4 +42,5 @@ if (!re.test(html)) {
 html = html.replace(re, () => `<script id="snapshot" type="application/json">${json}</script>`);
 const outPath = resolve(base, output);
 writeFileSync(outPath, html);
+if (cartoKey) console.log('Aviso: a chave da CARTO foi gravada dentro do HTML; quem receber o arquivo poderá vê-la. Restrinja ou revogue a chave no painel da CARTO se necessário.');
 console.log(`Gerado: ${outPath} (${(html.length / 1048576).toFixed(2)} MB). Registros: ${snap.rec.length}; duplicatas excluídas: ${snap.sobre.duplicatasExcluidas}.`);

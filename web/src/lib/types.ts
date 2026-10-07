@@ -3,7 +3,7 @@ export interface Me {
   username: string;
   role: Role;
   permissions: { importar: boolean; manual: boolean; exportar: boolean; restrito: boolean; auditoria: boolean };
-  map: { tileUrl: string | null; attribution: string; maxUploadMb: number };
+  map: { tileUrl: string | null; attribution: string; maxUploadMb: number; cartoKey?: string | null };
 }
 export interface Kpi {
   value: number | null;

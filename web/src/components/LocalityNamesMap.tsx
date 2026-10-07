@@ -1,7 +1,7 @@
 import L from 'leaflet';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
-import { BASEMAPS, storedBasemap } from '../lib/basemaps';
+import { getBasemaps, initialBasemap } from '../lib/basemaps';
 import type { Me } from '../lib/types';
 import { useAsync } from '../lib/useAsync';
 
@@ -19,7 +19,8 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
  */
 export function LocalityNamesMap({ me }: { me: Me }) {
   const enabled = !!me.map.tileUrl;
-  const [basemap, setBasemap] = useState<string>(() => (enabled ? (storedBasemap() ?? 'carto') : 'none'));
+  const basemaps = useMemo(() => getBasemaps(me.map.cartoKey), [me.map.cartoKey]);
+  const [basemap, setBasemap] = useState<string>(() => (enabled ? initialBasemap(basemaps, me.map.cartoKey) : 'none'));
   const [hovered, setHovered] = useState<string | null>(null);
   const areas = useAsync(() => api.get<{ features: AreaFeature[] }>('/api/map?layers=localidade'), []);
   const boundary = useAsync(() => api.get<{ geojson: GeoJSON.GeoJsonObject | null; source: string | null }>('/api/boundary'), []);
@@ -49,9 +50,9 @@ export function LocalityNamesMap({ me }: { me: Me }) {
     if (!m) return;
     tile.current?.remove();
     tile.current = null;
-    const b = BASEMAPS.find((x) => x.id === basemap);
+    const b = basemaps.find((x) => x.id === basemap);
     if (enabled && b) tile.current = L.tileLayer(b.url, { attribution: b.attribution, maxZoom: 19, subdomains: b.subdomains ?? 'abc' }).addTo(m);
-  }, [basemap, enabled]);
+  }, [basemap, enabled, basemaps]);
 
   useEffect(() => {
     const m = map.current;
@@ -101,7 +102,7 @@ export function LocalityNamesMap({ me }: { me: Me }) {
         <label className="field">
           Mapa-base
           <select value={basemap} onChange={(e) => { setBasemap(e.target.value); try { window.localStorage.setItem('basemap', e.target.value); } catch { /* preferência não salva */ } }} disabled={!enabled}>
-            {BASEMAPS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+            {basemaps.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
             <option value="none">Sem mapa-base</option>
           </select>
         </label>
