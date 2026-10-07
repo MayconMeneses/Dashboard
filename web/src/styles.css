@@ -79,3 +79,13 @@ tbody tr[tabindex] { cursor: pointer; } tbody tr:hover { background: var(--bg); 
 .login { max-width: 380px; margin: 10vh auto; }
 .sticky-detail { scroll-margin-top: var(--s4); }
 @media (max-width: 600px) { .container { padding: var(--s3); } #map { height: 360px; } .userbox { margin-left: 0; } }
+
+.loc-grid { display: grid; gap: var(--s4); grid-template-columns: 1fr; }
+@media (min-width: 700px) { .loc-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .loc-croata { grid-column: 1 / -1; } }
+@media (min-width: 1100px) { .loc-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2.2fr); } .loc-croata { grid-column: auto; } }
+figure.loc { margin: 0; min-width: 0; }
+figure.loc figcaption { font-weight: 600; margin-bottom: var(--s2); }
+figure.loc svg { width: 100%; height: auto; max-height: 420px; display: block; }
+.loc-svg-wrap { position: relative; }
+.area-tooltip { position: absolute; z-index: 2; pointer-events: none; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--s1) var(--s2); font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.2); white-space: nowrap; }
+.area-tip { font-size: 13px; }

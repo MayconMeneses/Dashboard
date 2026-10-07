@@ -33,7 +33,7 @@ export function registerDataRoutes(app: FastifyInstance, db: Db): void {
 
   app.get('/api/localities', async (req, reply) => {
     if (!requireUser(req, reply)) return;
-    return getLocalities(db);
+    return getLocalities(db, parseFilters(req.query as Record<string, unknown>));
   });
 
   app.get('/api/map', async (req, reply) => {

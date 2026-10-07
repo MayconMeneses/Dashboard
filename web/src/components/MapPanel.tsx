@@ -1,9 +1,9 @@
 import L from 'leaflet';
 import 'leaflet.markercluster';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { COLORS, LABEL, filtersToQuery, formatDate } from '../lib/format';
-import type { Filters, MapFeature, Me } from '../lib/types';
+import type { Filters, Locality, MapFeature, Me } from '../lib/types';
 import { useAsync } from '../lib/useAsync';
 
 interface Props {
@@ -39,10 +39,14 @@ function popupHtml(p: MapFeature['properties']): string {
 
 export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Props) {
   const [colorByExam, setColorByExam] = useState(true);
+  const [colorAreas, setColorAreas] = useState(true);
   const [on, setOn] = useState<Record<Layer, boolean>>({ localidade: true, area: true, rota: true, visita: true, captura: true, pit: true, outro: true });
   const q = filtersToQuery({ ...filters, locality: undefined, q: undefined, layers: [] });
   const { data, loading, error, reload } = useAsync(() => api.get<{ features: MapFeature[] }>(`/api/map?${q}`), [q, epoch]);
 
+  const statsQ = filtersToQuery({ ...filters, locality: undefined, q: undefined, layers: [] });
+  const stats = useAsync(() => api.get<Locality[]>(`/api/localities?${statsQ}`), [statsQ, epoch]);
+  const statByKey = useMemo(() => new Map((stats.data ?? []).map((l) => [l.key, l])), [stats.data]);
   const boundaryCfg = useAsync(() => api.get<{ geojson: GeoJSON.GeoJsonObject | null; source: string | null }>('/api/boundary'), []);
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
@@ -107,14 +111,25 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
           layer = L.circleMarker(ll, { radius: ref ? 4 : isSel ? 9 : 7, color: '#ffffff', weight: 2, fillColor: color, fillOpacity: dimmed ? 0.3 : 0.95, opacity: dimmed ? 0.4 : 1 });
         }
       } else {
-        const gj = L.geoJSON({ type: 'Feature', geometry: f.geometry, properties: {} } as GeoJSON.Feature, {
-          style: () => ({
-            color: isSel ? '#b45309' : t === 'rota' ? '#7c3aed' : '#0f766e',
-            weight: isSel ? 4 : 2,
-            fillOpacity: t === 'localidade' ? (isSel ? 0.25 : 0.08) : 0.05,
-            opacity: dimmed ? 0.45 : 1,
-          }),
-        });
+        const st = p.locality_key ? statByKey.get(p.locality_key) : undefined;
+        const area = t === 'localidade' && f.geometry.type === 'Polygon';
+        const fill = !colorAreas || !area ? '#0f766e' : (st?.positivos ?? 0) > 0 ? '#c0392b' : (st?.capturas ?? 0) > 0 ? '#2563eb' : '#94a3b8';
+        const baseStyle = {
+          color: isSel ? '#b45309' : t === 'rota' ? '#7c3aed' : area && colorAreas ? fill : '#0f766e',
+          weight: isSel ? 4 : 2,
+          fillColor: fill,
+          fillOpacity: area ? (isSel ? 0.45 : colorAreas && (st?.capturas ?? 0) > 0 ? 0.3 : 0.12) : 0.05,
+          opacity: dimmed ? 0.45 : 1,
+        };
+        const gj = L.geoJSON({ type: 'Feature', geometry: f.geometry, properties: {} } as GeoJSON.Feature, { style: () => baseStyle });
+        if (area) {
+          const label = `<strong>${esc(p.name || p.locality_raw)}</strong><br/>${st ? `${st.capturas} captura(s) · ${st.positivos ?? 0} positivo(s) · ${st.negativos ?? 0} negativo(s)` : 'sem registros'}`;
+          gj.eachLayer((l) => {
+            l.bindTooltip(label, { sticky: true, direction: 'top', className: 'area-tip' });
+            l.on('mouseover', () => (l as L.Path).setStyle({ weight: 4, fillOpacity: Math.min(0.6, baseStyle.fillOpacity + 0.25) }));
+            l.on('mouseout', () => (l as L.Path).setStyle(baseStyle));
+          });
+        }
         gj.eachLayer((l) => {
           const lb = (l as L.Polygon).getBounds?.();
           if (lb) {
@@ -124,9 +139,9 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
         });
         layer = gj;
       }
-      layer.bindPopup(popupHtml(p));
+      if (!(t === 'localidade' && f.geometry.type === 'Polygon')) layer.bindPopup(popupHtml(p));
       if (t === 'localidade' || (p.locality_key && t !== 'rota' && t !== 'area')) layer.on('click', () => p.locality_key && selectRef.current(p.locality_key === selected ? undefined : p.locality_key));
-      if (t === 'localidade') layer.bindTooltip(esc(p.name || p.locality_raw), { direction: 'center', permanent: false });
+      if (t === 'localidade' && f.geometry.type === 'Point') layer.bindTooltip(esc(p.name || p.locality_raw), { direction: 'top' });
       markerByRid.current.set(p.rid, layer);
       g.addLayer(layer);
     }
@@ -145,7 +160,7 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
       fitted.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, selected, colorByExam, boundaryCfg.data]);
+  }, [data, selected, colorByExam, colorAreas, statByKey, boundaryCfg.data]);
 
   useEffect(() => {
     const m = map.current;
@@ -187,6 +202,10 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
               <input type="checkbox" checked={colorByExam} onChange={(e) => setColorByExam(e.target.checked)} />
               Cor pelo resultado do exame
             </label>
+            <label>
+              <input type="checkbox" checked={colorAreas} onChange={(e) => setColorAreas(e.target.checked)} />
+              Colorir áreas pela positividade
+            </label>
           </div>
         </fieldset>
         <button className="small" onClick={reset}>
@@ -204,6 +223,9 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
         <span><span className="dot" style={{ background: COLORS.negativo }} />Captura – exame negativo</span>
         <span><span className="dot" style={{ background: COLORS.pendente }} />Pendente</span>
         <span><span className="dot" style={{ background: COLORS.nao_realizado }} />Não realizado / não informado</span>
+        <span><span className="dot" style={{ background: '#c0392b', opacity: 0.5 }} />Área com exame positivo</span>
+        <span><span className="dot" style={{ background: '#2563eb', opacity: 0.5 }} />Área só com negativos/sem resultado</span>
+        <span><span className="dot" style={{ background: '#94a3b8' }} />Área sem capturas</span>
         <span>▲ Visita</span>
         <span><span className="dot" style={{ background: '#334155', width: 8, height: 8 }} />Localidade (ponto)</span>
         <span>■ PIT</span>

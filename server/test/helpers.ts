@@ -19,7 +19,7 @@ export interface Ctx {
 
 export async function setup(): Promise<Ctx> {
   const dir = mkdtempSync(join(tmpdir(), 'dash-'));
-  const cfg = loadConfig({}, { dataDir: dir, uploadDir: join(dir, 'uploads'), dbFile: ':memory:', webDist: null, tileUrl: null });
+  const cfg = loadConfig({}, { dataDir: dir, uploadDir: join(dir, 'uploads'), dbFile: ':memory:', webDist: null, tileUrl: null, boundaryFile: null });
   const db = openDb(':memory:');
   const app = buildApp(db, cfg);
   const cookie = {} as Ctx['cookie'];
