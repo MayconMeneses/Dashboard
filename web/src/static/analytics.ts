@@ -26,7 +26,7 @@ export interface Analytics {
   resumo: { capturas: number; comResultado: number; positivos: number; negativos: number; positividade: number | null; imoveis: number | null; localidadesComImoveis: number };
   porLocalidade: ({ key: string; name: string; imoveis: number | null; capturasPor100Imoveis: number | null } & ExamCounts)[];
   porEspecie: ({ especie: string } & ExamCounts)[];
-  linhaDoTempo: { mes: string; capturas: number; positivos: number; negativos: number; semResultado: number }[];
+  linhaDoTempo: { mes: string; capturas: number; positivos: number; negativos: number; semResultado: number; campanha: number; pit: number; semOrigem: number }[];
   semDataCaptura: number;
   porOrigem: ({ chave: 'captura' | 'pit' | 'nao_informado' } & ExamCounts)[];
   porAmbiente: ({ chave: 'intra' | 'peri' | 'intra_peri' | 'nao_informado' } & ExamCounts)[];
@@ -86,7 +86,7 @@ export function analytics(rec: SnapshotRec[], f: Filters): Analytics {
   const porEspecie = [...sp].map(([especie, g]) => ({ especie, ...g })).sort(bySpecies);
 
   // --- linha do tempo (sem o filtro de período: mostra tudo e o período aparece destacado)
-  const months = new Map<string, { capturas: number; positivos: number; negativos: number; semResultado: number }>();
+  const months = new Map<string, { capturas: number; positivos: number; negativos: number; semResultado: number; campanha: number; pit: number; semOrigem: number }>();
   let semData = 0;
   for (const r of captures(rec, { ...f, from: undefined, to: undefined })) {
     if (!r.visit_date) {
@@ -94,8 +94,11 @@ export function analytics(rec: SnapshotRec[], f: Filters): Analytics {
       continue;
     }
     const m = r.visit_date.slice(0, 7);
-    const g = months.get(m) ?? { capturas: 0, positivos: 0, negativos: 0, semResultado: 0 };
+    const g = months.get(m) ?? { capturas: 0, positivos: 0, negativos: 0, semResultado: 0, campanha: 0, pit: 0, semOrigem: 0 };
     g.capturas++;
+    if (r.channel === 'captura') g.campanha++;
+    else if (r.channel === 'pit') g.pit++;
+    else g.semOrigem++;
     if (r.exam_result === 'positivo') g.positivos++;
     else if (r.exam_result === 'negativo') g.negativos++;
     else g.semResultado++;

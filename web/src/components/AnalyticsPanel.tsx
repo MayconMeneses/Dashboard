@@ -5,7 +5,7 @@ import { COLORS, LABEL, filtersToQuery, formatNumber } from '../lib/format';
 import type { Filters } from '../lib/types';
 import { useAsync } from '../lib/useAsync';
 import { ChartCard } from './ChartCard';
-import { BarChart, DonutChart, type Series } from './charts';
+import { BarChart, ComboChart, DonutChart, type Series } from './charts';
 
 const EXAM: [keyof Analytics['porLocalidade'][number] & ('positivo' | 'negativo' | 'pendente' | 'nao_realizado' | 'nao_informado'), string][] = [
   ['positivo', 'Positivo'],
@@ -34,6 +34,7 @@ export function AnalyticsPanel({ filters, epoch, onChange }: Props) {
   const { data, loading, error, reload } = useAsync(() => api.get<Analytics>(`/api/analytics?${q}`), [q, epoch]);
   const [allLoc, setAllLoc] = useState(false);
   const [covAll, setCovAll] = useState(false);
+  const [posAll, setPosAll] = useState(false);
 
   const a = data;
   const examSeries = (rows: { positivo: number; negativo: number; pendente: number; nao_realizado: number; nao_informado: number }[]): Series[] =>
@@ -85,6 +86,30 @@ export function AnalyticsPanel({ filters, epoch, onChange }: Props) {
   const fs = a?.faseSexo ?? EMPTY;
   // --- positividade por espécie
   const posRows = spRows.filter((r) => r.positivo + r.negativo > 0);
+  // --- positividade por localidade (só localidades com exame)
+  const posLoc = useMemo(
+    () =>
+      a
+        ? a.porLocalidade
+            .filter((l) => l.positivo + l.negativo > 0)
+            .map((l) => ({ ...l, n: l.positivo + l.negativo, taxa: Math.round((l.positivo / (l.positivo + l.negativo)) * 1000) / 10 }))
+            .sort((x, y) => y.taxa - x.taxa || y.n - x.n || x.name.localeCompare(y.name, 'pt-BR'))
+        : [],
+    [a],
+  );
+  const posLocShown = posAll ? posLoc : posLoc.slice(0, 15);
+  // --- comparativo entre meses
+  const mesRows = useMemo(
+    () =>
+      tl.map((m, i) => {
+        const exam = m.positivos + m.negativos;
+        const prev = i > 0 ? tl[i - 1]!.capturas : null;
+        return { ...m, exam, taxa: exam > 0 ? Math.round((m.positivos / exam) * 1000) / 10 : null, variacao: prev ? Math.round(((m.capturas - prev) / prev) * 100) : null };
+      }),
+    [tl],
+  );
+  const mesBars = useMemo<Series[]>(() => [{ label: 'Captura em campanha', data: tl.map((m) => m.campanha), color: '#0f766e' }, { label: 'Entregue/atendido no PIT', data: tl.map((m) => m.pit), color: '#7c3aed' }], [tl]);
+  const mesLine = useMemo(() => ({ label: 'Positividade (%)', data: mesRows.map((m) => m.taxa), color: COLORS.positivo! }), [mesRows]);
   // --- cobertura
   const cov = useMemo(() => (a ? a.porLocalidade.filter((l) => l.capturasPor100Imoveis !== null).sort((x, y) => (y.capturasPor100Imoveis ?? 0) - (x.capturasPor100Imoveis ?? 0)) : []), [a]);
   const covShown = covAll ? cov : cov.slice(0, 15);
@@ -172,6 +197,31 @@ export function AnalyticsPanel({ filters, epoch, onChange }: Props) {
         </ChartCard>
 
         <ChartCard
+          id="positividade-por-localidade"
+          title="Positividade por localidade"
+          unit="% de positivos entre as examinadas"
+          how="para cada localidade: positivos ÷ (positivos + negativos), só com capturas que têm resultado de exame. O “n” é quantas foram examinadas naquela localidade."
+          hint="Clique em uma barra para filtrar por localidade."
+          note={<>Cuidado com o n: 1 positivo em 1 exame dá 100%, e isso não significa muito. Localidades sem nenhum exame não aparecem. {posLoc.length > 15 && !posAll ? `Mostrando as 15 com maior positividade de ${posLoc.length}.` : ''}</>}
+          table={{ head: ['Localidade', 'Positivos', 'Negativos', 'Examinadas (n)', 'Positividade (%)'], rows: posLoc.map((l) => [l.name, l.positivo, l.negativo, l.n, l.taxa]) }}
+        >
+          {posLoc.length === 0 ? <div className="notice info">Nenhuma localidade com exame para estes filtros.</div> : (
+            <>
+              <BarChart
+                labels={posLocShown.map((l) => `${l.name} (n=${l.n})`)}
+                series={[{ label: 'Positividade', data: posLocShown.map((l) => l.taxa), color: COLORS.positivo! }]}
+                unit="% de positivos" percent totals suffix="%"
+                dimmed={(i) => !!filters.locality && posLocShown[i]?.key !== filters.locality}
+                onPick={(i) => onChange({ ...filters, locality: posLocShown[i]?.key === filters.locality ? undefined : posLocShown[i]?.key })}
+                extraTooltip={(i) => `${posLocShown[i]!.positivo} positivo(s) e ${posLocShown[i]!.negativo} negativo(s)`}
+                ariaLabel="Barras horizontais: positividade por localidade" rowHeight={24}
+              />
+              {posLoc.length > 15 && <button className="small" onClick={() => setPosAll((v) => !v)}>{posAll ? 'Mostrar só as 15 primeiras' : `Mostrar todas as ${posLoc.length}`}</button>}
+            </>
+          )}
+        </ChartCard>
+
+        <ChartCard
           id="linha-do-tempo"
           title="Capturas ao longo do tempo"
           unit="registros de captura por mês"
@@ -181,6 +231,24 @@ export function AnalyticsPanel({ filters, epoch, onChange }: Props) {
           table={{ head: ['Mês', 'Positivo', 'Negativo', 'Sem resultado informado', 'Total'], rows: tl.map((m) => [m.mes, m.positivos, m.negativos, m.semResultado, m.capturas]) }}
         >
           <BarChart labels={tlLabels} series={tlSeries} unit="registros de captura" horizontal={false} stacked totals dimmed={tlDim} onPick={tlPick} thickness={26} ariaLabel="Colunas: capturas por mês e resultado do exame" />
+        </ChartCard>
+
+        <ChartCard
+          id="comparativo-meses"
+          title="Comparativo entre meses"
+          unit="capturas por mês e % de positivos"
+          how="as colunas comparam, mês a mês, as capturas feitas em campanha e as entregues/atendidas em PIT (eixo da esquerda). A linha vermelha é a positividade do mês (eixo da direita)."
+          hint="Clique em um mês para filtrar o painel por esse período. No balão, veja a variação em relação ao mês anterior."
+          note={<>A positividade do mês só usa capturas com resultado; meses com poucos exames oscilam muito (a linha some quando não há nenhum exame). O mês corrente pode estar incompleto. Veja a variação mensal na tabela.</>}
+          table={{ head: ['Mês', 'Campanha', 'PIT', 'Sem origem', 'Total', 'Variação vs mês anterior (%)', 'Examinadas (n)', 'Positivos', 'Positividade (%)'], rows: mesRows.map((m) => [m.mes, m.campanha, m.pit, m.semOrigem, m.capturas, m.variacao, m.exam, m.positivos, m.taxa]) }}
+          wide
+        >
+          <ComboChart
+            labels={tlLabels} bars={mesBars} line={mesLine} unit="registros de captura" unitRight="% de positivos"
+            dimmed={tlDim} onPick={tlPick}
+            extraTooltip={(i) => { const m = mesRows[i]!; return `Total: ${m.capturas}${m.variacao === null ? '' : ` (${m.variacao > 0 ? '+' : ''}${m.variacao}% vs mês anterior)`} · ${m.exam} examinada(s)`; }}
+            ariaLabel="Colunas e linha: capturas por mês e origem, com positividade mensal"
+          />
         </ChartCard>
 
         <ChartCard

@@ -37,8 +37,8 @@ describe('análises', () => {
   });
   it('linha do tempo por mês e contagem sem data', () => {
     expect(a.linhaDoTempo).toEqual([
-      { mes: '2026-06', capturas: 1, positivos: 1, negativos: 0, semResultado: 0 },
-      { mes: '2026-07', capturas: 3, positivos: 0, negativos: 2, semResultado: 1 },
+      { mes: '2026-06', capturas: 1, positivos: 1, negativos: 0, semResultado: 0, campanha: 0, pit: 1, semOrigem: 0 },
+      { mes: '2026-07', capturas: 3, positivos: 0, negativos: 2, semResultado: 1, campanha: 2, pit: 1, semOrigem: 0 },
     ]);
     expect(a.semDataCaptura).toBe(1);
   });
