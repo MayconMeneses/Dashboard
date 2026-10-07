@@ -31,6 +31,8 @@ export interface Snapshot {
   geradoEm: string;
   arquivo: string;
   arquivoSha256?: string;
+  /** chave da API de mapas-base da CARTO, informada ao gerar o arquivo (opcional) */
+  cartoKey?: string;
   ativadoEm: string;
   /** contagem por tipo de TUDO o que foi lido do arquivo (antes de excluir duplicatas) */
   byType: Record<string, number>;

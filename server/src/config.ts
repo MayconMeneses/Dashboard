@@ -17,6 +17,8 @@ export interface Config {
   webDist: string | null;
   boundaryFile: string | null;
   boundarySource: string;
+  /** chave da API de mapas-base CARTO (opcional; nunca fica no código) */
+  cartoKey: string | null;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Partial<Config> = {}): Config {
@@ -35,6 +37,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     sessionHours: Number(env.SESSION_HOURS ?? 12),
     webDist: resolve(import.meta.dirname, '../../web/dist'),
     // Limite municipal oficial (GeoJSON) opcional, ex.: malha municipal do IBGE. Nunca é desenhado um limite "inventado".
+    cartoKey: env.CARTO_API_KEY?.trim() || null,
     boundaryFile: env.BOUNDARY_FILE ? resolve(env.BOUNDARY_FILE) : existsSync(BUNDLED_BOUNDARY) ? BUNDLED_BOUNDARY : null,
     boundarySource:
       env.BOUNDARY_SOURCE ??

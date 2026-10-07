@@ -21,7 +21,7 @@ export function buildApp(db: Db, cfg: Config): FastifyInstance {
   void app.register(fastifyMultipart, { limits: { fileSize: cfg.maxUploadBytes, files: 1, fields: 5 } });
 
   // Mapas-base permitidos (só quando TILE_URL não está vazio): OpenStreetMap, CARTO e Esri (satélite).
-  const tiles = cfg.tileUrl ? ['https://tile.openstreetmap.org', 'https://*.basemaps.cartocdn.com', 'https://server.arcgisonline.com', new URL(cfg.tileUrl.replace('{s}', 'a')).origin].join(' ') : '';
+  const tiles = cfg.tileUrl ? ['https://tile.openstreetmap.org', 'https://basemaps.cartocdn.com', 'https://*.basemaps.cartocdn.com', 'https://server.arcgisonline.com', new URL(cfg.tileUrl.replace('{s}', 'a')).origin].join(' ') : '';
   app.addHook('onSend', async (_req, reply) => {
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'DENY');
@@ -90,7 +90,7 @@ export function buildApp(db: Db, cfg: Config): FastifyInstance {
       username: u.username,
       role: u.role,
       permissions: { importar: can(u, 'importar'), manual: can(u, 'manual'), exportar: can(u, 'exportar'), restrito: can(u, 'restrito'), auditoria: can(u, 'auditoria') },
-      map: { tileUrl: cfg.tileUrl, attribution: cfg.tileAttribution, maxUploadMb: Math.round(cfg.maxUploadBytes / 1048576) },
+      map: { tileUrl: cfg.tileUrl, attribution: cfg.tileAttribution, maxUploadMb: Math.round(cfg.maxUploadBytes / 1048576), cartoKey: cfg.cartoKey },
     };
   });
 

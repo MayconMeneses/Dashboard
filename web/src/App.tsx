@@ -11,15 +11,15 @@ import { ManualPage } from './pages/Manual';
 
 type Page = 'painel' | 'dados' | 'manual' | 'sobre';
 
-const STATIC_ME: Me = {
+const staticMe = (): Me => ({
   username: 'visitante',
   role: 'leitor',
   permissions: { importar: false, manual: false, exportar: false, restrito: false, auditoria: false },
-  map: { tileUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© colaboradores do OpenStreetMap', maxUploadMb: 0 },
-};
+  map: { tileUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© colaboradores do OpenStreetMap', maxUploadMb: 0, cartoKey: getSnapshot()?.cartoKey ?? null },
+});
 
 export function App() {
-  const [me, setMe] = useState<Me | null | undefined>(IS_STATIC ? STATIC_ME : undefined);
+  const [me, setMe] = useState<Me | null | undefined>(IS_STATIC ? staticMe() : undefined);
   const [page, setPage] = useState<Page>('painel');
   const [version, setVersion] = useState<Summary['versao']>(null);
   const [dataEpoch, setDataEpoch] = useState(0);

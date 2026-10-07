@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { COLORS, LABEL, filtersToQuery, formatDate } from '../lib/format';
 import type { Filters, Locality, MapFeature, Me } from '../lib/types';
-import { BASEMAPS, storedBasemap } from '../lib/basemaps';
+import { getBasemaps, initialBasemap } from '../lib/basemaps';
 import { useAsync } from '../lib/useAsync';
 
 interface Props {
@@ -42,7 +42,8 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
   const [colorByExam, setColorByExam] = useState(true);
   const [colorAreas, setColorAreas] = useState(true);
   const enabled = !!me.map.tileUrl;
-  const [basemap, setBasemap] = useState<string>(() => (enabled ? (storedBasemap() ?? 'carto') : 'none'));
+  const basemaps = useMemo(() => getBasemaps(me.map.cartoKey), [me.map.cartoKey]);
+  const [basemap, setBasemap] = useState<string>(() => (enabled ? initialBasemap(basemaps, me.map.cartoKey) : 'none'));
   const tileRef = useRef<L.TileLayer | null>(null);
   const [on, setOn] = useState<Record<Layer, boolean>>({ localidade: true, area: true, rota: true, visita: true, captura: true, pit: true, outro: true });
   const q = filtersToQuery({ ...filters, locality: undefined, q: undefined, layers: [] });
@@ -77,14 +78,14 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
     if (!m) return;
     tileRef.current?.remove();
     tileRef.current = null;
-    const b = BASEMAPS.find((x) => x.id === basemap);
+    const b = basemaps.find((x) => x.id === basemap);
     if (enabled && b) tileRef.current = L.tileLayer(b.url, { attribution: b.attribution, maxZoom: 19, subdomains: b.subdomains ?? 'abc' }).addTo(m);
     try {
       window.localStorage.setItem('basemap', basemap);
     } catch {
       /* preferência não salva; segue funcionando */
     }
-  }, [basemap, enabled]);
+  }, [basemap, enabled, basemaps]);
 
   // (Re)desenha as camadas quando os dados, a seleção ou o modo de cor mudam.
   useEffect(() => {
@@ -228,7 +229,7 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
         <label className="field">
           Mapa-base
           <select value={basemap} onChange={(e) => setBasemap(e.target.value)} disabled={!enabled}>
-            {BASEMAPS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+            {basemaps.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
             <option value="none">Sem mapa-base (nenhuma requisição externa)</option>
           </select>
         </label>
@@ -256,7 +257,7 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
       </div>
       <p className="small muted" style={{ margin: '8px 0 0' }}>
         {official ? `Limite municipal: ${official}.` : hasBoundary ? 'Limite municipal: polígono presente no arquivo importado.' : 'Limite municipal não carregado: o arquivo não o traz e nenhum limite oficial foi configurado. O mapa enquadra os dados importados.'}{' '}
-        {enabled ? (basemap === 'none' ? 'Sem mapa-base.' : `Mapa-base: ${BASEMAPS.find((b) => b.id === basemap)?.attribution}. A região visualizada é pedida ao provedor do mapa.`) : 'Mapa-base desativado pelo administrador.'}
+        {enabled ? (basemap === 'none' ? 'Sem mapa-base.' : `Mapa-base: ${basemaps.find((b) => b.id === basemap)?.attribution}. A região visualizada é pedida ao provedor do mapa.`) : 'Mapa-base desativado pelo administrador.'}
       </p>
     </section>
   );
