@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src test",
     "test": "vitest run",
-    "user:create": "tsx src/cli/create-user.ts"
+    "user:create": "tsx src/cli/create-user.ts",
+    "gerar-html": "tsx src/cli/gerar-html.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",
