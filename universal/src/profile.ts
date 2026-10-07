@@ -37,7 +37,7 @@ function median(sorted: number[]): number {
   return sorted.length % 2 ? sorted[m]! : (sorted[m - 1]! + sorted[m]!) / 2;
 }
 
-export function profileColumn(name: string, rows: Row[], geo?: Table['geo']): ColProfile {
+export function profileColumn(name: string, rows: Row[], geo?: Table['geo'], forced?: ColType): ColProfile {
   const vals = rows.map((r) => r[name]).filter((v): v is Exclude<Cell, null> => v != null);
   const filled = vals.length;
   const missing = rows.length - filled;
@@ -65,6 +65,7 @@ export function profileColumn(name: string, rows: Row[], geo?: Table['geo']): Co
   else if ((type === 'number' || type === 'integer') && /^(lon|lng|long|longitude)$/.test(lname)) type = 'lon';
   // código/identificador numérico: inteiros quase todos distintos
   if (type === 'integer' && base.unique >= filled * 0.95 && filled > 5 && /(^id$|^id[_ ]|código|codigo|cod\b|\bid$)/.test(lname)) type = 'id';
+  if (forced) type = forced;
   base.type = type;
 
   if (type === 'number' || type === 'integer') {
@@ -88,4 +89,4 @@ export function profileColumn(name: string, rows: Row[], geo?: Table['geo']): Co
   return base;
 }
 
-export const profileTable = (t: Table): ColProfile[] => t.columns.map((c) => profileColumn(c, t.rows, t.geo));
+export const profileTable = (t: Table, forced: Record<string, ColType> = {}): ColProfile[] => t.columns.map((c) => profileColumn(c, t.rows, t.geo, forced[c]));

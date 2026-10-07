@@ -3,8 +3,8 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { parseFile } from './parse.js';
 import { profileTable, toNumber } from './profile.js';
-import { chartData, kpis, suggestCharts } from './suggest.js';
-import type { ChartSpec, Dataset, Table } from './types.js';
+import { chartData, kpis, qualityAlerts, suggestCharts } from './suggest.js';
+import type { ChartSpec, ColType, Dataset, Table } from './types.js';
 
 Chart.register(...registerables);
 const PALETTE = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#65a30d', '#475569', '#ea580c'];
@@ -15,6 +15,8 @@ let table: Table | null = null;
 let charts: Chart[] = [];
 let maps: L.Map[] = [];
 let removed = new Set<string>();
+let forced: Record<string, ColType> = {};
+const TYPE_NAMES: Record<string, string> = { number: 'número', integer: 'inteiro', date: 'data', category: 'categoria', boolean: 'sim/não', text: 'texto', id: 'identificador', lat: 'latitude', lon: 'longitude' };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] {
   const e = Object.assign(document.createElement(tag), props);
@@ -43,7 +45,7 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
   card.append(el('header', {}, el('h3', {}, spec.title), x), el('p', {}, spec.description));
 
   if (spec.kind === 'map') {
-    const prof = profileTable(t);
+    const prof = profileTable(t, forced);
     const lat = prof.find((p) => p.type === 'lat')!.name;
     const lon = prof.find((p) => p.type === 'lon')!.name;
     const div = el('div', { className: 'map' });
@@ -67,6 +69,13 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
     return card;
   }
 
+  if (spec.kind === 'scatter' && spec.x && spec.y) {
+    const pts = t.rows.map((r) => ({ x: toNumber(r[spec.x!] ?? null), y: toNumber(r[spec.y!] ?? null) })).filter((p): p is { x: number; y: number } => p.x != null && p.y != null);
+    const canvas = el('canvas');
+    card.append(el('div', { className: 'box' }, canvas));
+    charts.push(new Chart(canvas, { type: 'scatter', data: { datasets: [{ label: `${spec.x} × ${spec.y}`, data: pts, backgroundColor: PALETTE[0] + 'aa' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: spec.x } }, y: { title: { display: true, text: spec.y } } } } }));
+    return card;
+  }
   const d = chartData(t, spec);
   if (!d.labels.length) {
     card.append(el('p', {}, 'Sem dados suficientes para este gráfico.'));
@@ -100,16 +109,30 @@ function render() {
   if (!table) return;
   reset();
   const t = table;
-  const prof = profileTable(t);
+  const prof = profileTable(t, forced);
+  const alerts = qualityAlerts(t, prof);
+  $('alerts').replaceChildren(...alerts.map((a) => el('li', { className: a.level }, a.text)));
+  ($('alertsBox') as HTMLElement).hidden = !alerts.length;
   $('kpis').replaceChildren(...kpis(t, prof).map((k) => el('div', { className: 'kpi', title: k.hint ?? '' }, el('b', {}, k.value), el('span', {}, k.label))));
   const specs = suggestCharts(t, prof, Number(($('level') as HTMLSelectElement).value)).filter((s) => !removed.has(s.id));
   $('charts').replaceChildren(...specs.map((s) => drawChart(s, t)));
   renderTable('');
-  const th = ['Coluna', 'Tipo', 'Preenchidas', 'Vazias', 'Valores distintos'];
-  const names: Record<string, string> = { number: 'número', integer: 'inteiro', date: 'data', category: 'categoria', boolean: 'sim/não', text: 'texto', id: 'identificador', lat: 'latitude', lon: 'longitude' };
+  const th = ['Coluna', 'Tipo (pode corrigir)', 'Preenchidas', 'Vazias', 'Valores distintos'];
   $('cols').replaceChildren(
     el('thead', {}, el('tr', {}, ...th.map((h) => el('th', {}, h)))),
-    el('tbody', {}, ...prof.map((p) => el('tr', {}, el('td', {}, p.name), el('td', {}, names[p.type] ?? p.type), el('td', {}, String(p.filled)), el('td', {}, String(p.missing)), el('td', {}, String(p.unique))))),
+    el(
+      'tbody',
+      {},
+      ...prof.map((p) => {
+        const sel = el('select', { ariaLabel: `Tipo da coluna ${p.name}` }, ...Object.entries(TYPE_NAMES).map(([v, n]) => el('option', { value: v, selected: v === p.type }, n)));
+        sel.onchange = () => {
+          forced = { ...forced, [p.name]: sel.value as ColType };
+          removed = new Set();
+          render();
+        };
+        return el('tr', {}, el('td', {}, p.name), el('td', {}, sel), el('td', {}, String(p.filled)), el('td', {}, String(p.missing)), el('td', {}, String(p.unique)));
+      }),
+    ),
   );
 }
 
@@ -128,6 +151,7 @@ function renderTable(q: string) {
 function load(ds: Dataset) {
   dataset = ds;
   removed = new Set();
+  forced = {};
   $('msg').textContent = '';
   const sel = $('tableSel') as HTMLSelectElement;
   sel.replaceChildren(...ds.tables.map((t, i) => el('option', { value: String(i) }, `${t.name} (${t.rows.length})`)));
@@ -187,6 +211,7 @@ function init() {
   $('tableSel').onchange = () => {
     table = dataset!.tables[Number(($('tableSel') as HTMLSelectElement).value)]!;
     removed = new Set();
+    forced = {};
     render();
   };
   $('q').oninput = () => renderTable(($('q') as HTMLInputElement).value);
