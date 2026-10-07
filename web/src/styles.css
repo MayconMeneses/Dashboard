@@ -110,3 +110,39 @@ figure.loc svg { width: 100%; height: auto; max-height: 420px; display: block; }
 .heat td.cell:hover, .heat td.cell:focus-visible { outline: 2px solid var(--focus); }
 .heat th.sp { text-align: left; color: var(--text); font-weight: 600; font-style: italic; }
 .chart-card .seg-row { display: flex; flex-wrap: wrap; gap: var(--s2); margin-bottom: var(--s2); }
+
+.report { display: flex; flex-direction: column; gap: var(--s4); }
+.report-head h1 { font-size: 22px; margin-bottom: 4px; }
+.report-actions .row { margin-top: var(--s2); }
+table.compact th, table.compact td { padding: 3px 8px; font-size: 12px; }
+
+@media print {
+  @page { size: A4 portrait; margin: 10mm; }
+  html, body { background: #fff !important; color: #000; font-size: 12px; }
+  header.top, nav.tabs, .no-print, .chart-actions, .toolbar button, .filters, .chips { display: none !important; }
+  .container { max-width: none; padding: 0; }
+  .card { border-color: #bbb; box-shadow: none; break-inside: avoid; page-break-inside: avoid; padding: 10px; }
+  .card.report-records { break-inside: auto; }
+  .hint { display: none !important; }
+  .analytics-grid { grid-template-columns: 1fr !important; }
+  .chart-card.wide { grid-column: auto; }
+  .main-grid { grid-template-columns: 1fr !important; }
+  .loc-grid { grid-template-columns: 1fr 1fr !important; }
+  .loc-grid .loc-croata { grid-column: 1 / -1 !important; }
+  figure.loc svg { max-height: 230px; }
+  figure.loc.loc-croata svg { max-height: 430px; }
+  .toolbar fieldset, .toolbar label.field { display: none !important; }
+  .table-wrap, .chart-scroll { overflow: visible !important; }
+  .chart-box { min-width: 0 !important; width: 100% !important; }
+  table.compact { table-layout: auto; width: 100%; }
+  table.compact th, table.compact td { white-space: normal; font-size: 9.5px; padding: 2px 4px; }
+  .report { gap: 10px; }
+  .analytics-grid { gap: 10px; }
+  .report-records tr { break-inside: avoid; }
+  .report-records thead { display: table-header-group; }
+  #map, #map-names { height: 340px; }
+  button.small, .seg, input[type=checkbox], select, .btn { display: none !important; }
+  .leaflet-control-zoom { display: none; }
+  a { color: inherit; text-decoration: none; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

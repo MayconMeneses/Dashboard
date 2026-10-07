@@ -36,7 +36,7 @@ export function ChartCard({ id, title, unit, how, note, hint, table, wide, noPng
           <span className="unit-chip" title="O que está sendo contado">{unit}</span>
         </div>
         <p className="small how"><strong>Como ler:</strong> {how}</p>
-        {hint && <p className="small muted" style={{ margin: '0 0 8px' }}>{hint}</p>}
+        {hint && <p className="small muted hint" style={{ margin: '0 0 8px' }}>{hint}</p>}
       </figcaption>
       <div ref={host}>
         {asTable ? (

@@ -67,6 +67,14 @@ const centerPlugin: Plugin<'doughnut'> = {
   },
 };
 
+/** Antes de imprimir/gerar PDF, redesenha os gráficos para a largura da página. */
+if (typeof window !== 'undefined') {
+  const resizeAll = () => Object.values(ChartJS.instances).forEach((c) => c.resize());
+  window.addEventListener('beforeprint', resizeAll);
+  window.addEventListener('afterprint', resizeAll);
+  (window as unknown as { __prepararImpressao?: () => void }).__prepararImpressao = resizeAll;
+}
+
 function useChart(build: () => ChartConfiguration | null, deps: unknown[]) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
