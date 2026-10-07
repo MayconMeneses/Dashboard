@@ -4,6 +4,7 @@ import {
 } from 'chart.js';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { formatNumber } from '../lib/format';
+import { registerPrintHook } from '../lib/printHooks';
 
 ChartJS.register(ArcElement, BarController, BarElement, CategoryScale, DoughnutController, Legend, LineController, LineElement, LinearScale, PointElement, Tooltip);
 
@@ -68,12 +69,7 @@ const centerPlugin: Plugin<'doughnut'> = {
 };
 
 /** Antes de imprimir/gerar PDF, redesenha os gráficos para a largura da página. */
-if (typeof window !== 'undefined') {
-  const resizeAll = () => Object.values(ChartJS.instances).forEach((c) => c.resize());
-  window.addEventListener('beforeprint', resizeAll);
-  window.addEventListener('afterprint', resizeAll);
-  (window as unknown as { __prepararImpressao?: () => void }).__prepararImpressao = resizeAll;
-}
+registerPrintHook(() => Object.values(ChartJS.instances).forEach((c) => c.resize()));
 
 function useChart(build: () => ChartConfiguration | null, deps: unknown[]) {
   const ref = useRef<HTMLCanvasElement>(null);

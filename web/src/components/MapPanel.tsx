@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { COLORS, LABEL, filtersToQuery, formatDate } from '../lib/format';
 import type { Filters, Locality, MapFeature, Me } from '../lib/types';
 import { getBasemaps, initialBasemap } from '../lib/basemaps';
+import { registerPrintHook } from '../lib/printHooks';
 import { useAsync } from '../lib/useAsync';
 
 interface Props {
@@ -61,13 +62,24 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
   const selectRef = useRef(onSelect);
   selectRef.current = onSelect;
   const fitted = useRef(false);
+  const home = useRef<L.LatLngBounds | null>(null);
 
   useEffect(() => {
     if (!el.current || map.current) return;
-    const m = L.map(el.current, { zoomControl: true, minZoom: 8, maxZoom: 19 }).setView(CROATA_APPROX, 10);
+    const m = L.map(el.current, { zoomControl: true, minZoom: 8, maxZoom: 19, zoomSnap: 0.25 }).setView(CROATA_APPROX, 10);
     L.control.scale({ imperial: false }).addTo(m);
     map.current = m;
+    // Ao imprimir/gerar PDF a largura muda: reajusta o tamanho e enquadra tudo (o mapa não fica cortado).
+    const refit = () => {
+      m.invalidateSize({ animate: false });
+      if (home.current?.isValid()) m.fitBounds(home.current.pad(0.05), { animate: false });
+    };
+    const unregister = registerPrintHook(refit);
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => (window.matchMedia?.('print').matches ? refit() : m.invalidateSize({ animate: false }))) : null;
+    if (el.current) ro?.observe(el.current);
     return () => {
+      unregister();
+      ro?.disconnect();
       m.remove();
       map.current = null;
     };
@@ -172,6 +184,7 @@ export function MapPanel({ me, filters, epoch, selected, onSelect, focus }: Prop
       bounds.extend(boundary.current.getBounds());
     }
     for (const t of TYPES) if (on[t]) groups.current[t]!.addTo(m);
+    if (bounds.isValid()) home.current = bounds;
     if (selected && selBounds.isValid()) m.flyToBounds(selBounds.pad(0.4), { maxZoom: 15, animate: !window.matchMedia('(prefers-reduced-motion: reduce)').matches });
     else if (!fitted.current && bounds.isValid()) {
       m.fitBounds(bounds.pad(0.05));

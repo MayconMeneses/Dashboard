@@ -2,6 +2,7 @@ import L from 'leaflet';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { getBasemaps, initialBasemap } from '../lib/basemaps';
+import { registerPrintHook } from '../lib/printHooks';
 import type { Me } from '../lib/types';
 import { useAsync } from '../lib/useAsync';
 
@@ -35,11 +36,21 @@ export function LocalityNamesMap({ me }: { me: Me }) {
 
   useEffect(() => {
     if (!el.current || map.current) return;
-    const m = L.map(el.current, { minZoom: 8, maxZoom: 19 }).setView([-4.4, -40.9], 10);
+    const m = L.map(el.current, { minZoom: 8, maxZoom: 19, zoomSnap: 0.25 }).setView([-4.4, -40.9], 10);
     L.control.scale({ imperial: false }).addTo(m);
     map.current = m;
     layer.current = L.layerGroup().addTo(m);
+    // Ao imprimir/gerar PDF a largura muda: reajusta o tamanho e enquadra o município inteiro.
+    const refit = () => {
+      m.invalidateSize({ animate: false });
+      if (home.current?.isValid()) m.fitBounds(home.current.pad(0.03), { animate: false });
+    };
+    const unregister = registerPrintHook(refit);
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => (window.matchMedia?.('print').matches ? refit() : m.invalidateSize({ animate: false }))) : null;
+    ro?.observe(el.current);
     return () => {
+      unregister();
+      ro?.disconnect();
       m.remove();
       map.current = null;
     };
