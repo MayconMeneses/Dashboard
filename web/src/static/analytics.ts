@@ -22,6 +22,24 @@ const NO_SPECIES = 'Não identificada';
 const bySpecies = (a: { especie: string; total: number }, b: { especie: string; total: number }) =>
   (a.especie === NO_SPECIES ? 1 : 0) - (b.especie === NO_SPECIES ? 1 : 0) || b.total - a.total || a.especie.localeCompare(b.especie, 'pt-BR');
 
+export interface OrigemTotal { captura: number; pit: number; semOrigem: number; total: number; posCaptura: number; posPit: number; examCaptura: number; examPit: number }
+export interface OrigemRow extends OrigemTotal { key: string; name: string }
+
+const emptyOrigem = (): OrigemTotal => ({ captura: 0, pit: 0, semOrigem: 0, total: 0, posCaptura: 0, posPit: 0, examCaptura: 0, examPit: 0 });
+function addOrigem(g: OrigemTotal, r: SnapshotRec) {
+  g.total++;
+  const exam = r.exam_result === 'positivo' || r.exam_result === 'negativo';
+  if (r.channel === 'captura') {
+    g.captura++;
+    if (exam) g.examCaptura++;
+    if (r.exam_result === 'positivo') g.posCaptura++;
+  } else if (r.channel === 'pit') {
+    g.pit++;
+    if (exam) g.examPit++;
+    if (r.exam_result === 'positivo') g.posPit++;
+  } else g.semOrigem++;
+}
+
 export interface Analytics {
   resumo: { capturas: number; comResultado: number; positivos: number; negativos: number; positividade: number | null; imoveis: number | null; localidadesComImoveis: number };
   porLocalidade: ({ key: string; name: string; imoveis: number | null; capturasPor100Imoveis: number | null } & ExamCounts)[];
@@ -39,6 +57,12 @@ export interface Analytics {
     maxDias: number | null;
     comAsDuasDatas: number;
     semDataDoExame: number;
+  };
+  origemComparativo: {
+    total: OrigemTotal;
+    porLocalidade: OrigemRow[];
+    porEspecie: OrigemRow[];
+    porAmbiente: OrigemRow[];
   };
   pits: { nome: string; unidade: string | null; zona: string | null; localidade: string | null; localityKey: string | null }[];
 }
@@ -166,6 +190,21 @@ export function analytics(rec: SnapshotRec[], f: Filters): Analytics {
     .map((r) => ({ nome: r.name ?? '(sem nome)', unidade: r.pit_ref ?? null, zona: r.zone ?? null, localidade: r.locality_raw, localityKey: r.locality_key }))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { numeric: true }));
 
+  // --- campanha × PIT (demanda): cada visão ignora o filtro de origem e o da própria dimensão
+  const origemPor = (g: Filters, key: (r: SnapshotRec) => [string, string]): OrigemRow[] => {
+    const m = new Map<string, OrigemRow>();
+    for (const r of captures(rec, { ...g, channel: undefined })) {
+      const [k, name] = key(r);
+      const row = m.get(k) ?? { ...emptyOrigem(), key: k, name };
+      addOrigem(row, r);
+      m.set(k, row);
+    }
+    return [...m.values()].sort((x, y) => y.total - x.total || x.name.localeCompare(y.name, 'pt-BR'));
+  };
+  const origemTotal = emptyOrigem();
+  for (const r of captures(rec, { ...f, channel: undefined })) addOrigem(origemTotal, r);
+  const ENV_NAME: Record<string, string> = { intra: 'Intradomicílio', peri: 'Peridomicílio', intra_peri: 'Intra e peridomicílio', nao_informado: 'Não informado' };
+
   return {
     resumo: {
       capturas: all.length,
@@ -191,6 +230,12 @@ export function analytics(rec: SnapshotRec[], f: Filters): Analytics {
       maxDias: days[days.length - 1] ?? null,
       comAsDuasDatas: days.length,
       semDataDoExame: semDataExame,
+    },
+    origemComparativo: {
+      total: origemTotal,
+      porLocalidade: origemPor({ ...f, locality: undefined }, (r) => [r.locality_key ?? '', r.locality_key ? (r.locality_raw ?? r.locality_key) : '(sem localidade)']),
+      porEspecie: origemPor({ ...f, species: undefined }, (r) => [r.species ?? NO_SPECIES, r.species ?? NO_SPECIES]),
+      porAmbiente: origemPor({ ...f, environment: undefined }, (r) => [r.environment ?? 'nao_informado', ENV_NAME[r.environment ?? 'nao_informado']!]),
     },
     pits,
   };

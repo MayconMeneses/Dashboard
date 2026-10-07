@@ -88,6 +88,7 @@ Seção **Análises**, logo abaixo dos filtros. Cada gráfico tem título, a uni
 | Gráfico | O que mostra | Clique |
 |---|---|---|
 | Capturas por localidade (barras finas empilhadas) | capturas e resultado do exame por localidade | filtra a localidade |
+| Captura em campanha × PIT (demanda) | barras lado a lado: busca ativa × entregas da população, por localidade, espécie ou ambiente | filtra a localidade/espécie/ambiente |
 | Espécies encontradas (barras empilhadas) | capturas e exame por espécie | filtra a espécie |
 | Positividade por espécie | positivos ÷ (positivos + negativos), com o n de cada uma | — |
 | Positividade por localidade | positivos ÷ (positivos + negativos) por localidade, com o n | filtra a localidade |

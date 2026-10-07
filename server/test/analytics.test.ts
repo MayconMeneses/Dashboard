@@ -56,6 +56,16 @@ describe('análises', () => {
     expect(t.medianaDias).toBe(10);
     expect(Object.fromEntries(t.faixas.map((x) => [x.faixa, x.total]))).toMatchObject({ 'Exame antes da captura (conferir)': 1, '8 a 14 dias': 1, '15 a 21 dias': 1 });
   });
+  it('campanha × PIT: totais e por localidade/espécie/ambiente, ignorando o filtro de origem', () => {
+    const o = a.origemComparativo;
+    expect(o.total).toEqual({ captura: 2, pit: 2, semOrigem: 1, total: 5, posCaptura: 0, posPit: 1, examCaptura: 2, examPit: 1 });
+    expect(o.porLocalidade.find((x) => x.key === 'vila a')).toMatchObject({ captura: 2, pit: 1, semOrigem: 0, posPit: 1 });
+    expect(o.porLocalidade.find((x) => x.key === 'sitio b')).toMatchObject({ captura: 0, pit: 1, semOrigem: 1 });
+    expect(o.porEspecie.find((x) => x.key === 'Triatoma brasiliensis')).toMatchObject({ captura: 1, pit: 2 });
+    expect(o.porAmbiente.map((x) => x.key).sort()).toEqual(['intra', 'intra_peri', 'nao_informado', 'peri']);
+    const f = analytics(DATA, { channel: ['pit'] }).origemComparativo.total; // filtrar por PIT não esconde a campanha
+    expect(f.captura).toBe(2);
+  });
   it('PITs sem endereço', () => {
     expect(a.pits).toEqual([{ nome: 'PIT 01', unidade: 'UBS A', zona: 'Rural', localidade: 'Vila A', localityKey: 'vila a' }]);
   });

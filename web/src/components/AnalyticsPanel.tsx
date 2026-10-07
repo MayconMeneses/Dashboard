@@ -35,6 +35,8 @@ export function AnalyticsPanel({ filters, epoch, onChange }: Props) {
   const [allLoc, setAllLoc] = useState(false);
   const [covAll, setCovAll] = useState(false);
   const [posAll, setPosAll] = useState(false);
+  const [origView, setOrigView] = useState<'localidade' | 'especie' | 'ambiente'>('localidade');
+  const [origAll, setOrigAll] = useState(false);
 
   const a = data;
   const examSeries = (rows: { positivo: number; negativo: number; pendente: number; nao_realizado: number; nao_informado: number }[]): Series[] =>
@@ -110,6 +112,29 @@ export function AnalyticsPanel({ filters, epoch, onChange }: Props) {
   );
   const mesBars = useMemo<Series[]>(() => [{ label: 'Captura em campanha', data: tl.map((m) => m.campanha), color: '#0f766e' }, { label: 'Entregue/atendido no PIT', data: tl.map((m) => m.pit), color: '#7c3aed' }], [tl]);
   const mesLine = useMemo(() => ({ label: 'Positividade (%)', data: mesRows.map((m) => m.taxa), color: COLORS.positivo! }), [mesRows]);
+  // --- campanha × PIT (demanda)
+  const oc = a?.origemComparativo;
+  const origRowsAll = !oc ? EMPTY : origView === 'localidade' ? oc.porLocalidade : origView === 'especie' ? oc.porEspecie : oc.porAmbiente;
+  const origRows = useMemo(() => (origView === 'localidade' && !origAll ? origRowsAll.slice(0, 15) : origRowsAll), [origRowsAll, origView, origAll]);
+  const origLabels = useMemo(() => origRows.map((r) => r.name), [origRows]);
+  const origSeries = useMemo<Series[]>(() => [
+    { label: 'Captura em campanha (busca ativa)', data: origRows.map((r) => r.captura), color: '#0f766e' },
+    { label: 'Entregue/atendido no PIT (demanda da população)', data: origRows.map((r) => r.pit), color: '#7c3aed' },
+  ], [origRows]);
+  const origDim = useMemo(() => (i: number) => {
+    const r = origRows[i];
+    if (!r) return false;
+    if (origView === 'localidade') return !!filters.locality && r.key !== filters.locality;
+    if (origView === 'especie') return filters.species.length > 0 && !filters.species.includes(r.key);
+    return filters.environment.length > 0 && !filters.environment.includes(r.key);
+  }, [origRows, origView, filters.locality, filters.species, filters.environment]);
+  const origPick = useMemo(() => (i: number) => {
+    const r = origRows[i];
+    if (!r) return;
+    if (origView === 'localidade') onChange({ ...filters, locality: r.key === filters.locality ? undefined : r.key });
+    else if (origView === 'especie') { if (r.key !== 'Não identificada') onChange({ ...filters, species: toggle(filters.species, r.key) }); }
+    else if (r.key !== 'nao_informado') onChange({ ...filters, environment: toggle(filters.environment, r.key) });
+  }, [origRows, origView, filters, onChange]);
   // --- cobertura
   const cov = useMemo(() => (a ? a.porLocalidade.filter((l) => l.capturasPor100Imoveis !== null).sort((x, y) => (y.capturasPor100Imoveis ?? 0) - (x.capturasPor100Imoveis ?? 0)) : []), [a]);
   const covShown = covAll ? cov : cov.slice(0, 15);
@@ -163,6 +188,48 @@ export function AnalyticsPanel({ filters, epoch, onChange }: Props) {
         >
           <BarChart labels={locLabels} series={locSeries} unit="registros de captura" stacked totals dimmed={locDim} onPick={locPick} ariaLabel="Barras horizontais: capturas por localidade e resultado do exame" />
           {a.porLocalidade.length > 15 && <button className="small" onClick={() => setAllLoc((v) => !v)}>{allLoc ? 'Mostrar só as 15 primeiras' : `Mostrar todas as ${a.porLocalidade.length} localidades`}</button>}
+        </ChartCard>
+
+
+        <ChartCard
+          id="campanha-x-pit"
+          title="Captura em campanha × PIT: de onde vem a demanda"
+          unit="registros de captura"
+          how="compara, lado a lado, os insetos que os agentes encontraram na busca ativa (campanha) com os que a população entregou ou levou aos PITs (demanda espontânea). Use as abas para comparar por localidade, espécie ou ambiente."
+          hint="Clique em uma barra para filtrar o painel (localidade, espécie ou ambiente, conforme a aba). A comparação ignora o filtro de origem."
+          note={<>Origem lida do campo “Campanha_Captura ou PIT” do arquivo. Quem entrega no PIT é quem percebeu o inseto em casa; por isso uma localidade com muitos registros de PIT indica procura da população, enquanto muitos de campanha indicam onde a busca ativa foi feita.{oc && oc.total.semOrigem > 0 ? ` ${oc.total.semOrigem} registro(s) sem origem informada não entram nas barras.` : ''}</>}
+          table={{ head: [origView === 'localidade' ? 'Localidade' : origView === 'especie' ? 'Espécie' : 'Ambiente', 'Campanha', 'PIT', 'Sem origem', 'Total', '% PIT', 'Positivos (campanha)', 'Positivos (PIT)'], rows: origRowsAll.map((r) => [r.name, r.captura, r.pit, r.semOrigem, r.total, r.captura + r.pit ? Math.round((r.pit / (r.captura + r.pit)) * 100) : null, r.posCaptura, r.posPit]) }}
+          wide
+        >
+          {oc && (
+            <div className="mini-kpis" style={{ marginBottom: 12 }}>
+              <div className="card" style={{ borderLeft: '4px solid #0f766e' }}>
+                <div className="small muted">Captura em campanha (busca ativa)</div>
+                <div className="v">{formatNumber(oc.total.captura)} <span className="small muted">{pct(oc.total.captura, oc.total.captura + oc.total.pit)}</span></div>
+                <div className="small muted">{oc.total.posCaptura} positivo(s) em {oc.total.examCaptura} examinada(s)</div>
+              </div>
+              <div className="card" style={{ borderLeft: '4px solid #7c3aed' }}>
+                <div className="small muted">PIT (demanda da população)</div>
+                <div className="v">{formatNumber(oc.total.pit)} <span className="small muted">{pct(oc.total.pit, oc.total.captura + oc.total.pit)}</span></div>
+                <div className="small muted">{oc.total.posPit} positivo(s) em {oc.total.examPit} examinada(s)</div>
+              </div>
+            </div>
+          )}
+          <div className="seg" role="group" aria-label="Comparar por" style={{ marginBottom: 8 }}>
+            {([['localidade', 'Por localidade'], ['especie', 'Por espécie'], ['ambiente', 'Por ambiente']] as const).map(([k, l]) => (
+              <button key={k} aria-pressed={origView === k} onClick={() => setOrigView(k)}>{l}</button>
+            ))}
+          </div>
+          {origRows.length === 0 ? <div className="notice info">Nenhum registro para estes filtros.</div> : (
+            <>
+              <BarChart
+                labels={origLabels} series={origSeries} unit="registros de captura" dimmed={origDim} onPick={origPick} thickness={9} rowHeight={origRows.length > 6 ? 34 : 44}
+                extraTooltip={(i) => { const r = origRows[i]!; return `Campanha: ${r.posCaptura} positivo(s) de ${r.examCaptura} examinada(s) · PIT: ${r.posPit} de ${r.examPit}`; }}
+                ariaLabel="Barras horizontais lado a lado: capturas em campanha e em PIT"
+              />
+              {origView === 'localidade' && origRowsAll.length > 15 && <button className="small" onClick={() => setOrigAll((v) => !v)}>{origAll ? 'Mostrar só as 15 primeiras' : `Mostrar todas as ${origRowsAll.length} localidades`}</button>}
+            </>
+          )}
         </ChartCard>
 
         <ChartCard
