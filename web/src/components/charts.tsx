@@ -1,11 +1,11 @@
 import {
-  ArcElement, BarController, BarElement, CategoryScale, Chart as ChartJS, DoughnutController, Legend, LinearScale, Tooltip,
+  ArcElement, BarController, BarElement, CategoryScale, Chart as ChartJS, DoughnutController, Legend, LineController, LineElement, LinearScale, PointElement, Tooltip,
   type ChartConfiguration, type Plugin, type TooltipItem,
 } from 'chart.js';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { formatNumber } from '../lib/format';
 
-ChartJS.register(ArcElement, BarController, BarElement, CategoryScale, DoughnutController, Legend, LinearScale, Tooltip);
+ChartJS.register(ArcElement, BarController, BarElement, CategoryScale, DoughnutController, Legend, LineController, LineElement, LinearScale, PointElement, Tooltip);
 
 const css = (name: string, fallback: string) => {
   try {
@@ -231,6 +231,68 @@ export function DonutChart({ labels, values, colors, unit, centerText, centerSub
   );
   return (
     <div style={{ height: 280, position: 'relative' }}>
+      <canvas ref={ref} role="img" aria-label={ariaLabel} />
+    </div>
+  );
+}
+
+interface ComboProps {
+  labels: string[];
+  bars: Series[];
+  line: { label: string; data: (number | null)[]; color: string };
+  unit: string;
+  unitRight: string;
+  /** texto extra do balão (por categoria) */
+  extraTooltip?: (i: number) => string | undefined;
+  dimmed?: (i: number) => boolean;
+  onPick?: (i: number) => void;
+  ariaLabel: string;
+}
+
+/** Colunas agrupadas (eixo esquerdo) + linha em % (eixo direito). */
+export function ComboChart({ labels, bars, line, unit, unitRight, extraTooltip, dimmed, onPick, ariaLabel }: ComboProps) {
+  const ref = useChart(
+    () => ({
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          ...bars.map((s) => ({ type: 'bar' as const, label: s.label, data: s.data, backgroundColor: labels.map((_, i) => dim(s.color, !!dimmed?.(i))), borderRadius: 3, maxBarThickness: 26, yAxisID: 'y', order: 2 })),
+          { type: 'line' as const, label: line.label, data: line.data, borderColor: line.color, backgroundColor: line.color, pointRadius: 5, pointHoverRadius: 7, borderWidth: 2.5, tension: 0, spanGaps: false, clip: false as unknown as number, yAxisID: 'y2', order: 1 },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: reduced() ? false : { duration: 350 },
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: css('--text', '#14202b'), font: { size: 12 }, maxRotation: 0, autoSkip: false } },
+          y: { beginAtZero: true, grace: '10%', grid: { color: css('--border', '#d9dee4') }, ticks: { color: css('--muted', '#55636f'), precision: 0, font: { size: 11 } }, title: { display: true, text: unit, color: css('--muted', '#55636f'), font: { size: 11 } } },
+          y2: { position: 'right', beginAtZero: true, max: 100, grid: { drawOnChartArea: false }, ticks: { color: css('--muted', '#55636f'), font: { size: 11 }, callback: (v) => `${v}%` }, title: { display: true, text: unitRight, color: css('--muted', '#55636f'), font: { size: 11 } } },
+        },
+        plugins: {
+          legend: { position: 'top', align: 'start', labels: { color: css('--text', '#14202b'), boxWidth: 12, boxHeight: 12, font: { size: 12 } } },
+          tooltip: {
+            callbacks: {
+              label: (c) => (c.dataset.yAxisID === 'y2' ? `${c.dataset.label}: ${c.raw === null ? 'sem exames' : `${formatNumber(Number(c.raw))}%`}` : `${c.dataset.label}: ${formatNumber(Number(c.raw))}`),
+              footer: (items) => {
+                const x = extraTooltip?.(items[0]?.dataIndex ?? 0);
+                return x ? [x] : [];
+              },
+            },
+          },
+        },
+        onClick: (_e, els) => {
+          const el = els[0];
+          if (el && onPick) onPick(el.index);
+        },
+      },
+    }),
+    [labels, bars, line, unit, unitRight, extraTooltip, dimmed, onPick],
+  );
+  return (
+    <div style={{ height: 320, position: 'relative' }}>
       <canvas ref={ref} role="img" aria-label={ariaLabel} />
     </div>
   );

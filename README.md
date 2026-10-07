@@ -90,7 +90,9 @@ Seção **Análises**, logo abaixo dos filtros. Cada gráfico tem título, a uni
 | Capturas por localidade (barras finas empilhadas) | capturas e resultado do exame por localidade | filtra a localidade |
 | Espécies encontradas (barras empilhadas) | capturas e exame por espécie | filtra a espécie |
 | Positividade por espécie | positivos ÷ (positivos + negativos), com o n de cada uma | — |
+| Positividade por localidade | positivos ÷ (positivos + negativos) por localidade, com o n | filtra a localidade |
 | Capturas ao longo do tempo (colunas por mês) | meses pela data de captura | filtra o período |
+| Comparativo entre meses (colunas + linha) | campanha × PIT por mês e positividade mensal; variação vs mês anterior na tabela | filtra o período |
 | Origem da captura (rosca) | campanha × PIT | filtra a origem |
 | Onde o inseto foi encontrado (rosca) | intra × peridomicílio | filtra o ambiente |
 | Fase e sexo | ninfa, macho, fêmea… | — |
