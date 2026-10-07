@@ -200,7 +200,7 @@ export function getLocalities(db: Db, f: Filters = {}) {
         SUM(type = 'captura' AND exam_result = 'negativo') AS negativos
        FROM rec${full} GROUP BY locality_key ORDER BY name COLLATE NOCASE`,
     )
-    .all();
+    .all(...params);
 }
 
 export function getMapFeatures(db: Db, f: Filters) {

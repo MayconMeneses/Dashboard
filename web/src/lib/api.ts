@@ -9,7 +9,16 @@ export class ApiError extends Error {
   }
 }
 
+import { handle } from '../static/engine';
+import { IS_STATIC, getSnapshot } from './static';
+
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+  if (IS_STATIC) {
+    const snap = getSnapshot();
+    if (method !== 'GET') throw new ApiError(403, 'somente_leitura', 'Este painel compartilhado é somente leitura.');
+    if (!snap) throw new ApiError(500, 'sem_dados', 'Este arquivo não contém dados. Gere-o de novo com o comando gerar-html.');
+    return handle(snap, url) as T;
+  }
   const headers: Record<string, string> = { 'X-Requested-With': 'dashboard' };
   let payload: BodyInit | undefined;
   if (body instanceof FormData) payload = body;

@@ -29,6 +29,22 @@ Outros usuários: `npm run user:create -- <usuario> <senha(>=10)> <admin|analist
 | `SESSION_HOURS` | `12` | Duração da sessão. |
 | `BOUNDARY_FILE`, `BOUNDARY_SOURCE` | — | GeoJSON do limite municipal oficial (ex.: malha municipal do IBGE de Croatá) e o texto da fonte exibido no mapa. |
 
+## Painel compartilhável (um único arquivo HTML)
+
+Gera um arquivo `.html` com **tudo embutido** (painel, gráficos, mapas, tabela e os dados do KML/KMZ). Quem recebe só precisa abri-lo no navegador (duplo clique): não instala nada, não tem login e não precisa de servidor. É uma fotografia somente leitura dos dados daquele arquivo; para atualizar, gere de novo com o KML novo.
+
+```powershell
+npm install
+npm run build:static          # uma vez (gera o modelo web/dist-static/index.html)
+npm run gerar-html -- "C:\caminho\MAPA DE CROATÁ.kml" painel-croata.html --nome="MAPA DE CROATÁ.kml"
+```
+Opções: `--excluir-duplicatas` / `--manter-duplicatas` (padrão: exclui só quando todas as cópias estão em outras pastas, como Resultados/Positivos/Negativos).
+
+- Os números são os mesmos do painel com servidor (há testes de paridade entre os dois).
+- **Privacidade:** o arquivo gerado **não leva** endereço, número do imóvel/residência, nº da etiqueta nem os valores brutos do KML; as coordenadas são arredondadas (~1 m). Mesmo assim contém as posições de capturas e PITs: compartilhe só com quem pode ver esses dados.
+- O mapa-base (OpenStreetMap) precisa de internet; sem ela, áreas e limite continuam aparecendo.
+- A aba **Sobre os dados** explica o arquivo de origem, o que foi excluído e como ler os números.
+
 ## Perfis
 
 | Perfil | Pode |

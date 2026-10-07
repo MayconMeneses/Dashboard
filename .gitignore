@@ -4,3 +4,6 @@ data/
 .env
 *.log
 .DS_Store
+web/dist-static
+compartilhar/
+*.painel.html
