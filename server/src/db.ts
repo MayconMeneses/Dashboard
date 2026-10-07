@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS features (
   pit_ref TEXT,
   channel TEXT,
   environment TEXT,
+  property_count INTEGER,
+  zone TEXT,
   address TEXT,
   is_boundary INTEGER NOT NULL DEFAULT 0,
   duplicate_of INTEGER,
@@ -102,6 +104,10 @@ export function openDb(file: string): Db {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
+  // migração de bancos criados antes dos campos novos
+  const cols = (db.prepare('PRAGMA table_info(features)').all() as { name: string }[]).map((c) => c.name);
+  if (!cols.includes('property_count')) db.exec('ALTER TABLE features ADD COLUMN property_count INTEGER');
+  if (!cols.includes('zone')) db.exec('ALTER TABLE features ADD COLUMN zone TEXT');
   return db;
 }
 

@@ -3,6 +3,9 @@ import { audit } from '../audit.js';
 import { can, requirePermission, requireUser } from '../auth.js';
 import type { Db } from '../db.js';
 import { getAllRecordsForExport } from '../services/queries.js';
+import { analytics } from '../../../web/src/static/analytics.js';
+import type { SnapshotRec } from '../../../web/src/static/engine.js';
+import { getRecForAnalytics } from '../services/queries.js';
 import { getChart, getFacets, getLocalities, getMapFeatures, getRecords, getSummary, parseFilters } from '../services/queries.js';
 import { getActiveImport } from '../services/importer.js';
 
@@ -29,6 +32,11 @@ export function registerDataRoutes(app: FastifyInstance, db: Db): void {
     if (!requireUser(req, reply)) return;
     const q = req.query as Record<string, unknown>;
     return getChart(db, parseFilters(q), q.mode === 'exame' ? 'exame' : 'busca', q.sort === 'total' ? 'total' : 'nome', q.hideEmpty === 'true');
+  });
+
+  app.get('/api/analytics', async (req, reply) => {
+    if (!requireUser(req, reply)) return;
+    return analytics(getRecForAnalytics(db) as unknown as SnapshotRec[], parseFilters(req.query as Record<string, unknown>));
   });
 
   app.get('/api/facets', async (req, reply) => {

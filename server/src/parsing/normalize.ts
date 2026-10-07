@@ -214,6 +214,8 @@ export function parseToFeatures(raw: RawKml, mapping: FieldMapping = {}): ParseR
       species,
       propertyRef: r.canon.imovel || null,
       pitRef: r.canon.pit || null,
+      propertyCount: type === 'localidade' ? parseCount(r.canon.qtd_imoveis) : null,
+      zone: r.canon.zona?.trim() || null,
       channel,
       environment: parseEnvironment(r.canon.ambiente),
       address: r.canon.endereco || null,

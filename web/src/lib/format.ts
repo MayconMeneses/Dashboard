@@ -21,7 +21,7 @@ export const LABEL: Record<string, string> = {
   pit_canal: 'PIT',
   intra: 'Intradomicílio',
   peri: 'Peridomicílio',
-  intra_peri: 'Intra e peri',
+  intra_peri: 'Intra e peridomicílio',
 };
 
 export const CHANNEL_LABEL: Record<string, string> = { captura: 'Captura em campanha', pit: 'PIT' };
@@ -67,6 +67,7 @@ export function filtersToQuery(f: Filters, extra: Record<string, string | number
   if (f.exam.length) p.set('exam', f.exam.join(','));
   if (f.channel.length) p.set('channel', f.channel.join(','));
   if (f.species.length) p.set('species', f.species.join(','));
+  if (f.environment.length) p.set('environment', f.environment.join(','));
   if (f.q) p.set('q', f.q);
   for (const [k, v] of Object.entries(extra)) if (v !== undefined) p.set(k, String(v));
   return p.toString();

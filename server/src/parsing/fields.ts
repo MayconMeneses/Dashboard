@@ -18,11 +18,13 @@ export const FIELD_ALIASES: Record<Exclude<CanonicalField, 'ignorar'>, string[]>
   canal: ['campanha_captura_ou_pit', 'captura_ou_pit', 'campanha', 'origem_captura'],
   ambiente: ['intra_ou_peri', 'ambiente', 'local_captura'],
   fase_sexo: ['ninfa_macho_ou_femea', 'fase_sexo', 'ninfa_macho_femea'],
+  qtd_imoveis: ['quantidade_de_imoveis', 'qtd_imoveis', 'numero_de_imoveis', 'total_de_imoveis'],
+  zona: ['zona', 'zona_pit'],
 };
 
 /** Campos que só aparecem como informação auxiliar; ficam no registro original, sem gerar aviso de "campo sem mapeamento". */
 export const IGNORED_FIELDS = new Set(
-  ['descricao', 'latitude', 'longitude', 'estado_uf', 'municipio', 'cep', 'ponto_de_referencia', 'quantidade_de_imoveis', 'cod_da_localidade', 'zona', 'nome'].map(normalizeKey),
+  ['descricao', 'latitude', 'longitude', 'estado_uf', 'municipio', 'cep', 'ponto_de_referencia', 'cod_da_localidade', 'nome'].map(normalizeKey),
 );
 
 /** Campos com dados pessoais: nunca são importados nem exibidos. */

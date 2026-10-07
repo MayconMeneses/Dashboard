@@ -40,6 +40,7 @@ export interface Filters {
   exam: string[];
   channel: string[];
   species: string[];
+  environment: string[];
   q?: string;
 }
 export interface RecordRow {

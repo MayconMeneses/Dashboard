@@ -64,6 +64,8 @@ export type CanonicalField =
   | 'canal'
   | 'ambiente'
   | 'fase_sexo'
+  | 'qtd_imoveis'
+  | 'zona'
   | 'ignorar';
 
 export interface NormalizedFeature {
@@ -90,6 +92,10 @@ export interface NormalizedFeature {
   propertyRef: string | null;
   pitRef: string | null;
   /** como o registro chegou: captura em campanha ou entregue/atendido em PIT */
+  /** nº de imóveis da localidade (campo "Quantidade de Imoveis" dos pontos de localidade) */
+  propertyCount: number | null;
+  /** zona do PIT (Urbano/Rural) */
+  zone: string | null;
   channel: 'captura' | 'pit' | null;
   environment: 'intra' | 'peri' | 'intra_peri' | null;
   /** dado de endereço: restrito */
