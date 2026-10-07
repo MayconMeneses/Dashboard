@@ -168,7 +168,10 @@ export function parseToFeatures(raw: RawKml, mapping: FieldMapping = {}): ParseR
     let locName: string | null = null;
     let fromRecord = false;
     if (type === 'localidade') locName = r.canon.localidade || (geom?.type === 'Point' ? cleanLocalityName(pm.name) : pm.name) || null;
-    else if (r.canon.localidade) (locName = r.canon.localidade), (fromRecord = true);
+    else if (r.canon.localidade) {
+      locName = r.canon.localidade;
+      fromRecord = true;
+    }
     else {
       const folderName = [...pm.folderPath].reverse().find((f) => !isTypeFolderName(f));
       if (folderName && (type === 'captura' || type === 'visita' || type === 'pit')) {
