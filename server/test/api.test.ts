@@ -185,3 +185,36 @@ describe('filtros, mapa, tabela e exportação', () => {
     expect((await get(ctx, '/api/summary')).json().kpis.comCaptura.value).toBe(1);
   });
 });
+
+describe('filtro por espécie e áreas no mapa', () => {
+  const kml = `<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+<Folder><name>Area das Localidades</name><Placemark><name>Vila Alfa</name><Polygon><outerBoundaryIs><LinearRing><coordinates>-41,-5,0 -40,-5,0 -40,-4,0 -41,-4,0 -41,-5,0</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark></Folder>
+<Folder><name>Coleta</name>
+<Placemark><name>Brasiliensis</name><ExtendedData><Data name="Localidade"><value>Vila Alfa</value></Data><Data name="Resultado do Exame a Fresco"><value>Positivo</value></Data></ExtendedData><Point><coordinates>-40.5,-4.5,0</coordinates></Point></Placemark>
+<Placemark><name>P. Lutzi</name><ExtendedData><Data name="Localidade"><value>Vila Alfa</value></Data><Data name="Resultado do Exame a Fresco"><value>Negativo</value></Data></ExtendedData><Point><coordinates>-40.6,-4.6,0</coordinates></Point></Placemark>
+</Folder></Document></kml>`;
+  it('lista as espécies encontradas e filtra registros, indicadores e gráfico', async () => {
+    await activateSample(kml, 'especies.kml');
+    const facets = (await get(ctx, '/api/facets')).json();
+    expect(facets.species).toEqual([
+      { value: 'Panstrongylus lutzi', count: 1 },
+      { value: 'Triatoma brasiliensis', count: 1 },
+    ]);
+    const k = (await get(ctx, '/api/summary?species=Panstrongylus%20lutzi')).json().kpis;
+    expect(k.comCaptura.value).toBe(1);
+    expect(k.examePositivo.value).toBe(0);
+    expect(k.exameNegativo.value).toBe(1);
+    const recs = (await get(ctx, '/api/records?species=Triatoma%20brasiliensis&layers=captura')).json();
+    expect(recs.total).toBe(1);
+    expect(recs.rows[0].species).toBe('Triatoma brasiliensis');
+    const chart = (await get(ctx, '/api/chart?mode=exame&species=Triatoma%20brasiliensis&hideEmpty=true')).json();
+    expect(chart.series.find((s: { key: string }) => s.key === 'positivo').data).toEqual([1]);
+  });
+  it('mantém as áreas no mapa quando filtros de registros estão ativos', async () => {
+    await activateSample(kml, 'especies.kml');
+    const map = (await get(ctx, '/api/map?exam=positivo&species=Triatoma%20brasiliensis&from=2030-01-01')).json();
+    const types = map.features.map((f: { properties: { type: string } }) => f.properties.type);
+    expect(types).toContain('localidade'); // a área continua desenhada
+    expect(types).not.toContain('captura'); // mas o ponto sai (período sem registros)
+  });
+});

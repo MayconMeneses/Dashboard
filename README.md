@@ -42,7 +42,7 @@ Opções: `--excluir-duplicatas` / `--manter-duplicatas` (padrão: exclui só qu
 
 - Os números são os mesmos do painel com servidor (há testes de paridade entre os dois).
 - **Privacidade:** o arquivo gerado **não leva** endereço, número do imóvel/residência, nº da etiqueta nem os valores brutos do KML; as coordenadas são arredondadas (~1 m). Mesmo assim contém as posições de capturas e PITs: compartilhe só com quem pode ver esses dados.
-- O mapa-base (OpenStreetMap) precisa de internet; sem ela, áreas e limite continuam aparecendo.
+- O mapa-base precisa de internet; sem ela, áreas e limite continuam aparecendo. Padrão: mapa claro OpenStreetMap/CARTO (funciona em arquivo aberto do disco). O OpenStreetMap padrão é bloqueado pelo provedor quando a página é um arquivo local (erro 403), por isso não é o padrão.
 - A aba **Sobre os dados** explica o arquivo de origem, o que foi excluído e como ler os números.
 
 ## Perfis
@@ -80,6 +80,9 @@ O leitor foi ajustado ao arquivo real da campanha:
 Campos com possíveis dados pessoais (morador, proprietário, telefone, CPF…) são **descartados** na importação (o arquivo original os preserva).
 
 ## Mapas
+
+- **Mapa-base:** o seletor “Mapa-base” oferece Claro (OpenStreetMap/CARTO, padrão), Satélite (Esri), OpenStreetMap padrão e “Sem mapa-base”. Só o escolhido é carregado; o provedor recebe a região que está sendo vista. No servidor, `TILE_URL=` (vazio) desliga todos.
+- **Filtro de espécie:** lista as espécies encontradas (com contagem) e filtra indicadores, gráfico, mapa e tabela. As áreas das localidades continuam desenhadas quando há filtros de registros.
 
 - **Onde fica Croatá:** três mapas — Brasil (Ceará em destaque), Ceará (posição de Croatá) e Croatá com o limite do IBGE e as **áreas das localidades desenhadas por você no KML** (pasta “Area das Localidades”). Passe o mouse sobre uma área para ver o nome e as contagens (capturas, positivos, negativos); clique para selecionar a localidade (o gráfico, o mapa e a tabela acompanham). As cores seguem os filtros: vermelho = com exame positivo, azul = só negativos/sem resultado, cinza = sem capturas.
 - Brasil e Ceará são mapas **esquemáticos** (© @svg-maps/brazil, CC BY 4.0); a posição de Croatá no mapa do Ceará é aproximada. O mapa de Croatá usa dados reais (limite do IBGE + suas áreas).

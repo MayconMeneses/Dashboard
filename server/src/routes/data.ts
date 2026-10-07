@@ -3,7 +3,7 @@ import { audit } from '../audit.js';
 import { can, requirePermission, requireUser } from '../auth.js';
 import type { Db } from '../db.js';
 import { getAllRecordsForExport } from '../services/queries.js';
-import { getChart, getLocalities, getMapFeatures, getRecords, getSummary, parseFilters } from '../services/queries.js';
+import { getChart, getFacets, getLocalities, getMapFeatures, getRecords, getSummary, parseFilters } from '../services/queries.js';
 import { getActiveImport } from '../services/importer.js';
 
 const ENV: Record<string, string> = { intra: 'Intradomicílio', peri: 'Peridomicílio', intra_peri: 'Intra e peridomicílio' };
@@ -29,6 +29,11 @@ export function registerDataRoutes(app: FastifyInstance, db: Db): void {
     if (!requireUser(req, reply)) return;
     const q = req.query as Record<string, unknown>;
     return getChart(db, parseFilters(q), q.mode === 'exame' ? 'exame' : 'busca', q.sort === 'total' ? 'total' : 'nome', q.hideEmpty === 'true');
+  });
+
+  app.get('/api/facets', async (req, reply) => {
+    if (!requireUser(req, reply)) return;
+    return getFacets(db);
   });
 
   app.get('/api/localities', async (req, reply) => {

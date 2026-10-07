@@ -66,6 +66,7 @@ export function filtersToQuery(f: Filters, extra: Record<string, string | number
   if (f.search.length) p.set('search', f.search.join(','));
   if (f.exam.length) p.set('exam', f.exam.join(','));
   if (f.channel.length) p.set('channel', f.channel.join(','));
+  if (f.species.length) p.set('species', f.species.join(','));
   if (f.q) p.set('q', f.q);
   for (const [k, v] of Object.entries(extra)) if (v !== undefined) p.set(k, String(v));
   return p.toString();

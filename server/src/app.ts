@@ -20,11 +20,12 @@ export function buildApp(db: Db, cfg: Config): FastifyInstance {
   void app.register(fastifyCookie);
   void app.register(fastifyMultipart, { limits: { fileSize: cfg.maxUploadBytes, files: 1, fields: 5 } });
 
-  const tiles = cfg.tileUrl ? new URL(cfg.tileUrl.replace('{s}', 'a')).origin : '';
+  // Mapas-base permitidos (só quando TILE_URL não está vazio): OpenStreetMap, CARTO e Esri (satélite).
+  const tiles = cfg.tileUrl ? ['https://tile.openstreetmap.org', 'https://*.basemaps.cartocdn.com', 'https://server.arcgisonline.com', new URL(cfg.tileUrl.replace('{s}', 'a')).origin].join(' ') : '';
   app.addHook('onSend', async (_req, reply) => {
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'DENY');
-    reply.header('Referrer-Policy', 'no-referrer');
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin'); // o OpenStreetMap exige a origem nas requisições de mapa
     reply.header('Cache-Control', 'no-store');
     reply.header(
       'Content-Security-Policy',

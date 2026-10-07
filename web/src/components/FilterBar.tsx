@@ -1,11 +1,13 @@
 import { CHANNEL_LABEL, LABEL } from '../lib/format';
+import { api } from '../lib/api';
 import type { Filters, Locality } from '../lib/types';
+import { useAsync } from '../lib/useAsync';
 
 const LAYERS = ['localidade', 'visita', 'captura', 'pit', 'area', 'rota'];
 const SEARCH = ['com_captura', 'sem_captura', 'nao_informado'];
 const EXAM = ['positivo', 'negativo', 'pendente', 'nao_realizado', 'nao_informado'];
 
-export const DEFAULT_FILTERS: Filters = { layers: [], search: [], exam: [], channel: [] };
+export const DEFAULT_FILTERS: Filters = { layers: [], search: [], exam: [], channel: [], species: [] };
 
 function toggle(list: string[], v: string): string[] {
   return list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
@@ -19,12 +21,14 @@ export function activeChips(f: Filters, localities: Locality[]): { label: string
   for (const v of f.search) chips.push({ label: `Busca: ${LABEL[v]}`, clear: (x) => ({ ...x, search: x.search.filter((s) => s !== v) }) });
   for (const v of f.exam) chips.push({ label: `Exame: ${LABEL[v]}`, clear: (x) => ({ ...x, exam: x.exam.filter((s) => s !== v) }) });
   for (const v of f.channel) chips.push({ label: `Origem: ${CHANNEL_LABEL[v]}`, clear: (x) => ({ ...x, channel: x.channel.filter((s) => s !== v) }) });
+  for (const v of f.species) chips.push({ label: `Espécie: ${v}`, clear: (x) => ({ ...x, species: x.species.filter((s) => s !== v) }) });
   for (const v of f.layers) chips.push({ label: `Camada: ${LABEL[v]}`, clear: (x) => ({ ...x, layers: x.layers.filter((s) => s !== v) }) });
   return chips;
 }
 
-export function FilterBar({ filters, onChange, localities }: { filters: Filters; onChange: (f: Filters) => void; localities: Locality[] }) {
+export function FilterBar({ filters, onChange, localities, epoch = 0 }: { filters: Filters; onChange: (f: Filters) => void; localities: Locality[]; epoch?: number }) {
   const chips = activeChips(filters, localities);
+  const facets = useAsync(() => api.get<{ species: { value: string; count: number }[] }>('/api/facets'), [epoch]);
   return (
     <section className="card" aria-label="Filtros">
       <div className="filters">
@@ -65,6 +69,18 @@ export function FilterBar({ filters, onChange, localities }: { filters: Filters;
               <label key={v}>
                 <input type="checkbox" checked={filters.exam.includes(v)} onChange={() => onChange({ ...filters, exam: toggle(filters.exam, v) })} />
                 {LABEL[v]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Espécie encontrada</legend>
+          <div className="checks">
+            {(facets.data?.species ?? []).length === 0 && <span className="small muted">{facets.loading ? 'Carregando…' : 'Nenhuma espécie informada'}</span>}
+            {(facets.data?.species ?? []).map((sp) => (
+              <label key={sp.value}>
+                <input type="checkbox" checked={filters.species.includes(sp.value)} onChange={() => onChange({ ...filters, species: toggle(filters.species, sp.value) })} />
+                <i>{sp.value}</i> ({sp.count})
               </label>
             ))}
           </div>
