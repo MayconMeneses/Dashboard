@@ -13,6 +13,7 @@ const CANON = ['localidade', 'data_visita', 'data_exame', 'resultado_busca', 're
 const mappingSchema = z.object({
   fields: z.record(z.string().max(120), z.enum(CANON)).optional(),
   folders: z.record(z.string().max(240), z.enum(FEATURE_TYPES)).optional(),
+  localityAliases: z.record(z.string().max(120), z.string().max(120)).optional(),
 });
 
 const present = (r: ImportRow) => ({

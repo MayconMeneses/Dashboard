@@ -17,7 +17,14 @@ export const LABEL: Record<string, string> = {
   outro: 'Outro',
   arquivo: 'Arquivo',
   manual: 'Registro manual',
+  captura_campanha: 'Captura em campanha',
+  pit_canal: 'PIT',
+  intra: 'Intradomicílio',
+  peri: 'Peridomicílio',
+  intra_peri: 'Intra e peri',
 };
+
+export const CHANNEL_LABEL: Record<string, string> = { captura: 'Captura em campanha', pit: 'PIT' };
 
 export const COLORS: Record<string, string> = {
   com_captura: '#0f766e',
@@ -58,6 +65,7 @@ export function filtersToQuery(f: Filters, extra: Record<string, string | number
   if (f.layers.length) p.set('layers', f.layers.join(','));
   if (f.search.length) p.set('search', f.search.join(','));
   if (f.exam.length) p.set('exam', f.exam.join(','));
+  if (f.channel.length) p.set('channel', f.channel.join(','));
   if (f.q) p.set('q', f.q);
   for (const [k, v] of Object.entries(extra)) if (v !== undefined) p.set(k, String(v));
   return p.toString();

@@ -6,6 +6,7 @@ import { getAllRecordsForExport } from '../services/queries.js';
 import { getChart, getLocalities, getMapFeatures, getRecords, getSummary, parseFilters } from '../services/queries.js';
 import { getActiveImport } from '../services/importer.js';
 
+const ENV: Record<string, string> = { intra: 'Intradomicílio', peri: 'Peridomicílio', intra_peri: 'Intra e peridomicílio' };
 const LABEL: Record<string, string> = {
   com_captura: 'Com captura', sem_captura: 'Sem captura', nao_informado: 'Não informado', positivo: 'Positivo', negativo: 'Negativo', pendente: 'Pendente', nao_realizado: 'Não realizado',
   visita: 'Visita', captura: 'Captura', pit: 'PIT', arquivo: 'Arquivo KML/KMZ', manual: 'Registro manual',
@@ -62,7 +63,7 @@ export function registerDataRoutes(app: FastifyInstance, db: Db): void {
     const filters = parseFilters(q);
     const active = getActiveImport(db);
     const rows = getAllRecordsForExport(db, filters, includeAddress);
-    const head = ['origem', 'arquivo_origem', 'versao', 'data_do_arquivo', 'tipo', 'nome', 'localidade', 'data_visita', 'data_exame', 'resultado_busca', 'resultado_exame', 'quantidade', 'fase', 'sexo', 'especie', 'imovel', 'pit', 'latitude', 'longitude', 'possivel_duplicata'];
+    const head = ['origem', 'arquivo_origem', 'versao', 'data_do_arquivo', 'tipo', 'nome', 'localidade', 'data_visita', 'data_exame', 'resultado_busca', 'resultado_exame', 'quantidade', 'fase', 'sexo', 'especie', 'origem_captura', 'ambiente', 'imovel', 'pit', 'latitude', 'longitude', 'possivel_duplicata'];
     if (includeAddress) head.push('endereco');
     const lines = [head.join(';')];
     for (const r of rows) {
@@ -72,7 +73,7 @@ export function registerDataRoutes(app: FastifyInstance, db: Db): void {
         LABEL[String(r.type)] ?? r.type, r.name, r.locality_raw, r.visit_date, r.exam_date,
         r.type === 'captura' || r.type === 'visita' ? LABEL[String(r.search_result)] : '',
         r.type === 'captura' ? LABEL[String(r.exam_result)] : '',
-        r.triatomine_count, r.stage, r.sex, r.species, r.property_ref, r.pit_ref, r.lat, r.lng, r.duplicate_of != null ? 'sim' : '',
+        r.triatomine_count, r.stage, r.sex, r.species, r.channel === 'pit' ? 'PIT' : r.channel === 'captura' ? 'Captura em campanha' : '', ENV[String(r.environment)] ?? '', r.property_ref, r.pit_ref, r.lat, r.lng, r.duplicate_of != null ? 'sim' : '',
       ];
       if (includeAddress) cells.push(r.address);
       lines.push(cells.map(csvCell).join(';'));

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { LABEL, filtersToQuery, formatDate, formatNumber } from '../lib/format';
+import { CHANNEL_LABEL, LABEL, filtersToQuery, formatDate, formatNumber } from '../lib/format';
 import type { Filters, Locality, Me, RecordRow } from '../lib/types';
 import { useAsync } from '../lib/useAsync';
 
@@ -20,6 +20,8 @@ const COLS: [string, string][] = [
   ['search_result', 'Busca'],
   ['exam_result', 'Exame'],
   ['species', 'Espécie'],
+  ['channel', 'Origem da captura'],
+  ['environment', 'Ambiente'],
   ['triatomine_count', 'Qtd'],
   ['origin', 'Origem'],
 ];
@@ -99,7 +101,9 @@ export function DetailPanel({ me, filters, epoch, localities, onClear, onFocus }
                     <td>{formatDate(r.visit_date)}</td>
                     <td>{r.type === 'captura' || r.type === 'visita' ? <span className={`badge ${r.search_result}`}>{LABEL[r.search_result]}</span> : '—'}</td>
                     <td>{r.type === 'captura' ? <span className={`badge ${r.exam_result}`}>{LABEL[r.exam_result]}</span> : '—'}</td>
-                    <td>{r.species || '—'}</td>
+                    <td>{r.species || '—'}{r.stage || r.sex ? <span className="muted small"> · {[r.stage, r.sex].filter(Boolean).join(' ')}</span> : null}</td>
+                    <td>{r.channel ? CHANNEL_LABEL[r.channel] : '—'}</td>
+                    <td>{r.environment ? LABEL[r.environment] : '—'}</td>
                     <td>{r.triatomine_count ?? '—'}</td>
                     <td>{LABEL[r.origin]}</td>
                     {showAddr && <td>{r.address || '—'}</td>}

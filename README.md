@@ -27,6 +27,7 @@ Outros usuários: `npm run user:create -- <usuario> <senha(>=10)> <admin|analist
 | `TILE_URL` | OpenStreetMap | Mapa-base. `TILE_URL=` (vazio) desativa e não faz nenhuma requisição a terceiros. |
 | `COOKIE_SECURE` | `false` | Marque `true` atrás de HTTPS. |
 | `SESSION_HOURS` | `12` | Duração da sessão. |
+| `BOUNDARY_FILE`, `BOUNDARY_SOURCE` | — | GeoJSON do limite municipal oficial (ex.: malha municipal do IBGE de Croatá) e o texto da fonte exibido no mapa. |
 
 ## Perfis
 
@@ -47,6 +48,18 @@ O original é guardado em `DATA_DIR/uploads` (nome gerado pelo servidor, SHA-256
 ### O que o leitor de KML entende
 
 Não depende de nomes ou ordem fixa de pastas/tags. Lê `ExtendedData` (`Data/value`, `SchemaData/SimpleData`) e descrições HTML/CDATA (tabelas ou linhas `Campo: valor`); quando a informação aparece nos dois lugares, vale a estruturada. Reconhece, ignorando acentos e caixa, campos como: localidade/comunidade, data da captura/visita, data do exame, resultado da busca, resultado do exame, quantidade, fase, sexo, espécie, imóvel, PIT, endereço, id. Os tipos de registro vêm do nome da pasta (captura, visita, PIT, localidade, rota, área), da geometria (polígono → área/localidade, linha → rota) ou dos campos presentes. O que não for reconhecido pode ser mapeado manualmente na prévia.
+
+#### Formato do arquivo “MAPA DE CROATÁ” (Google My Maps)
+
+O leitor foi ajustado ao arquivo real da campanha:
+
+- **Pasta “Localidades do município de Croatá”:** pontos “Nome cod 0001 Início/Final”. O código e o marcador são removidos e os dois pontos viram a mesma localidade. Pontos que não seguem o padrão (ex.: “Luminosa R1 … Fiocruz”, “SETOR DE ENDEMIAS”) ficam como **pontos de referência**, não como localidade.
+- **“Area das Localidades”:** polígonos; são a lista de referência de localidades. Nomes de pontos e de registros são associados a elas (exata, semelhante por erro de digitação, ou parcial — ex.: “Sede” → “Croatá(Sede)”) e cada correção aparece na prévia; o valor original continua no registro. O que não casar (ex.: “Barra do Sotero”, “Aningas”) é listado para você **unificar** manualmente.
+- **“Coleta”:** cada ponto é um registro de captura. Campos lidos: Localidade, Data de Captura, Nº da Etiqueta, Numero da Residencia, “Campanha_Captura ou PIT” (origem: captura em campanha × PIT), “INTRA ou PERI” (ambiente), “Ninfa_Macho ou Femea” (separado em fase e sexo), “Resultado do Exame a Fresco” e Data do exame. A espécie é deduzida do nome do registro (“Brasiliensis”, “P. Lutzi”…), com aviso.
+- **“Resultados”, “Positivos”, “Negativos”:** são cópias dos registros em outras pastas. O painel as detecta como **possíveis duplicatas** (mesma localidade, imóvel, posição e atributos, ignorando campos vazios) e, nesse caso, já sugere excluir as cópias — decisão que fica com você na ativação. Dois registros no mesmo imóvel com datas diferentes **não** são tratados como cópia.
+- **“pits”:** locais de PIT; o endereço é dado restrito.
+- Exame em branco = “não informado”; erros de digitação óbvios (“Negaivo”) são corrigidos com aviso; datas com ano de 2 dígitos (27/07/26) são aceitas; exame anterior à captura gera aviso.
+- Este arquivo não traz resultado de busca nem quantidade de triatomíneos, nem limite municipal: esses indicadores aparecem como “Sem dado”.
 
 Campos com possíveis dados pessoais (morador, proprietário, telefone, CPF…) são **descartados** na importação (o arquivo original os preserva).
 
@@ -69,7 +82,7 @@ Campos com possíveis dados pessoais (morador, proprietário, telefone, CPF…) 
 ## Limitações atuais
 
 - Sem arquivo real da campanha para validar: o reconhecimento de campos é heurístico. Confirme com a equipe quais campos/pastas o sistema de origem exporta e use o mapeamento.
-- **Limite municipal:** não é inventado. Se o arquivo trouxer um polígono de limite (pasta/nome com “limite”, “município”…), ele é desenhado; senão o mapa mostra só os dados. Uma base oficial (ex.: malha do IBGE) pode ser acrescentada se a equipe autorizar.
+- **Limite municipal:** não é inventado. O arquivo da campanha não traz o limite de Croatá. Para exibi-lo, baixe a malha oficial (IBGE, malha municipal; confirme o código do município de Croatá/CE no site do IBGE), salve como GeoJSON e inicie com `BOUNDARY_FILE=/caminho/croata.geojson BOUNDARY_SOURCE="IBGE – Malha Municipal"`. Sem isso, o mapa enquadra os dados importados e avisa que o limite não foi carregado. (O ambiente em que o projeto foi construído não tinha acesso ao IBGE, então isso não foi baixado nem testado com o arquivo oficial.)
 - Não há exportação KML/KMZ derivada, tela de gestão de usuários (use o comando acima) nem backup/restauração de banco.
 - Visitas manuais não têm edição (só anular).
 - `node:sqlite` ainda é marcado como experimental pelo Node 22 (aviso no console).

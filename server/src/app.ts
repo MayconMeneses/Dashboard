@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import fastifyCookie from '@fastify/cookie';
 import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
@@ -91,6 +91,18 @@ export function buildApp(db: Db, cfg: Config): FastifyInstance {
       permissions: { importar: can(u, 'importar'), manual: can(u, 'manual'), exportar: can(u, 'exportar'), restrito: can(u, 'restrito'), auditoria: can(u, 'auditoria') },
       map: { tileUrl: cfg.tileUrl, attribution: cfg.tileAttribution, maxUploadMb: Math.round(cfg.maxUploadBytes / 1048576) },
     };
+  });
+
+  app.get('/api/boundary', async (req, reply) => {
+    if (!requireUser(req, reply)) return;
+    if (!cfg.boundaryFile || !existsSync(cfg.boundaryFile) || statSync(cfg.boundaryFile).size > 8 * 1024 * 1024) return { geojson: null, source: null };
+    try {
+      const g = JSON.parse(readFileSync(cfg.boundaryFile, 'utf8')) as { type?: string };
+      const ok = ['FeatureCollection', 'Feature', 'Polygon', 'MultiPolygon'].includes(g.type ?? '');
+      return ok ? { geojson: g, source: cfg.boundarySource } : { geojson: null, source: null };
+    } catch {
+      return { geojson: null, source: null };
+    }
   });
 
   app.get('/api/audit', async (req, reply) => {

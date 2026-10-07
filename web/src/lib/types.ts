@@ -36,6 +36,7 @@ export interface Filters {
   layers: string[];
   search: string[];
   exam: string[];
+  channel: string[];
   q?: string;
 }
 export interface RecordRow {
@@ -54,6 +55,8 @@ export interface RecordRow {
   sex: string | null;
   property_ref: string | null;
   pit_ref: string | null;
+  channel: string | null;
+  environment: string | null;
   lat: number | null;
   lng: number | null;
   duplicate_of: number | null;
@@ -75,6 +78,8 @@ export interface MapFeature {
     exam_result: string;
     triatomine_count: number | null;
     species: string | null;
+    channel: string | null;
+    environment: string | null;
     is_boundary: boolean;
   };
 }
@@ -103,7 +108,8 @@ export interface Report {
   folderTypes: Record<string, string>;
   localities: { key: string; name: string }[];
   similarLocalities: [string, string][];
-  duplicates: { key: string; indexes: number[] }[];
+  duplicates: { key: string; indexes: number[]; crossFolder: boolean }[];
+  unmatchedLocalities: string[];
   issues: Issue[];
 }
 export interface ImportInfo {
@@ -118,7 +124,7 @@ export interface ImportInfo {
   activatedAt: string | null;
   decisionNote: string | null;
   error: { code: string; message: string } | null;
-  mapping: { fields?: Record<string, string>; folders?: Record<string, string> };
+  mapping: { fields?: Record<string, string>; folders?: Record<string, string>; localityAliases?: Record<string, string> };
   report: Report | null;
 }
 export interface ManualVisit {

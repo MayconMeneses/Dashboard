@@ -61,6 +61,8 @@ CREATE TABLE IF NOT EXISTS features (
   species TEXT,
   property_ref TEXT,
   pit_ref TEXT,
+  channel TEXT,
+  environment TEXT,
   address TEXT,
   is_boundary INTEGER NOT NULL DEFAULT 0,
   duplicate_of INTEGER,

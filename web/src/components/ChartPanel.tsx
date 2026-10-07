@@ -19,7 +19,8 @@ export function ChartPanel({ filters, epoch, selected, onSelect }: Props) {
   const [sort, setSort] = useState<'nome' | 'total'>('total');
   const [stacked, setStacked] = useState(true);
   const [asTable, setAsTable] = useState(false);
-  const q = filtersToQuery({ ...filters, layers: [] }, { mode, sort });
+  const [showEmpty, setShowEmpty] = useState(false);
+  const q = filtersToQuery({ ...filters, layers: [] }, { mode, sort, hideEmpty: !showEmpty });
   const { data, loading, error, reload } = useAsync(() => api.get<Chart>(`/api/chart?${q}`), [q, epoch]);
 
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -98,6 +99,9 @@ export function ChartPanel({ filters, epoch, selected, onSelect }: Props) {
         </label>
         <label className="checks">
           <input type="checkbox" checked={stacked} onChange={(e) => setStacked(e.target.checked)} /> Empilhar
+        </label>
+        <label className="checks">
+          <input type="checkbox" checked={showEmpty} onChange={(e) => setShowEmpty(e.target.checked)} /> Mostrar localidades sem registros
         </label>
         <button className="small" onClick={() => setAsTable((v) => !v)} aria-pressed={asTable}>
           {asTable ? 'Ver gráfico' : 'Ver como tabela'}
