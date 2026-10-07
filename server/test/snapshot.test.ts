@@ -125,3 +125,27 @@ describe('privacidade do painel compartilhado', () => {
     expect(readFileSync(new URL('./fixtures/exemplo-ficticio.kml', import.meta.url)).length).toBeGreaterThan(1000);
   });
 });
+
+describe('pendências para conferir no KML', () => {
+  const kml = strToU8(`<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+<Folder><name>Area das Localidades</name><Placemark><name>Vila Alfa</name>${sq(-40.9, -4.4)}</Placemark></Folder>
+<Folder><name>Coleta</name>
+${cap('Brasiliensis', { Localidade: 'Vila Alfa', 'Data de Captura': '30/06/2026', 'Resultado do Exame a Fresco': 'Positivo', 'Data do exame': '10/06/2026', 'Numero da Residencia': '12', 'Nº da Etiqueta': '9' }, -40.9, -4.4)}
+${cap('Brasiliensis', { Localidade: 'Vila Alfa', 'Data de Captura': '01/07/2026', 'Resultado do Exame a Fresco': '' }, -40.9001, -4.4001)}
+${cap('Algo estranho', { Localidade: 'Lugar Inexistente', 'Data de Captura': '', 'Resultado do Exame a Fresco': 'Negativo' }, -40.95, -4.45)}
+</Folder></Document></kml>`);
+  const p = buildSnapshot(kml, 'x.kml').sobre.pendencias;
+  it('lista exame antes da captura, sem resultado, localidade desconhecida, sem data e espécie não identificada', () => {
+    const t = p.map((x) => x.problema).join(' | ');
+    expect(t).toContain('Data do exame anterior');
+    expect(t).toContain('Sem resultado de exame');
+    expect(t).toContain('Lugar Inexistente');
+    expect(t).toContain('Sem data de captura');
+    expect(t).toContain('Espécie não identificada');
+  });
+  it('não vaza imóvel nem etiqueta e informa a posição no arquivo', () => {
+    expect(JSON.stringify(p)).not.toContain('Residencia');
+    expect(JSON.stringify(p)).not.toMatch(/"12"|etiqueta/i);
+    expect(p.every((x) => x.indice >= 1)).toBe(true);
+  });
+});

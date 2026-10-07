@@ -9,6 +9,8 @@ import { COOKIE, can, createSession, destroySession, requirePermission, requireU
 import type { Config } from './config.js';
 import type { Db } from './db.js';
 import { registerDataRoutes } from './routes/data.js';
+import { loadContextGeojson } from './geo-context.js';
+import { registerAdminRoutes } from './routes/admin.js';
 import { registerImportRoutes } from './routes/imports.js';
 import { registerManualRoutes } from './routes/manual.js';
 import { ServiceError } from './services/importer.js';
@@ -89,7 +91,7 @@ export function buildApp(db: Db, cfg: Config): FastifyInstance {
     return {
       username: u.username,
       role: u.role,
-      permissions: { importar: can(u, 'importar'), manual: can(u, 'manual'), exportar: can(u, 'exportar'), restrito: can(u, 'restrito'), auditoria: can(u, 'auditoria') },
+      permissions: { importar: can(u, 'importar'), manual: can(u, 'manual'), exportar: can(u, 'exportar'), restrito: can(u, 'restrito'), auditoria: can(u, 'auditoria'), administrar: can(u, 'administrar') },
       map: { tileUrl: cfg.tileUrl, attribution: cfg.tileAttribution, maxUploadMb: Math.round(cfg.maxUploadBytes / 1048576), cartoKey: cfg.cartoKey },
     };
   });
@@ -106,12 +108,20 @@ export function buildApp(db: Db, cfg: Config): FastifyInstance {
     }
   });
 
+  let contextMaps: { brasil: unknown; ceara: unknown } | undefined;
+  app.get('/api/context-maps', async (req, reply) => {
+    if (!requireUser(req, reply)) return;
+    contextMaps ??= { brasil: loadContextGeojson(cfg.brasilGeojson), ceara: loadContextGeojson(cfg.cearaGeojson) };
+    return contextMaps;
+  });
+
   app.get('/api/audit', async (req, reply) => {
     if (!requirePermission(req, reply, 'auditoria')) return;
     return db.prepare('SELECT at, username, action, target, detail_json FROM audit_log ORDER BY id DESC LIMIT 200').all();
   });
 
   registerImportRoutes(app, db, cfg);
+  registerAdminRoutes(app, db, cfg);
   registerDataRoutes(app, db);
   registerManualRoutes(app, db);
 

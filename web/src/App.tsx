@@ -6,11 +6,12 @@ import { DashboardPage } from './pages/Dashboard';
 import { ImportPage } from './pages/Import';
 import { LoginPage } from './pages/Login';
 import { ReportPage } from './pages/Report';
+import { UsersPage } from './pages/Users';
 import { AboutPage } from './pages/About';
 import { IS_STATIC, getSnapshot } from './lib/static';
 import { ManualPage } from './pages/Manual';
 
-type Page = 'painel' | 'dados' | 'manual' | 'sobre' | 'relatorio';
+type Page = 'painel' | 'dados' | 'manual' | 'sobre' | 'relatorio' | 'usuarios';
 
 const staticMe = (): Me => ({
   username: 'visitante',
@@ -41,6 +42,7 @@ export function App() {
 
   const tabs: [Page, string][] = [['painel', 'Painel']];
   tabs.push(['relatorio', 'Relatório / PDF']);
+  if (me.permissions.administrar) tabs.push(['usuarios', 'Usuários']);
   if (IS_STATIC) tabs.push(['sobre', 'Sobre os dados']);
   if (me.permissions.importar) tabs.push(['dados', 'Atualizar dados']);
   if (me.permissions.manual) tabs.push(['manual', 'Visita sem captura']);
@@ -85,6 +87,7 @@ export function App() {
       </header>
       <main className="container">
         {page === 'painel' && <DashboardPage me={me} epoch={dataEpoch} goImport={() => setPage('dados')} />}
+        {page === 'usuarios' && me.permissions.administrar && <UsersPage me={me} />}
         {page === 'relatorio' && <ReportPage me={me} epoch={dataEpoch} />}
         {page === 'sobre' && IS_STATIC && <AboutPage snapshot={getSnapshot()} />}
         {page === 'dados' && me.permissions.importar && <ImportPage me={me} onChanged={refresh} />}

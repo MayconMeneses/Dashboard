@@ -148,3 +148,12 @@ describe('codificação', () => {
     expect(parseKmlOrKmz(body).features).toHaveLength(1);
   });
 });
+
+describe('entidades XML padrão', () => {
+  it('decodifica &amp; &apos; &lt; em nomes e valores sem expandir entidades externas', () => {
+    const body = `<Folder><name>Capturas</name><Placemark><name>Olho D&apos;&#193;gua &amp; Cia</name><ExtendedData><Data name="Localidade"><value>Vila &lt;A&gt; &amp; B</value></Data></ExtendedData><Point><coordinates>-40.9,-4.4</coordinates></Point></Placemark></Folder>`;
+    const f = parseKmlOrKmz(kml(body)).features[0]!;
+    expect(f.name).toBe("Olho D'Água & Cia");
+    expect(f.localityRaw).toBe('Vila <A> & B');
+  });
+});

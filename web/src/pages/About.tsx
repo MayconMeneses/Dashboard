@@ -1,4 +1,5 @@
 import { formatDateTime } from '../lib/format';
+import { downloadCsv } from '../components/charts';
 import type { Snapshot } from '../static/engine';
 
 const TYPE_LABEL: Record<string, string> = { localidade: 'Localidades (pontos e áreas)', captura: 'Registros de captura', pit: 'PITs', visita: 'Visitas', area: 'Áreas', rota: 'Rotas', outro: 'Pontos de referência / outros' };
@@ -61,6 +62,34 @@ export function AboutPage({ snapshot }: { snapshot: Snapshot | null }) {
       <section className="card stack">
         <h3>Privacidade</h3>
         <p className="small" style={{ margin: 0 }}>Não constam neste painel: {s.camposRestritosRemovidos.join('; ')}.{s.camposDescartados.length ? ` Campos descartados por possível dado pessoal: ${s.camposDescartados.join(', ')}.` : ''} As coordenadas dos pontos aparecem arredondadas (cerca de 1 metro).</p>
+      </section>
+
+      <section className="card" id="pendencias" aria-label="Conferir no arquivo de origem">
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <h3 style={{ margin: 0 }}>Conferir no arquivo de origem ({s.pendencias.length})</h3>
+          {s.pendencias.length > 0 && (
+            <button className="small no-print" onClick={() => downloadCsv(['Posição no arquivo', 'Registro', 'Localidade', 'Data de captura', 'O que conferir'], s.pendencias.map((p) => [p.indice, p.registro, p.localidade, p.data, p.problema]), 'conferir-no-kml')}>
+              Baixar lista (CSV)
+            </button>
+          )}
+        </div>
+        <p className="small muted">Registros que têm algo a conferir ou completar no KML de origem. A “posição” é a ordem do ponto no arquivo (o primeiro ponto é o nº 1). Não é erro do painel: o painel mostra o que o arquivo traz.</p>
+        {s.pendencias.length === 0 ? (
+          <div className="notice ok">Nenhuma pendência encontrada.</div>
+        ) : (
+          <div className="table-wrap">
+            <table className="compact">
+              <thead><tr><th>Posição</th><th>Registro</th><th>Localidade</th><th>Data</th><th>O que conferir</th></tr></thead>
+              <tbody>
+                {s.pendencias.map((p, i) => (
+                  <tr key={i}>
+                    <td>{p.indice}</td><td style={{ whiteSpace: 'normal' }}>{p.registro}</td><td style={{ whiteSpace: 'normal' }}>{p.localidade ?? '—'}</td><td>{p.data ? p.data.split('-').reverse().join('/') : '—'}</td><td style={{ whiteSpace: 'normal' }}>{p.problema}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="card">

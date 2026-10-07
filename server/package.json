@@ -11,7 +11,8 @@
     "lint": "eslint src test",
     "test": "vitest run",
     "user:create": "tsx src/cli/create-user.ts",
-    "gerar-html": "tsx src/cli/gerar-html.ts"
+    "gerar-html": "tsx src/cli/gerar-html.ts",
+    "restore": "tsx src/cli/restore.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

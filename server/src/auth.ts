@@ -65,6 +65,7 @@ const CAN = {
   restrito: ['admin', 'analista'], // endereço residencial
   auditoria: ['admin'],
   baixarOriginal: ['admin'],
+  administrar: ['admin'],
 } as const;
 export type Permission = keyof typeof CAN;
 

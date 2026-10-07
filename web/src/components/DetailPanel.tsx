@@ -61,9 +61,14 @@ export function DetailPanel({ me, filters, epoch, localities, onClear, onFocus }
           </label>
         )}
         {me.permissions.exportar && (
-          <a className="btn small" href={`/api/export/records.csv?${csvQ}`}>
-            Exportar CSV
-          </a>
+          <>
+            <a className="btn small" href={`/api/export/records.csv?${csvQ}`}>
+              Exportar CSV
+            </a>
+            <a className="btn small" href={`/api/export/records.kml?${filtersToQuery({ ...filters, layers: filters.layers.length ? filters.layers : ['captura', 'visita', 'pit'] })}`} title="KML sem endereço nem dados pessoais; pode ser reimportado no painel ou aberto no Google Earth">
+              Exportar KML
+            </a>
+          </>
         )}
         <span className="small muted">{data ? `${formatNumber(data.total)} registro(s)` : ''}</span>
       </div>

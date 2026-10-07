@@ -45,12 +45,16 @@ export interface Snapshot {
   seenFields: Record<string, boolean>;
   rec: SnapshotRec[];
   boundary: { geojson: unknown; source: string } | null;
+  /** GeoJSON oficial opcional para os mapas de localização (Brasil com UFs e Ceará) */
+  mapas?: { brasil: unknown; ceara: unknown };
   sobre: {
     registrosLidos: number;
     duplicatasExcluidas: number;
     avisos: { codigo: string; mensagem: string; quantidade: number }[];
     camposDescartados: string[];
     camposRestritosRemovidos: string[];
+    /** registros que a equipe deve conferir no arquivo de origem */
+    pendencias: { indice: number; registro: string; localidade: string | null; data: string | null; problema: string }[];
   };
 }
 
@@ -297,6 +301,8 @@ export function handle(s: Snapshot, url: string): unknown {
       return mapFeatures(s, f);
     case '/api/records':
       return records(s, f, { page: Math.max(Number(p.get('page')) || 1, 1), pageSize: Math.min(Math.max(Number(p.get('pageSize')) || 25, 1), 100), sort: p.get('sort') ?? undefined, dir: p.get('dir') ?? undefined });
+    case '/api/context-maps':
+      return s.mapas ?? { brasil: null, ceara: null };
     case '/api/boundary':
       return s.boundary ? { geojson: s.boundary.geojson, source: s.boundary.source } : { geojson: null, source: null };
     case '/api/imports':

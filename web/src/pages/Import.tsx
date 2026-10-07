@@ -260,6 +260,19 @@ export function ImportPage({ me, onChanged }: { me: Me; onChanged: () => void })
         </section>
       )}
 
+      {me.permissions.administrar && (
+        <section className="card stack" aria-label="Backup">
+          <h2>Backup</h2>
+          <p className="small" style={{ margin: 0 }}>
+            O backup é um arquivo ZIP com o banco de dados e os arquivos KML/KMZ originais enviados. Guarde-o em local seguro: ele contém os dados da campanha. <strong>Não há backup automático</strong>: baixe com a frequência que a equipe precisar.
+          </p>
+          <div className="row">
+            <a className="btn" href="/api/admin/backup">Baixar backup (ZIP)</a>
+          </div>
+          <p className="small muted" style={{ margin: 0 }}>Para restaurar, com o servidor parado: <code>npm run restore -- "arquivo-do-backup.zip"</code>. O banco anterior é guardado ao lado, com a data.</p>
+        </section>
+      )}
+
       <section className="card" aria-label="Versões">
         <h2>Versões importadas</h2>
         {versions.loading && !versions.data && <div className="skeleton" style={{ height: 80 }} />}

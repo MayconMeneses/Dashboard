@@ -132,15 +132,25 @@ Os números dessas análises são calculados pelo **mesmo código** no servidor 
 - Endereço só para analista/admin e fora do CSV por padrão; CSV neutraliza injeção de fórmula.
 - Auditoria de login, importação, ativação/restauração, exportações e registros manuais.
 - Nenhum envio de dados a serviços de geocodificação, analytics ou IA. A única chamada externa possível é o **mapa-base** (tiles do OpenStreetMap, que veem a região visualizada); desative com `TILE_URL=`.
-- **Backup:** não há backup automático. Copie a pasta `DATA_DIR` com a rotina da sua instituição.
+- **Backup:** administradores baixam um ZIP (banco + arquivos enviados) em *Importar → Backup* (`GET /api/admin/backup`). Não é automático: agende o download ou copie `DATA_DIR`. Restaurar: `npm run restore -- backup.zip` com o servidor parado (o banco anterior é guardado como `*.antes-da-restauracao-<data>`).
 
 ## Limitações atuais
 
 - Sem arquivo real da campanha para validar: o reconhecimento de campos é heurístico. Confirme com a equipe quais campos/pastas o sistema de origem exporta e use o mapeamento.
 - **Limite municipal:** o arquivo da campanha não traz o limite de Croatá. O projeto inclui `boundary/croata-ibge.geojson`, extraído do **PDF oficial do IBGE** (Mapa Municipal de Croatá-CE, código 2304236, Malha Territorial ed. 04/2021): o traçado dos limites foi lido do vetor do PDF e georreferenciado pelas graduações da moldura. Não é o arquivo oficial em GeoJSON/shapefile: a precisão é aproximada (algumas dezenas de metros). Conferências feitas: área ≈ 699 km², todos os 58 registros de captura e os 12 PITs do arquivo da campanha caem dentro do limite; alguns pontos de localidades na divisa podem ficar logo fora. Para usar a malha oficial em GeoJSON (IBGE, Malhas Territoriais), inicie com `BOUNDARY_FILE=/caminho/croata.geojson BOUNDARY_SOURCE="IBGE – Malha Municipal"`.
-- Não há exportação KML/KMZ derivada, tela de gestão de usuários (use o comando acima) nem backup/restauração de banco.
 - Visitas manuais não têm edição (só anular).
 - `node:sqlite` ainda é marcado como experimental pelo Node 22 (aviso no console).
+
+## Operação
+
+- **Usuários:** aba *Usuários* (administrador): criar, trocar perfil, redefinir senha e desativar; o sistema impede desativar o último administrador ou a si mesmo.
+- **Exportar KML:** na lista de registros, o botão KML gera um arquivo com os mesmos campos da campanha (reimportável), sem endereço nem imóvel.
+- **Pendências do arquivo:** em *Sobre os dados → Conferir no arquivo de origem* há a lista de registros a corrigir (exame antes da captura, localidade não reconhecida, data inválida, fora da área, sem resultado, sem data, espécie não identificada), com CSV.
+- **PDF automatizado:** `CHROME_PATH=/caminho/chrome npm run gerar-pdf -- painel.html relatorio.pdf` (Chrome/Edge via playwright-core). Também dá para usar *Relatório / PDF → Imprimir* no navegador.
+- **Windows:** `iniciar-painel.bat` (duplo clique) inicia o servidor e cria o administrador na primeira vez, sem mexer na política de scripts.
+- **Mapa-base:** `CARTO_API_KEY` (ou `--carto-key=` no `gerar-html`); a chave nunca vai para o repositório. Sem chave, há Esri e “sem fundo”.
+- **Brasil e Ceará oficiais:** por padrão são mapas esquemáticos. Para usar limites oficiais, baixe os GeoJSON de UFs do Brasil e do Ceará (IBGE – Malhas Territoriais, ou equivalente) e informe `BRASIL_GEOJSON`/`CEARA_GEOJSON` ou `--brasil-geojson=`/`--ceara-geojson=` no `gerar-html`. Os arquivos são simplificados e a UF do Ceará é reconhecida por sigla `CE`, código `23` ou nome.
+- **CI:** `.github/workflows/ci.yml` roda lint, typecheck, testes e builds em Ubuntu e Windows.
 
 ## Testes e verificações
 

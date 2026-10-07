@@ -16,6 +16,14 @@
     "test": "npm run test -w server && npm run test -w web",
     "user:create": "npm run user:create -w server --",
     "build:static": "npm run build:static -w web",
-    "gerar-html": "npm run gerar-html -w server --"
+    "gerar-html": "npm run gerar-html -w server --",
+    "restore": "npm run restore -w server --",
+    "gerar-pdf": "node scripts/gerar-pdf.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.64.0"
+  },
+  "engines": {
+    "node": ">=22.13"
   }
 }
