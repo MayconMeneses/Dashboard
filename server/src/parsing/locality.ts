@@ -68,8 +68,10 @@ export class LocalityBook {
       for (const k of this.names.keys()) {
         if (Math.abs(k.length - key.length) > max) continue;
         const d = levenshtein(k, key);
-        if (d < best) (best = d), (hit = [k]);
-        else if (d === best && d <= max) hit.push(k);
+        if (d < best) {
+          best = d;
+          hit = [k];
+        } else if (d === best && d <= max) hit.push(k);
       }
       if (hit.length === 1 && best <= max) return { key: hit[0]!, name: this.names.get(hit[0]!)!, matched: true, how: 'semelhante' };
     }
