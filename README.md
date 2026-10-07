@@ -86,6 +86,7 @@ Campos com possíveis dados pessoais (morador, proprietário, telefone, CPF…) 
 
 - **Onde fica Croatá:** três mapas — Brasil (Ceará em destaque), Ceará (posição de Croatá) e Croatá com o limite do IBGE e as **áreas das localidades desenhadas por você no KML** (pasta “Area das Localidades”). Passe o mouse sobre uma área para ver o nome e as contagens (capturas, positivos, negativos); clique para selecionar a localidade (o gráfico, o mapa e a tabela acompanham). As cores seguem os filtros: vermelho = com exame positivo, azul = só negativos/sem resultado, cinza = sem capturas.
 - Brasil e Ceará são mapas **esquemáticos** (© @svg-maps/brazil, CC BY 4.0); a posição de Croatá no mapa do Ceará é aproximada. O mapa de Croatá usa dados reais (limite do IBGE + suas áreas).
+- **Localidades do município:** mapa só com as áreas da pasta “Area das Localidades” do KML. Ao passar o mouse aparece apenas o nome da localidade (sem dados de triatomíneos); tem zoom, seletor de mapa-base e lista de nomes.
 - **Mapa interativo** (Leaflet): as mesmas áreas, com zoom, nome ao passar o mouse e camadas de capturas, PITs, visitas e pontos de referência.
 
 ## Regras de significado dos dados

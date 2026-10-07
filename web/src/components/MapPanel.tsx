@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { COLORS, LABEL, filtersToQuery, formatDate } from '../lib/format';
 import type { Filters, Locality, MapFeature, Me } from '../lib/types';
+import { BASEMAPS, storedBasemap } from '../lib/basemaps';
 import { useAsync } from '../lib/useAsync';
 
 interface Props {
@@ -13,28 +14,6 @@ interface Props {
   selected?: string;
   onSelect: (key: string | undefined) => void;
   focus?: { lat: number; lng: number; n: number };
-}
-
-interface Basemap {
-  id: string;
-  label: string;
-  url: string;
-  attribution: string;
-  subdomains?: string;
-}
-/** Mapas-base abertos. Cada um só é carregado se escolhido; "Sem mapa-base" não faz nenhuma requisição a terceiros. */
-const BASEMAPS: Basemap[] = [
-  { id: 'carto', label: 'Claro (OpenStreetMap/CARTO)', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', attribution: '© colaboradores do OpenStreetMap © CARTO', subdomains: 'abcd' },
-  { id: 'esri', label: 'Satélite (Esri)', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Imagens © Esri, Maxar, Earthstar Geographics e comunidade GIS' },
-  { id: 'osm', label: 'OpenStreetMap padrão', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© colaboradores do OpenStreetMap' },
-];
-
-function storedBasemap(): string | null {
-  try {
-    return window.localStorage.getItem('basemap');
-  } catch {
-    return null;
-  }
 }
 
 const CROATA_APPROX: L.LatLngTuple = [-4.4, -40.9]; // posição aproximada, usada só quando não há dados

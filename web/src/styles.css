@@ -89,3 +89,7 @@ figure.loc svg { width: 100%; height: auto; max-height: 420px; display: block; }
 .loc-svg-wrap { position: relative; }
 .area-tooltip { position: absolute; z-index: 2; pointer-events: none; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--s1) var(--s2); font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.2); white-space: nowrap; }
 .area-tip { font-size: 13px; }
+
+#map-names { height: 560px; border-radius: var(--radius); border: 1px solid var(--border); z-index: 0; background: #eef2f6; }
+@media (max-width: 600px) { #map-names { height: 420px; } }
+.names-list { columns: 3 180px; margin: 8px 0 0; padding-left: 18px; }
