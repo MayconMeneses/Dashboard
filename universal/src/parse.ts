@@ -28,7 +28,7 @@ function clean(v: unknown): Cell {
   return s === '' ? null : s;
 }
 
-function toTable(name: string, matrix: unknown[][]): Table {
+function toTableSimple(name: string, matrix: unknown[][]): Table {
   const rows2 = matrix.filter((r) => r.some((c) => c != null && String(c).trim() !== ''));
   if (!rows2.length) return { name, columns: [], rows: [] };
   const columns = uniqueNames((rows2[0] as unknown[]).map((c) => String(c ?? '')));
@@ -38,6 +38,40 @@ function toTable(name: string, matrix: unknown[][]): Table {
     return o;
   });
   return { name, columns, rows };
+}
+
+const filledCount = (r: unknown[]) => r.filter((c) => c != null && String(c).trim() !== '').length;
+
+/**
+ * Planilhas de formulário trazem títulos, blocos separados por linhas em branco e cabeçalhos soltos.
+ * Separa em blocos, descarta linhas de título acima do cabeçalho real (primeira linha bem preenchida)
+ * e devolve uma tabela por bloco. Se houver um único bloco, cai no comportamento simples.
+ */
+export function toTables(name: string, matrix: unknown[][]): Table[] {
+  const groups: unknown[][][] = [];
+  let cur: unknown[][] = [];
+  for (const r of matrix) {
+    if (filledCount(r) === 0) {
+      if (cur.length) groups.push(cur);
+      cur = [];
+    } else cur.push(r);
+  }
+  if (cur.length) groups.push(cur);
+  const blocks: Table[] = [];
+  for (const g of groups) {
+    const maxFilled = Math.max(...g.map(filledCount));
+    if (g.length < 3 || maxFilled < 3) continue;
+    const start = g.findIndex((r) => filledCount(r) >= Math.ceil(maxFilled * 0.6));
+    const body = g.slice(start);
+    if (body.length < 3) continue;
+    const used = new Set<number>();
+    body.forEach((r) => r.forEach((c, i) => c != null && String(c).trim() !== '' && used.add(i)));
+    const cols = [...used].sort((a, b) => a - b);
+    const t = toTableSimple(`${name} · bloco ${blocks.length + 1}`, body.map((r) => cols.map((i) => r[i])));
+    if (t.columns.length >= 3 && t.rows.length >= 3) blocks.push(t);
+  }
+  if (blocks.length >= 2 || (blocks.length === 1 && groups.length > 1)) return blocks.length === 1 ? [{ ...blocks[0]!, name }] : blocks;
+  return [toTableSimple(name, matrix)];
 }
 
 export function objectsToTable(name: string, list: Record<string, unknown>[]): Table {
@@ -53,8 +87,8 @@ export function objectsToTable(name: string, list: Record<string, unknown>[]): T
 }
 
 function parseCsv(name: string, text: string): Table[] {
-  const res = Papa.parse<unknown[]>(text.replace(/^﻿/, ''), { skipEmptyLines: 'greedy' });
-  return [toTable(name, res.data as unknown[][])];
+  const res = Papa.parse<unknown[]>(text.replace(/^﻿/, ''), { skipEmptyLines: false });
+  return toTables(name, res.data as unknown[][]);
 }
 
 function parseJson(name: string, text: string): Table[] {
@@ -160,7 +194,7 @@ export async function parseFile(fileName: string, bytes: Uint8Array): Promise<Da
     case 'xlsx': {
       const blob = new Blob([bytes as BlobPart]);
       const sheets = await readXlsx(blob);
-      tables = sheets.map((sh) => toTable(sh.sheet, sh.data as unknown as unknown[][]));
+      tables = sheets.flatMap((sh) => toTables(sh.sheet, sh.data as unknown as unknown[][]));
       break;
     }
     default:

@@ -81,3 +81,26 @@ describe('qualidade e correlação', () => {
     expect(profileTable(t, { cod: 'text' }).find((x) => x.name === 'cod')!.type).toBe('text');
   });
 });
+
+describe('planilha de formulário', () => {
+  it('separa blocos e ignora títulos acima do cabeçalho', async () => {
+    const csv = ['TÍTULO,,,', 'A,B,C,D', '', 'BLOCO UM,,,', 'ciclo,x,y,z', 'c1,1,2,3', 'c2,4,5,6', 'c3,7,8,9', '', 'func,a,b', 'f1,1,2', 'f2,3,4', 'f3,5,6'].join('\n');
+    const d = await parseFile('form.csv', enc(csv));
+    expect(d.tables).toHaveLength(2);
+    expect(d.tables[0]!.columns).toEqual(['ciclo', 'x', 'y', 'z']);
+    expect(d.tables[0]!.rows).toHaveLength(3);
+    expect(d.tables[1]!.columns).toEqual(['func', 'a', 'b']);
+  });
+});
+
+describe('tabela por rótulo (ex.: ciclos)', () => {
+  it('plota cada indicador por linha, na ordem do arquivo, sem histograma de poucos pontos', async () => {
+    const t = (await parseFile('c.csv', enc('ciclo,trab,pct\n1º Ciclo,8219,"87,19"\n2º Ciclo,4587,"48,64"\n3º Ciclo,,"66,36"\n'))).tables[0]!;
+    const s = suggestCharts(t, profileTable(t), 2);
+    expect(s.some((c) => c.kind === 'hist')).toBe(false);
+    const c = s.find((x) => x.y === 'trab')!;
+    expect(c.keepOrder).toBe(true);
+    expect(chartData(t, c).labels).toEqual(['1º Ciclo', '2º Ciclo']);
+    expect(chartData(t, s.find((x) => x.y === 'pct')!).values).toEqual([87.19, 48.64, 66.36]);
+  });
+});
