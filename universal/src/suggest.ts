@@ -6,7 +6,8 @@ export const fmtNum = (n: number) => new Intl.NumberFormat('pt-BR', { maximumFra
 /** Sugere gráficos conforme os tipos de coluna; `level` 1 = enxuto … 3 = completo. */
 export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpec[] {
   const out: ChartSpec[] = [];
-  const cats = prof.filter((p) => p.type === 'category' && p.unique >= 2).sort((a, b) => a.unique - b.unique);
+  const labelCol = t.rows.length >= 3 && t.rows.length <= 40 ? prof.find((p) => (p.type === 'category' || p.type === 'text' || p.type === 'id') && p.filled === t.rows.length && p.unique === t.rows.length) : undefined;
+  const cats = prof.filter((p) => p.type === 'category' && p.unique >= 2 && p.unique < p.filled).sort((a, b) => a.unique - b.unique);
   const nums = prof.filter((p) => (p.type === 'number' || p.type === 'integer') && p.unique > 1);
   const dates = prof.filter((p) => p.type === 'date');
   const bools = prof.filter((p) => p.type === 'boolean');
@@ -27,7 +28,12 @@ export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpe
     out.push({ id: id('cat'), kind: small ? 'donut' : 'hbar', x: c.name, agg: 'count', title: `Registros por ${c.name}`, description: small ? `Proporção de cada valor de “${c.name}”.` : `Os valores mais frequentes de “${c.name}” (até 15).`, score: 85 - i * 5 });
   });
   for (const b of bools.slice(0, 2)) out.push({ id: id('bool'), kind: 'donut', x: b.name, agg: 'count', title: `${b.name}`, description: 'Distribuição Sim/Não.', score: 70 });
-  nums.slice(0, level === 1 ? 1 : level === 2 ? 3 : 5).forEach((m, i) => {
+  if (labelCol) {
+    nums.filter((m) => m.filled >= 2).slice(0, level === 1 ? 3 : level === 2 ? 6 : 10).forEach((m, i) => {
+      out.push({ id: id('lab'), kind: 'bar', x: labelCol.name, y: m.name, agg: 'sum', keepOrder: true, title: `${m.name} por ${labelCol.name}`, description: `Valor de “${m.name}” em cada linha de “${labelCol.name}”, na ordem do arquivo. Linha sem valor fica sem barra (não é zero).`, score: 88 - i });
+    });
+  }
+  if (t.rows.length >= 12) nums.slice(0, level === 1 ? 1 : level === 2 ? 3 : 5).forEach((m, i) => {
     out.push({ id: id('hist'), kind: 'hist', x: m.name, title: `Distribuição de ${m.name}`, description: `Quantos registros caem em cada faixa de “${m.name}”.`, score: 75 - i * 5 });
   });
   const c0 = cats.find((c) => c.unique <= 25);
@@ -177,7 +183,8 @@ export function chartData(t: Table, spec: ChartSpec): SeriesData {
   }
   if (spec.x) {
     const m = agg(t.rows, get(spec.x), num(spec.y), how);
-    const e = [...m.entries()].map(([k, a]) => [k, how === 'mean' ? a.s / a.n : a.s] as const).sort((a, b) => b[1] - a[1]).slice(0, 15);
+    let e = [...m.entries()].map(([k, a]) => [k, how === 'mean' ? a.s / a.n : a.s] as const);
+    if (!spec.keepOrder) e = e.sort((a, b) => b[1] - a[1]).slice(0, 15);
     return { labels: e.map((x) => x[0]), values: e.map((x) => x[1]) };
   }
   return { labels: [], values: [] };

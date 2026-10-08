@@ -43,6 +43,8 @@ export interface ChartSpec {
   y?: string;
   agg?: 'count' | 'sum' | 'mean';
   stack?: string;
+  /** mantém a ordem original das linhas (ex.: ciclos), em vez de ordenar por valor */
+  keepOrder?: boolean;
   /** relevância (maior = aparece primeiro) */
   score: number;
 }
