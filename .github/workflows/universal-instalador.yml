@@ -1,0 +1,26 @@
+name: Instalador do Dashboard Universal
+on:
+  workflow_dispatch:
+  push:
+    tags: ['universal-v*']
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci --no-workspaces
+        working-directory: universal
+      - run: npm test
+        working-directory: universal
+      - run: npm run build
+        working-directory: universal
+      - run: npm ci --no-workspaces
+        working-directory: universal/desktop
+      - run: npm run dist:win
+        working-directory: universal/desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Instalador-Dashboard-Universal
+          path: universal/desktop/release/*.exe

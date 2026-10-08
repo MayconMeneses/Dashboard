@@ -1,0 +1,67 @@
+{
+  "name": "dashboard-universal-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.cjs",
+  "description": "Dashboard Universal – gera painéis automáticos a partir de CSV, Excel, JSON, GeoJSON, KML e KMZ",
+  "author": "Dashboard Universal",
+  "scripts": {
+    "prepare-app": "node prepare.mjs",
+    "start": "npm run prepare-app && electron .",
+    "dist:win": "npm run prepare-app && electron-builder --win nsis --x64"
+  },
+  "build": {
+    "publish": null,
+    "appId": "br.dashboard.universal",
+    "productName": "Dashboard Universal",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.cjs",
+      "app/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false,
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "language": "1046",
+      "artifactName": "Instalador-Dashboard-Universal-${version}.${ext}"
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "csv",
+          "xlsx",
+          "json",
+          "geojson",
+          "kml",
+          "kmz"
+        ],
+        "name": "Arquivo de dados",
+        "role": "Viewer"
+      }
+    ]
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3"
+  }
+}
