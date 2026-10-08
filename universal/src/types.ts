@@ -62,6 +62,8 @@ export interface ChartSpec {
   style?: 'line' | 'bar' | 'stacked' | 'hbar';
   /** texto curto de como ler este gráfico */
   howTo?: string;
+  /** linha de taxa (%) sobre as colunas: numerador/denominador são valores da coluna de situação */
+  rate?: { options: { label: string; numerator: string[]; denominator: string[]; explain: string }[]; agravo?: string[] };
   /** relevância (maior = aparece primeiro) */
   score: number;
 }

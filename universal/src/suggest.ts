@@ -242,6 +242,31 @@ export function tidyFacts(t: Table) {
   return { mainSit, mainAgr: agrList[0]?.[0], agrList, situ, periods: [...new Set(t.rows.map((r) => String(r[td.period])))], entities: [...new Set(t.rows.map((r) => String(r[td.entity])))] };
 }
 
+/** Opções de "positividade" quando há situações do tipo confirmados / descartados / notificados. */
+function rateOptions(sitNames: string[]) {
+  const find = (re: RegExp) => sitNames.filter((n) => re.test(n.toLowerCase()) && !/crit[eé]rio/.test(n.toLowerCase()));
+  const conf = find(/confirmad/);
+  const desc = find(/descartad/);
+  const notif = find(/notificad/);
+  const opts: { label: string; numerator: string[]; denominator: string[]; explain: string }[] = [];
+  if (conf.length && desc.length) opts.push({ label: 'Confirmados ÷ concluídos', numerator: conf, denominator: [...conf, ...desc], explain: 'Positividade = confirmados ÷ (confirmados + descartados): entre os casos que já tiveram conclusão, quantos foram confirmados. Casos “em andamento” ficam fora.' });
+  if (conf.length && notif.length) opts.push({ label: 'Confirmados ÷ notificados', numerator: conf, denominator: notif, explain: 'Taxa = confirmados ÷ notificados: do total notificado, quantos já estão confirmados. Cai quando há muitos casos ainda em andamento.' });
+  return opts;
+}
+
+/** Taxa (%) por rótulo do eixo x, usando as mesmas linhas filtradas do gráfico. */
+export function rateData(t: Table, spec: ChartSpec, optIdx: number): { labels: string[]; values: number[]; explain: string; name: string } | null {
+  const td = t.tidy;
+  const opt = spec.rate?.options[optIdx] ?? spec.rate?.options[0];
+  if (!td?.situation || !opt || !spec.x) return null;
+  const rows = t.rows.filter((r) => !td.agravo || !spec.rate?.agravo || (r[td.agravo] == null ? spec.rate.agravo.includes(NONE) : spec.rate.agravo.includes(String(r[td.agravo]))));
+  const labels = pivotData(t, { ...spec, seriesBy: undefined }).labels;
+  const sum = (k: string, names: string[]) => rows.reduce((a, r) => (String(r[spec.x!]) === k && names.includes(String(r[td.situation!])) ? a + (toNumber(r['Valor'] ?? null) ?? 0) : a), 0);
+  const has = (k: string, names: string[]) => rows.some((r) => String(r[spec.x!]) === k && names.includes(String(r[td.situation!])) && r['Valor'] != null);
+  const values = labels.map((k) => (has(k, opt.denominator) && sum(k, opt.denominator) > 0 ? (sum(k, opt.numerator) / sum(k, opt.denominator)) * 100 : Number.NaN));
+  return { labels, values, explain: opt.explain, name: `Positividade (${opt.label})` };
+}
+
 function suggestTidy(t: Table, level: number): ChartSpec[] {
   const td = t.tidy!;
   const f = tidyFacts(t);
@@ -280,6 +305,16 @@ function suggestTidy(t: Table, level: number): ChartSpec[] {
       howTo: 'Compare a forma das linhas: picos mostram quando cada local teve mais casos. Clique na legenda para esconder/mostrar um item.', score: 90,
     });
   }
+  const rateOpts = td.situation ? rateOptions(sitNames) : [];
+  if (f.mainSit && rateOpts.length) {
+    out.push({
+      id: 'tid-pos', kind: 'pivot', style: 'bar', x: td.period, agg: 'sum', y: td.value, keepOrder: true, where: mainWhere,
+      rate: { options: rateOpts, agravo: td.agravo && f.mainAgr ? [f.mainAgr, NONE] : undefined },
+      title: `${f.mainSit}${agrTxt} por ${td.period.toLowerCase()} e positividade`,
+      description: `As colunas comparam o mesmo resultado (${f.mainSit}${agrTxt}) em ${td.period.toLowerCase()}s diferentes. A linha laranja (eixo da direita, em %) é a positividade do mesmo ${td.period.toLowerCase()}. Troque a definição de positividade no seletor do gráfico.`,
+      howTo: 'Colunas = quantidade (eixo da esquerda). Linha = percentual (eixo da direita). Coluna alta com linha baixa = muitos casos, poucos positivos; coluna baixa com linha alta = poucos casos, mas a maioria positiva. Clique numa coluna para ver só aquele período.', score: 97,
+    });
+  }
   if (td.situation && rest.length >= 2) {
     out.push({
       id: 'tid-comp', kind: 'pivot', style: 'stacked', x: td.entity, seriesBy: td.situation, agg: 'sum', y: td.value, where: { ...agrWhere, ...partWhere(rest.slice(0, 3)) },
@@ -291,6 +326,7 @@ function suggestTidy(t: Table, level: number): ChartSpec[] {
   if (td.agravo && f.agrList.filter(([, v]) => v > 0).length >= 2 && level >= 2) {
     out.push({
       id: 'tid-agr', kind: 'pivot', style: 'stacked', x: td.period, seriesBy: td.agravo, agg: 'sum', y: td.value, keepOrder: true, where: td.situation && f.mainSit ? { [td.situation]: [f.mainSit] } : {},
+      rate: rateOpts.length ? { options: rateOpts, agravo: f.mainAgr ? [f.mainAgr, NONE] : undefined } : undefined,
       title: `${f.mainSit ?? 'Total'} por ${td.agravo.toLowerCase()} em cada ${td.period.toLowerCase()}`,
       description: `Soma de todos os ${td.entity.toLowerCase()}s, separada por ${td.agravo.toLowerCase()}. Mostra se um agravo domina e se o perfil muda ao longo do tempo.`,
       howTo: 'Cada barra é um período; as cores dividem o total entre os agravos. Um agravo muito pequeno quase não aparece (veja a tabela).', score: 80,
@@ -306,7 +342,7 @@ function suggestTidy(t: Table, level: number): ChartSpec[] {
       });
     }
   }
-  return out.sort((a, b) => b.score - a.score).slice(0, level === 1 ? 3 : level === 2 ? 5 : 8);
+  return out.sort((a, b) => b.score - a.score).slice(0, level === 1 ? 3 : level === 2 ? 6 : 9);
 }
 
 /** Dados de um gráfico "pivot": soma de y por x, com uma série por valor de seriesBy; vazio ≠ zero. */
@@ -464,4 +500,12 @@ export function tidyAlerts(t: Table): Alert[] {
   }
   for (const n of t.notes ?? []) out.push({ level: 'info', text: n });
   return out;
+}
+
+export function rateInsight(r: { labels: string[]; values: number[]; name: string }): string {
+  const v = r.values.map((x, i) => [x, i] as const).filter(([x]) => !Number.isNaN(x));
+  if (!v.length) return '';
+  const s = [...v].sort((a, b) => b[0] - a[0]);
+  const f = (n: number) => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(n);
+  return `${r.name}: maior em ${r.labels[s[0]![1]]} (${f(s[0]![0])}%), menor em ${r.labels[s[s.length - 1]![1]]} (${f(s[s.length - 1]![0])}%).`;
 }

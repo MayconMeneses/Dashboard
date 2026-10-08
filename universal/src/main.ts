@@ -5,7 +5,7 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import PdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&inline';
 import { parseFile } from './parse.js';
 import { profileTable, toNumber } from './profile.js';
-import { chartData, HOW_TO, insightFor, kpis, qualityAlerts, suggestCharts } from './suggest.js';
+import { chartData, HOW_TO, insightFor, kpis, qualityAlerts, rateData, rateInsight, suggestCharts } from './suggest.js';
 import type { ChartSpec, ColType, Dataset, Table } from './types.js';
 
 Chart.register(...registerables);
@@ -19,6 +19,7 @@ let table: Table | null = null;
 let charts: Chart[] = [];
 let maps: L.Map[] = [];
 let removed = new Set<string>();
+const rateChoice: Record<string, number> = {};
 let forced: Record<string, ColType> = {};
 let filters: Record<string, string> = {};
 
@@ -99,7 +100,16 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
     card.append(el('p', {}, 'Sem dados suficientes para este gráfico.'));
     return card;
   }
-  const insight = insightFor(spec, d);
+  const rate = spec.rate ? rateData(t, spec, rateChoice[spec.id] ?? 0) : null;
+  if (spec.rate && rate) {
+    const sel = el('select', { ariaLabel: 'Definição de positividade' }, ...spec.rate.options.map((o, i) => el('option', { value: String(i), selected: i === (rateChoice[spec.id] ?? 0) }, o.label)));
+    sel.onchange = () => {
+      rateChoice[spec.id] = Number(sel.value);
+      render();
+    };
+    card.append(el('p', { className: 'rate-pick' }, 'Positividade: ', sel, el('span', { className: 'muted' }, ' ' + rate.explain)));
+  }
+  const insight = insightFor(spec, d) + (rate ? ' ' + rateInsight(rate) : '');
   card.append(el('p', { className: 'insight' }, el('b', {}, 'Destaque: '), insight));
   card.append(el('details', { className: 'howto' }, el('summary', {}, 'Como ler este gráfico'), el('p', {}, spec.howTo ?? HOW_TO[spec.kind] ?? '')));
   const canvas = el('canvas');
@@ -113,10 +123,12 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
   const datasets = d.datasets
     ? d.datasets.map((s, i) => ({ label: s.label, data: s.values.map((v) => (Number.isNaN(v) ? null : v)), backgroundColor: PALETTE[i % PALETTE.length], borderColor: PALETTE[i % PALETTE.length], tension: 0.25, pointRadius: isLine ? 3 : 0, borderWidth: isLine ? 2 : 0, spanGaps: false }))
     : [{ label: spec.y ?? 'Registros', data: d.values.map((v) => (Number.isNaN(v) ? null : v)), backgroundColor: donut ? d.labels.map((_, i) => PALETTE[i % PALETTE.length]) : PALETTE[0], borderColor: PALETTE[0], tension: 0.25, barThickness: horizontal ? 14 : undefined, spanGaps: false }];
+  const allSets: object[] = [...datasets];
+  if (rate) allSets.push({ type: 'line', label: rate.name, data: rate.values.map((v) => (Number.isNaN(v) ? null : v)), yAxisID: 'y1', borderColor: '#ea580c', backgroundColor: '#ea580c', borderWidth: 3, pointRadius: 4, tension: 0.2, spanGaps: false, order: -1 });
   charts.push(
     new Chart(canvas, {
       type,
-      data: { labels: d.labels, datasets },
+      data: { labels: d.labels, datasets: allSets as never },
       options: {
         indexAxis: horizontal ? 'y' : 'x',
         responsive: true,
@@ -129,8 +141,8 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
           const c = e.native?.target as HTMLElement | null;
           if (c) c.style.cursor = els.length ? 'pointer' : 'default';
         },
-        plugins: { legend: { display: donut || !!d.datasets, position: 'bottom' }, tooltip: { callbacks: { label: (c) => `${c.dataset.label ?? ''}: ${c.parsed.y == null && c.parsed.x == null ? 'sem dado' : new Intl.NumberFormat('pt-BR').format((horizontal ? c.parsed.x : c.parsed.y) as number)}` } } },
-        scales: donut ? {} : { x: { stacked, ...(horizontal ? { beginAtZero: true } : {}) }, y: { stacked, beginAtZero: true } },
+        plugins: { legend: { display: donut || !!d.datasets, position: 'bottom' }, tooltip: { callbacks: { label: (c) => { const v = (horizontal ? c.parsed.x : c.parsed.y) as number | null; const pct = (c.dataset as { yAxisID?: string }).yAxisID === 'y1'; return `${c.dataset.label ?? ''}: ${v == null ? 'sem dado' : pct ? `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(v)}%` : new Intl.NumberFormat('pt-BR').format(v)}`; } } } },
+        scales: donut ? {} : { x: { stacked, ...(horizontal ? { beginAtZero: true } : {}) }, y: { stacked, beginAtZero: true }, ...(rate ? { y1: { position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false }, ticks: { callback: (v: string | number) => `${v}%` }, title: { display: true, text: 'Positividade (%)' } } } : {}) },
       },
     }),
   );

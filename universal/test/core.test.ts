@@ -59,7 +59,7 @@ describe('perfil e gráficos', () => {
   });
 });
 
-import { bestCorrelation, qualityAlerts } from '../src/suggest.js';
+import { bestCorrelation, qualityAlerts, rateData } from '../src/suggest.js';
 describe('qualidade e correlação', () => {
   it('detecta correlação, duplicatas, vazias e constantes', async () => {
     const L = ['a,b,c,k'];
@@ -165,5 +165,20 @@ describe('blocos repetidos (um por mês)', () => {
     expect(mes.datasets!.find((s) => s.label === 'C')!.values[0]).toBeNaN();
     const evo = chartData(t, specs.find((s) => s.id === 'tid-evol')!);
     expect(evo.datasets!.some((s) => s.label === 'Em Andamento')).toBe(true);
+  });
+});
+
+describe('positividade sobre as colunas', () => {
+  const csv = ['Mês,Janeiro,,', 'Municipio,A,B,Total', 'Notificados Dengue,100,50,', 'Notificados Zica,1,1,', 'Confirmados Dengue,20,10,', 'Confirmados Zica,0,0,', 'Descartados Dengue,60,30,', 'Descartados Zica,1,1,', 'Em Andamento,20,10,', '', 'Mês,Fevereiro,,', 'Municipio,A,B,Total', 'Notificados Dengue,10,10,', 'Notificados Zica,0,0,', 'Confirmados Dengue,5,5,', 'Confirmados Zica,0,0,', 'Descartados Dengue,0,0,', 'Descartados Zica,0,0,', 'Em Andamento,5,5,'].join('\n');
+  it('calcula a taxa por mês nas duas definições e deixa lacuna sem concluídos', async () => {
+    const t = (await parseFile('p.csv', enc(csv))).tables[0]!;
+    const s = suggestCharts(t, profileTable(t), 2).find((c) => c.id === 'tid-pos')!;
+    expect(s.rate!.options).toHaveLength(2);
+    const a = rateData(t, s, 0)!;
+    expect(a.labels).toEqual(['Janeiro', 'Fevereiro']);
+    expect(a.values[0]).toBeCloseTo((30 / (30 + 90)) * 100); // 30 confirmados ÷ (30 + 90 descartados)
+    expect(a.values[1]).toBeCloseTo(100); // 10 confirmados, 0 descartados
+    const b = rateData(t, s, 1)!;
+    expect(b.values[0]).toBeCloseTo((30 / 150) * 100);
   });
 });
