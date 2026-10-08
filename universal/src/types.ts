@@ -41,7 +41,9 @@ export interface ColProfile {
   top?: { value: string; count: number }[];
 }
 
-export type ChartKind = 'bar' | 'hbar' | 'donut' | 'line' | 'hist' | 'stacked' | 'map' | 'scatter' | 'multi' | 'pivot';
+export type ChartStyle = 'line' | 'bar' | 'stacked' | 'hbar' | 'donut' | 'area' | 'percent' | 'heatmap' | 'radar' | 'small' | 'pareto';
+
+export type ChartKind = 'bar' | 'hbar' | 'donut' | 'line' | 'hist' | 'stacked' | 'map' | 'scatter' | 'multi' | 'pivot' | 'funnel' | 'bubble';
 
 export interface ChartSpec {
   id: string;
@@ -59,7 +61,15 @@ export interface ChartSpec {
   /** kind 'pivot': soma de y por x, uma série por valor de seriesBy; where filtra linhas; style define o desenho */
   seriesBy?: string;
   where?: Record<string, string[]>;
-  style?: 'line' | 'bar' | 'stacked' | 'hbar';
+  style?: ChartStyle;
+  /** por que o sistema escolheu este desenho (mostrado ao usuário) */
+  why?: string;
+  /** mantém o desenho definido em style (não é trocado pela recomendação automática) */
+  lockStyle?: boolean;
+  /** kind 'funnel': etapas em ordem; cada etapa soma as situações indicadas */
+  stages?: { label: string; situations: string[] }[];
+  /** kind 'bubble': situação do eixo x, medida do eixo y (taxa) e do tamanho */
+  bubble?: { x: string[]; size: string[]; sizeLabel: string; xLabel: string };
   /** texto curto de como ler este gráfico */
   howTo?: string;
   /** linha de taxa (%) sobre as colunas: numerador/denominador são valores da coluna de situação */

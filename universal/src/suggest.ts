@@ -1,4 +1,5 @@
 import { toDate, toNumber } from './profile.js';
+import { compatibleStyles } from './shapes.js';
 import type { Alert, ChartSpec, ColProfile, Kpi, Row, Table } from './types.js';
 
 export const fmtNum = (n: number) => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(n);
@@ -26,10 +27,9 @@ export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpe
     if (m && level >= 3) out.push({ id: id('line'), kind: 'line', x: d.name, y: m.name, agg: 'sum', title: `${m.name} por mês`, description: `Soma de “${m.name}” em cada mês.`, score: 60 });
   }
   cats.slice(0, level === 1 ? 2 : level === 2 ? 4 : 6).forEach((c, i) => {
-    const small = c.unique <= 6;
-    out.push({ id: id('cat'), kind: small ? 'donut' : 'hbar', x: c.name, agg: 'count', title: `Registros por ${c.name}`, description: small ? `Proporção de cada valor de “${c.name}”.` : `Os valores mais frequentes de “${c.name}” (até 15).`, score: 85 - i * 5 });
+    out.push({ id: id('cat'), kind: 'pivot', style: 'hbar', x: c.name, agg: 'count', title: `Registros por ${c.name}`, description: `Quantos registros há para cada valor de “${c.name}” (até 25 valores mais frequentes).`, score: 85 - i * 5 });
   });
-  for (const b of bools.slice(0, 2)) out.push({ id: id('bool'), kind: 'donut', x: b.name, agg: 'count', title: `${b.name}`, description: 'Distribuição Sim/Não.', score: 70 });
+  for (const b of bools.slice(0, 2)) out.push({ id: id('bool'), kind: 'pivot', style: 'donut', x: b.name, agg: 'count', title: `${b.name}`, description: 'Distribuição Sim/Não.', score: 70 });
   if (labelCol) {
     nums.filter((m) => m.filled >= 2).slice(0, level === 1 ? 3 : level === 2 ? 6 : 10).forEach((m, i) => {
       out.push({ id: id('lab'), kind: 'bar', x: labelCol.name, y: m.name, agg: 'sum', keepOrder: true, title: `${m.name} por ${labelCol.name}`, description: `Valor de “${m.name}” em cada linha de “${labelCol.name}”, na ordem do arquivo. Linha sem valor fica sem barra (não é zero).`, score: 88 - i });
@@ -53,7 +53,10 @@ export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpe
   const c0 = cats.find((c) => c.unique <= 25);
   if (c0 && nums[0] && level >= 2) out.push({ id: id('catnum'), kind: 'hbar', x: c0.name, y: nums[0].name, agg: 'sum', title: `${nums[0].name} por ${c0.name}`, description: `Soma de “${nums[0].name}” para cada valor de “${c0.name}”.`, score: 80 });
   const c1 = cats.find((c) => c.name !== c0?.name && c.unique <= 8);
-  if (c0 && c1 && c0.unique <= 15 && level >= 3) out.push({ id: id('stack'), kind: 'stacked', x: c0.name, stack: c1.name, agg: 'count', title: `${c0.name} × ${c1.name}`, description: `Cruzamento entre “${c0.name}” e “${c1.name}”.`, score: 55 });
+  if (c0 && c1 && c0.unique <= 15 && level >= 3) {
+    out.push({ id: id('stack'), kind: 'pivot', style: 'stacked', x: c0.name, seriesBy: c1.name, agg: 'count', title: `${c0.name} × ${c1.name}`, description: `Quantos registros há em cada combinação de “${c0.name}” e “${c1.name}”.`, score: 55 });
+    if (c0.unique >= 4 && c1.unique >= 3) out.push({ id: id('heat'), kind: 'pivot', style: 'heatmap', lockStyle: true, x: c0.name, seriesBy: c1.name, agg: 'count', title: `Mapa de calor: ${c0.name} × ${c1.name}`, description: `Mesma contagem, em cores: quanto mais escura a célula, mais registros.`, score: 50 });
+  }
 
   if (level >= 2) {
     const pair = bestCorrelation(t, nums.filter((c) => c.unique > 2));
@@ -267,6 +270,19 @@ export function rateData(t: Table, spec: ChartSpec, optIdx: number): { labels: s
   return { labels, values, explain: opt.explain, name: `Positividade (${opt.label})` };
 }
 
+/** Aplica as regras de escolha de desenho (shapes.ts) aos gráficos "pivot" que não têm desenho fixo. */
+function applyEngine(t: Table, specs: ChartSpec[]) {
+  for (const sp of specs) {
+    if (sp.kind !== 'pivot' || sp.rate || sp.lockStyle) continue;
+    const d = pivotData(t, sp);
+    const rec = compatibleStyles({ ordered: !!sp.keepOrder, series: d.datasets?.length ?? 0, labels: d.labels.length, positive: [...d.values, ...(d.datasets ?? []).flatMap((x) => x.values)].every((v) => Number.isNaN(v) || v >= 0) }).find((o) => o.recommended);
+    if (rec) {
+      sp.style = rec.style;
+      sp.why = rec.why;
+    }
+  }
+}
+
 function suggestTidy(t: Table, level: number): ChartSpec[] {
   const td = t.tidy!;
   const f = tidyFacts(t);
@@ -342,13 +358,41 @@ function suggestTidy(t: Table, level: number): ChartSpec[] {
       });
     }
   }
-  return out.sort((a, b) => b.score - a.score).slice(0, level === 1 ? 3 : level === 2 ? 6 : 9);
+  // novos tipos de gráfico, escolhidos pelo formato dos dados
+  const rec0 = rateOpts[0];
+  if (td.situation && rec0 && f.mainSit && level >= 2) {
+    const conf = rec0.numerator;
+    const concl = rec0.denominator;
+    out.push({
+      id: 'tid-funil', kind: 'funnel', where: agrWhere, y: td.value, stages: [{ label: f.mainSit, situations: [f.mainSit] }, { label: 'Concluídos', situations: concl }, { label: [...conf].sort((a, b) => a.length - b.length)[0]!, situations: conf }],
+      title: `Funil dos casos${agrTxt}: de ${f.mainSit} a ${[...conf].sort((a, b) => a.length - b.length)[0]}`,
+      description: `Quantos casos chegam a cada etapa (soma de todos os ${td.period.toLowerCase()}s e ${td.entity.toLowerCase()}s) e que fração da etapa anterior isso representa. “Concluídos” = ${concl.join(' + ')}.`,
+      why: 'As situações formam etapas em sequência (notificar, concluir, confirmar): o funil mostra onde os casos “saem” do processo.',
+      howTo: 'Cada faixa é uma etapa; quanto mais larga, mais casos. O percentual ao lado do nome é a fração da etapa anterior. A diferença entre notificados e concluídos são os casos ainda em andamento.', score: 86,
+    });
+    const sizeNames = rest.filter((n) => !conf.includes(n) && !concl.includes(n)).slice(0, 1);
+    if (f.entities.length >= 3 && sizeNames.length) out.push({
+      id: 'tid-bolhas', kind: 'bubble', rate: { options: rateOpts, agravo: td.agravo && f.mainAgr ? [f.mainAgr, NONE] : undefined }, bubble: { x: [f.mainSit], size: sizeNames, xLabel: `${f.mainSit}${agrTxt}`, sizeLabel: sizeNames[0]! },
+      title: `${td.entity}: volume × positividade (tamanho = ${sizeNames[0]})`,
+      description: `Cada bolha é um ${td.entity.toLowerCase()}: posição horizontal = ${f.mainSit} no período; vertical = positividade (${rec0.label}); tamanho = ${sizeNames[0]}.`,
+      why: `São duas medidas por ${td.entity.toLowerCase()} (volume e taxa) mais uma terceira (tamanho): o gráfico de bolhas é o desenho feito para cruzar três medidas.`,
+      howTo: 'Bolhas à direita têm mais casos; bolhas no alto têm maior proporção de confirmados; bolha grande = mais casos ainda em andamento. Clique numa bolha para filtrar o painel.', score: 84,
+    });
+  }
+  if (f.periods.length >= 4 && f.entities.length >= 4 && f.mainSit && level >= 3) out.push({
+    id: 'tid-calor', kind: 'pivot', style: 'heatmap', lockStyle: true, x: td.period, seriesBy: td.entity, agg: 'sum', y: td.value, keepOrder: true, where: mainWhere,
+    title: `Mapa de calor: ${f.mainSit}${agrTxt} por ${td.entity.toLowerCase()} e ${td.period.toLowerCase()}`,
+    description: `Cruza ${td.entity.toLowerCase()} × ${td.period.toLowerCase()}; a cor é proporcional ao valor.`, score: 70,
+  });
+  applyEngine(t, out);
+  return out.sort((a, b) => b.score - a.score).slice(0, level === 1 ? 3 : level === 2 ? 8 : 12);
 }
 
 /** Dados de um gráfico "pivot": soma de y por x, com uma série por valor de seriesBy; vazio ≠ zero. */
 export function pivotData(t: Table, spec: ChartSpec): SeriesData {
   const x = spec.x!;
   const yCol = spec.y ?? 'Valor';
+  const counting = spec.agg === 'count';
   const rows = t.rows.filter((r) => Object.entries(spec.where ?? {}).every(([c, vals]) => (r[c] == null ? vals.includes(NONE) : vals.includes(String(r[c])))));
   const xs: string[] = [];
   for (const r of rows) {
@@ -365,7 +409,7 @@ export function pivotData(t: Table, spec: ChartSpec): SeriesData {
     let n = 0;
     for (const r of rows) {
       if (!pred(r)) continue;
-      const v = toNumber(r[yCol] ?? null);
+      const v = counting ? (r[x] == null ? null : 1) : toNumber(r[yCol] ?? null);
       if (v == null) continue;
       s += v;
       n++;
@@ -414,6 +458,20 @@ export function insightFor(spec: ChartSpec, d: SeriesData): string {
   }
   return `Maior: ${d.labels[top[1]]} (${br(top[0])}, ${br((top[0] / (total || 1)) * 100)}% do total ${br(total)}); menor: ${d.labels[low[1]]} (${br(low[0])}).${gap}`;
 }
+
+export const HOWTO_SHAPE: Record<string, string> = {
+  line: 'A linha liga os períodos em ordem; subida = aumento, descida = queda. Compare a forma das linhas.',
+  bar: 'Cada coluna é um valor; quanto mais alta, maior o número.',
+  hbar: 'Cada barra é um item, do maior para o menor; quanto mais longa, maior o número.',
+  stacked: 'Cada coluna é um total dividido em cores; o tamanho de cada cor é a parte daquela série.',
+  area: 'Área preenchida sob a linha; quando empilhada, a espessura de cada faixa é a parte daquela série.',
+  percent: 'Todas as colunas têm a mesma altura (100%); cada cor mostra a proporção da série, não o volume.',
+  heatmap: 'Cada célula é um valor; quanto mais escura, maior. Células listradas = sem dado (não é zero). Clique num título para filtrar.',
+  radar: 'Cada eixo é um item; cada polígono é uma série. Quanto mais longe do centro, maior o valor.',
+  small: 'Um gráfico pequeno por série, todos na mesma escala vertical: compare a forma e a altura entre eles.',
+  pareto: 'Barras do maior para o menor e linha de % acumulado: mostra quantos itens somam a maior parte do total.',
+  donut: 'Cada fatia é a parte do total; fatias maiores = mais registros.',
+};
 
 export const HOW_TO: Record<string, string> = {
   bar: 'Cada barra é um valor; quanto mais alta, maior o número.',
