@@ -89,3 +89,41 @@ describe('relatório: descrição do que o usuário ajustou', () => {
     expect(formatBytes(100)).toBe('1 KB');
   });
 });
+
+import { buildPdfDoc, pdfText } from '../src/report.js';
+import type { ReportModel } from '../src/report.js';
+
+describe('relatório em PDF (definição do documento)', () => {
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const model: ReportModel = {
+    title: 'Controle', generatedAt: '08/10/2026 10:00', version: '9.9.9',
+    origin: [['Arquivo', 'a.xlsx'], ['SHA-256 do arquivo original', 'abc']], records: [['Linhas lidas', '10']],
+    adjustments: ['Grafias unificadas em “c”: “A” → “B”'], kpis: [['Total', '10']],
+    charts: [
+      { title: 'Barras', paragraphs: ['desc'], insight: 'maior X', why: 'porque', howTo: 'leia', images: [{ dataUrl: png }] },
+      { title: 'Calor', paragraphs: [], images: [], heat: { rows: ['r1'], cols: ['a', 'b'], cells: [[1, null]], min: 1, max: 1 } },
+      { title: 'Mapa', paragraphs: [], images: [], note: 'Mapa omitido' },
+      { title: 'Pequenos', paragraphs: [], images: [1, 2, 3, 4].map((i) => ({ title: `s${i}`, dataUrl: png })) },
+    ],
+    criteria: ['c1'], limits: [], reproduce: 'repita', sample: { columns: ['x', 'y'], rows: [['1', '2']] },
+  };
+  const doc = buildPdfDoc(model);
+  const flat = JSON.stringify(doc.content);
+  it('tem todas as seções, anexo e metadados', () => {
+    for (const s of ['1. Origem dos dados', '2. Registros analisados', '3. Filtros, período e ajustes aplicados', '4. Indicadores', '5. Gráficos', '6. Critérios de cálculo', '7. Limitações e avisos', '8. Como reproduzir', 'Anexo A. Amostra dos dados analisados']) expect(flat).toContain(s);
+    expect(doc.pageSize).toBe('A4');
+    expect(doc.info).toMatchObject({ title: 'Controle', author: 'Dashboard Universal' });
+  });
+  it('troca setas que a fonte não tem e mostra "sem dado" no mapa de calor', () => {
+    expect(pdfText('“A” → “B”')).toBe('“A” -> “B”');
+    expect(flat).toContain('“A” -> “B”');
+    expect(flat).toContain('—');
+    expect(flat).toContain('Mapa omitido');
+  });
+  it('gráficos pequenos saem em linhas de 3 e o rodapé numera as páginas', () => {
+    expect(flat.match(/"columns":\[/g)!.length).toBeGreaterThanOrEqual(2);
+    const footer = (doc.footer as (p: number, n: number) => { columns: { text: string }[] })(2, 5);
+    expect(footer.columns[1]!.text).toBe('Página 2 de 5');
+    expect(footer.columns[0]!.text).toContain('Dashboard Universal 9.9.9');
+  });
+});

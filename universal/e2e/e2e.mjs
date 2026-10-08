@@ -70,15 +70,26 @@ const info = await page.locator('#tinfo').innerText();
 assert.match(info, /filtradas de 40/);
 ok('filtro por período');
 
-// 5. Relatório (window.print simulado)
-await page.evaluate(() => {
-  window.print = () => { window.__printed = true; window.dispatchEvent(new Event('afterprint')); };
-});
-await page.click('#btnReport');
-assert.equal(await page.evaluate(() => window.__printed), true);
-const rep = await page.evaluate(() => document.getElementById('report').innerText);
-for (const s of ['1. Origem dos dados', 'SHA-256', '2. Registros analisados', '3. Filtros, período e ajustes aplicados', 'Período em “data”', 'Grafias unificadas', '6. Critérios de cálculo', '7. Limitações e avisos', '8. Como reproduzir']) assert.ok(rep.includes(s), 'relatório contém: ' + s);
-ok('relatório estruturado com origem, filtros, critérios e limitações');
+// 5. Relatório em PDF de verdade (download direto, sem diálogo de impressão)
+const [pdfDl] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.click('#btnReport')]);
+assert.match(pdfDl.suggestedFilename(), /^relatorio-cp1252\.pdf$/);
+const pdfPath = join(dir, 'relatorio.pdf');
+await pdfDl.saveAs(pdfPath);
+const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+const { readFileSync } = await import('node:fs');
+const doc = await pdfjs.getDocument({ data: new Uint8Array(readFileSync(pdfPath)) }).promise;
+assert.ok(doc.numPages >= 2, 'PDF com 2 ou mais páginas');
+let pdfText = '';
+let images = 0;
+for (let i = 1; i <= doc.numPages; i++) {
+  const pg = await doc.getPage(i);
+  pdfText += (await pg.getTextContent()).items.map((x) => x.str).join(' ') + '\n';
+  const ops = await pg.getOperatorList();
+  images += ops.fnArray.filter((f) => f === pdfjs.OPS.paintImageXObject || f === pdfjs.OPS.paintInlineImageXObject).length;
+}
+for (const s of ['1. Origem dos dados', 'SHA-256 do arquivo original', '2. Registros analisados', '3. Filtros, período e ajustes aplicados', 'Período em', 'Grafias unificadas', '5. Gráficos', '6. Critérios de cálculo', '7. Limitações e avisos', '8. Como reproduzir', 'Anexo A', 'Página 1 de']) assert.ok(pdfText.includes(s), 'PDF contém: ' + s);
+assert.ok(images >= 1, 'PDF contém imagens dos gráficos');
+ok(`relatório em PDF real: ${doc.numPages} páginas, texto selecionável, ${images} imagem(ns) de gráfico, numeração de páginas`);
 
 // 6. Mapa sem fundo / HTML compartilhável restaura o estado
 await page.click('#btnHtml');
