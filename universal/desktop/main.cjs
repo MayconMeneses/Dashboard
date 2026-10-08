@@ -12,7 +12,7 @@ const URL_ATUALIZACAO = process.env.UNIVERSAL_UPDATE_URL || 'https://raw.githubu
 const PAGINA_INSTALADORES = 'https://github.com/MayconMeneses/Dashboard/tree/HEAD/universal/instaladores';
 const MAX_HTML = 25 * 1024 * 1024;
 
-const EXT = ['csv', 'tsv', 'txt', 'xlsx', 'pdf', 'json', 'geojson', 'kml', 'kmz'];
+const EXT = ['csv', 'tsv', 'txt', 'xlsx', 'docx', 'doc', 'pdf', 'json', 'geojson', 'kml', 'kmz'];
 let win = null;
 let pending = null;
 

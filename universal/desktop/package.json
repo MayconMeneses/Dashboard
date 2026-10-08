@@ -53,6 +53,7 @@
           "csv",
           "xlsx",
           "pdf",
+          "docx",
           "json",
           "geojson",
           "kml",

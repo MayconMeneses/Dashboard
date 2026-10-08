@@ -2,6 +2,7 @@ import { XMLParser } from 'fast-xml-parser';
 import { unzipSync, strFromU8 } from 'fflate';
 import Papa from 'papaparse';
 import readXlsx from 'read-excel-file/browser';
+import { docxToMatrix } from './docx.js';
 import { detectRepeatedBlocks } from './grid.js';
 import { pdfToMatrix } from './pdf.js';
 import type { Cell, Dataset, Row, Table } from './types.js';
@@ -31,15 +32,24 @@ function clean(v: unknown): Cell {
 }
 
 function toTableSimple(name: string, matrix: unknown[][]): Table {
-  const rows2 = matrix.filter((r) => r.some((c) => c != null && String(c).trim() !== ''));
+  let rows2 = matrix.filter((r) => r.some((c) => c != null && String(c).trim() !== ''));
   if (!rows2.length) return { name, columns: [], rows: [] };
+  // linhas de título (poucas células preenchidas) acima do cabeçalho real são descartadas
+  const cnt = (r: unknown[]) => r.filter((c) => c != null && String(c).trim() !== '').length;
+  const max = Math.max(...rows2.map(cnt));
+  const start = rows2.findIndex((r) => cnt(r) >= Math.ceil(max * 0.6));
+  let title: string | undefined;
+  if (start > 0 && rows2.length - start >= 2) {
+    title = rows2.slice(0, start).flat().filter((c) => c != null && String(c).trim() !== '').map((c) => String(c).trim()).join(' ');
+    rows2 = rows2.slice(start);
+  }
   const columns = uniqueNames((rows2[0] as unknown[]).map((c) => String(c ?? '')));
   const rows: Row[] = rows2.slice(1, MAX_ROWS + 1).map((r) => {
     const o: Row = {};
     columns.forEach((c, i) => (o[c] = clean(r[i])));
     return o;
   });
-  return { name, columns, rows };
+  return { name, columns, rows, ...(title ? { title } : {}) };
 }
 
 const filledCount = (r: unknown[]) => r.filter((c) => c != null && String(c).trim() !== '').length;
@@ -226,6 +236,19 @@ export async function parseFile(fileName: string, bytes: Uint8Array, opts: Parse
       } else for (const t of tables) t.notes = [...(t.notes ?? []), `Tabela extraída de ${r.pages} página(s) de PDF pela posição do texto; confira os números com o documento original.`];
       break;
     }
+    case 'docx': {
+      const r = docxToMatrix(bytes);
+      if (!r.matrix.length) throw new Error('O documento está vazio.');
+      tables = r.tables ? toTables(base, r.matrix) : [];
+      const ok = tables.filter((t) => t.tidy || (t.columns.length >= 3 && t.rows.length >= 3));
+      if (!r.tables || !ok.length) {
+        tables = [{ name: base, noCharts: true, columns: ['Parágrafo', 'Texto'], rows: r.paragraphs.map((x, i) => ({ 'Parágrafo': i + 1, Texto: x })), notes: [r.tables ? 'As tabelas do documento são pequenas demais para gráficos; mostrando o texto do documento.' : 'Este documento do Word não tem tabelas; mostrando o texto, parágrafo a parágrafo. Para gráficos, use tabelas no Word ou o arquivo em Excel/CSV.'] }];
+      } else for (const t of ok) t.notes = [...(t.notes ?? []), `Tabela(s) lida(s) de um documento Word (${r.tables} tabela(s)); confira os números com o documento original.`];
+      if (ok.length) tables = ok;
+      break;
+    }
+    case 'doc':
+      throw new Error('O formato antigo .doc (Word 97-2003) não é suportado. Abra no Word e use Salvar como → Documento do Word (.docx).');
     case 'xlsx': {
       const blob = new Blob([bytes as BlobPart]);
       const sheets = await readXlsx(blob);
