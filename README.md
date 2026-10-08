@@ -1,10 +1,52 @@
-# Dashboard da campanha de captura de triatomíneos – Croatá/CE
+# Dashboard – vigilância entomológica (Chagas) e painéis automáticos
+
+Dois projetos em TypeScript que transformam arquivos de campo e planilhas em painéis interativos, mapas e relatórios, rodando no próprio computador (sem enviar dados para a internet):
+
+| | Projeto | O que faz |
+|---|---|---|
+| 🪲 | **Painel de triatomíneos – Croatá/CE** | Lê KML/KMZ de campanhas de captura de barbeiros (doença de Chagas) e mostra resultados por localidade, mapas, filtros e relatório em PDF. |
+| 📊 | **[Dashboard Universal](universal/)** | Recebe CSV, Excel, JSON, GeoJSON, KML ou KMZ e gera sozinho indicadores, gráficos, mapa e alertas de qualidade dos dados. Tem instalador para Windows com atualização automática. |
+
+> Todos os prints abaixo usam **dados fictícios**. O repositório não contém dados reais de campanha.
+
+## Prints
+
+**Painel de triatomíneos** – resultado da busca por localidade e mapa do município com áreas, capturas e PITs:
+
+<p>
+  <img src="docs/img/grafico-localidades.png" alt="Gráfico de resultados por localidade" width="45%">
+  <img src="docs/img/mapa.png" alt="Mapa de Croatá com localidades e capturas" width="45%">
+</p>
+
+**Dashboard Universal** – painel gerado automaticamente a partir de um CSV:
+
+<img src="docs/img/universal.png" alt="Dashboard Universal gerado a partir de um CSV" width="90%">
+
+## Destaques técnicos
+
+- **Importação segura de dados geográficos:** KML/KMZ com limites de tamanho, rejeição de `DOCTYPE`, decodificação própria de entidades XML, pré-visualização antes de ativar e histórico de versões.
+- **Regras de significado dos dados:** exame não informado nunca vira negativo; "sem dado" é diferente de zero; duplicatas detectadas por atributos e distância.
+- **Segurança:** senhas com scrypt, cookie HttpOnly, proteção CSRF, bloqueio por tentativas, CSP, perfis (admin/analista/leitor), trilha de auditoria e remoção de campos restritos nas exportações.
+- **Mesmo código no servidor e no HTML compartilhável:** o painel pode ser exportado como um único arquivo `.html`, com testes de paridade entre as duas versões.
+- **Dashboard Universal:** detecção de tipos de coluna, escolha automática de gráficos, comparativos, alertas de qualidade, filtro por clique, leitura de planilhas de formulário com vários quadros e correção manual de tipos.
+- **Distribuição:** programa Electron e instalador leve (NSIS) para Windows, com atualização automática do painel conferida por SHA-256.
+- **Qualidade:** mais de 140 testes automatizados (Vitest), ESLint, TypeScript em modo estrito e integração contínua (GitHub Actions) em Ubuntu e Windows.
+
+## Tecnologias
+
+TypeScript · React · Vite · Node.js 22 · Fastify · SQLite (`node:sqlite`) · Zod · Chart.js · Leaflet · Electron · NSIS · Vitest · ESLint · GitHub Actions · KML/KMZ/GeoJSON.
+
+## Baixar o Dashboard Universal (Windows)
+
+Instaladores em [`universal/instaladores/`](universal/instaladores/LEIA-ME.md): versão leve (0,2 MB) e versão completa (2 partes, junte com `JUNTAR.bat`) com atualização automática. O Windows pode mostrar o aviso do SmartScreen, porque o instalador não é assinado digitalmente.
+
+---
+
+# Painel de triatomíneos – documentação técnica
 
 Painel web que lê arquivos **KML/KMZ** da campanha e mostra, por localidade, o **resultado da busca** (com captura / sem captura) e o **resultado do exame** dos triatomíneos (positivo / negativo / pendente / não realizado), com mapa e tabela de registros. Um arquivo novo pode ser importado a qualquer momento: nada é substituído sem prévia e confirmação, e as versões anteriores ficam guardadas.
 
 > Ferramenta de apoio à análise. Não substitui os formulários nem os procedimentos oficiais da vigilância. O repositório contém só **dados fictícios** de exemplo (`samples/exemplo-ficticio.kml`).
-
-> **Dashboard Universal:** além do painel de triatomíneos, a pasta [`universal/`](universal/) traz um painel genérico que gera gráficos automáticos a partir de CSV, Excel, JSON, GeoJSON, KML e KMZ, com instaladores para Windows em [`universal/instaladores/`](universal/instaladores/). Veja `universal/README.md`.
 
 ## Como executar
 
