@@ -25,3 +25,5 @@ table{border-collapse:collapse;width:100%;font-size:.85rem}th,td{padding:4px 8px
 th{position:sticky;top:0;background:var(--surface)}
 @media print{.top .actions,.drop,.x{display:none}.chart{break-inside:avoid}}
 #alertsBox{margin-bottom:16px}#alerts{margin:0;padding-left:18px}#alerts li.aviso::marker{color:#d97706}#alerts li.info::marker{color:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.chip{background:var(--accent);color:#fff;border-color:var(--accent);border-radius:999px;padding:3px 12px}
+@media (max-width:600px){main{padding:12px}.top{padding:10px 12px}.actions{width:100%}.actions>*{flex:1 1 auto}.chart .box{height:240px}}

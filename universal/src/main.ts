@@ -16,6 +16,20 @@ let charts: Chart[] = [];
 let maps: L.Map[] = [];
 let removed = new Set<string>();
 let forced: Record<string, ColType> = {};
+let filters: Record<string, string> = {};
+
+function view(): Table {
+  const t = table!;
+  const keys = Object.keys(filters);
+  if (!keys.length) return t;
+  return { ...t, rows: t.rows.filter((r) => keys.every((k) => String(r[k] ?? '') === filters[k])) };
+}
+
+function toggleFilter(col: string, value: string) {
+  if (filters[col] === value) delete filters[col];
+  else filters = { ...filters, [col]: value };
+  render();
+}
 const TYPE_NAMES: Record<string, string> = { number: 'número', integer: 'inteiro', date: 'data', category: 'categoria', boolean: 'sim/não', text: 'texto', id: 'identificador', lat: 'latitude', lon: 'longitude' };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] {
@@ -97,6 +111,14 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
         indexAxis: horizontal ? 'y' : 'x',
         responsive: true,
         maintainAspectRatio: false,
+        onClick: (_e, els) => {
+          const i = els[0]?.index;
+          if (i != null && spec.x && d.labels[i] != null) toggleFilter(spec.x, d.labels[i]!);
+        },
+        onHover: (e, els) => {
+          const c = e.native?.target as HTMLElement | null;
+          if (c) c.style.cursor = els.length ? 'pointer' : 'default';
+        },
         plugins: { legend: { display: donut || !!d.datasets, position: 'bottom' } },
         scales: donut ? {} : { x: { stacked: spec.kind === 'stacked' }, y: { stacked: spec.kind === 'stacked', beginAtZero: true } },
       },
@@ -108,15 +130,24 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
 function render() {
   if (!table) return;
   reset();
-  const t = table;
-  const prof = profileTable(t, forced);
-  const alerts = qualityAlerts(t, prof);
+  const full = table;
+  const t = view();
+  const prof = profileTable(full, forced);
+  const alerts = qualityAlerts(full, prof);
+  $('chips').replaceChildren(
+    ...Object.entries(filters).map(([k, v]) => {
+      const b = el('button', { type: 'button', className: 'chip', title: 'Remover este filtro' }, `${k}: ${v}  ✕`);
+      b.onclick = () => toggleFilter(k, v);
+      return b;
+    }),
+  );
+  ($('chips') as HTMLElement).hidden = !Object.keys(filters).length;
   $('alerts').replaceChildren(...alerts.map((a) => el('li', { className: a.level }, a.text)));
   ($('alertsBox') as HTMLElement).hidden = !alerts.length;
   $('kpis').replaceChildren(...kpis(t, prof).map((k) => el('div', { className: 'kpi', title: k.hint ?? '' }, el('b', {}, k.value), el('span', {}, k.label))));
   const specs = suggestCharts(t, prof, Number(($('level') as HTMLSelectElement).value)).filter((s) => !removed.has(s.id));
   $('charts').replaceChildren(...specs.map((s) => drawChart(s, t)));
-  renderTable('');
+  renderTable(($('q') as HTMLInputElement).value);
   const th = ['Coluna', 'Tipo (pode corrigir)', 'Preenchidas', 'Vazias', 'Valores distintos'];
   $('cols').replaceChildren(
     el('thead', {}, el('tr', {}, ...th.map((h) => el('th', {}, h)))),
@@ -138,8 +169,9 @@ function render() {
 
 function renderTable(q: string) {
   if (!table) return;
+  const tv = view();
   const needle = q.trim().toLowerCase();
-  const rows = needle ? table.rows.filter((r) => table!.columns.some((c) => String(r[c] ?? '').toLowerCase().includes(needle))) : table.rows;
+  const rows = needle ? tv.rows.filter((r) => table!.columns.some((c) => String(r[c] ?? '').toLowerCase().includes(needle))) : tv.rows;
   const shown = rows.slice(0, 500);
   $('tbl').replaceChildren(
     el('thead', {}, el('tr', {}, ...table.columns.map((c) => el('th', {}, c)))),
@@ -152,6 +184,7 @@ function load(ds: Dataset) {
   dataset = ds;
   removed = new Set();
   forced = {};
+  filters = {};
   $('msg').textContent = '';
   const sel = $('tableSel') as HTMLSelectElement;
   sel.replaceChildren(...ds.tables.map((t, i) => el('option', { value: String(i) }, `${t.name} (${t.rows.length})`)));
@@ -212,6 +245,7 @@ function init() {
     table = dataset!.tables[Number(($('tableSel') as HTMLSelectElement).value)]!;
     removed = new Set();
     forced = {};
+    filters = {};
     render();
   };
   $('q').oninput = () => renderTable(($('q') as HTMLInputElement).value);
