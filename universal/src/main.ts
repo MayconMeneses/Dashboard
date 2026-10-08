@@ -743,6 +743,7 @@ function openReport() {
       cv.replaceWith(img);
     });
     clone.querySelectorAll('button, select').forEach((x) => x.remove());
+    clone.querySelectorAll('.rate-pick').forEach((x) => !x.querySelector('.muted') && x.remove());
     clone.querySelectorAll('.map').forEach((x) => x.replaceWith(el('p', { className: 'muted' }, 'Mapa omitido do relatório (depende de imagens externas); veja o painel.')));
     clone.querySelectorAll('details').forEach((d) => d.setAttribute('open', ''));
     gallery.append(clone);

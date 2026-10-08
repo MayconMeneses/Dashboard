@@ -339,6 +339,7 @@ function suggestTidy(t: Table, level: number): ChartSpec[] {
       rate: { options: rateOpts, agravo: td.agravo && f.mainAgr ? [f.mainAgr, NONE] : undefined },
       title: `${f.mainSit}${agrTxt} por ${td.period.toLowerCase()} e positividade`,
       description: `As colunas comparam o mesmo resultado (${f.mainSit}${agrTxt}) em ${td.period.toLowerCase()}s diferentes. A linha laranja (eixo da direita, em %) é a positividade do mesmo ${td.period.toLowerCase()}. Troque a definição de positividade no seletor do gráfico.`,
+      why: 'Dois tipos de informação sobre o mesmo período: quantidade (colunas, eixo da esquerda) e taxa em % (linha, eixo da direita). Juntos mostram se um mês tem muitos casos mas poucos positivos, ou o contrário.',
       howTo: 'Colunas = quantidade (eixo da esquerda). Linha = percentual (eixo da direita). Coluna alta com linha baixa = muitos casos, poucos positivos; coluna baixa com linha alta = poucos casos, mas a maioria positiva. Clique numa coluna para ver só aquele período.', score: 97,
     });
   }
@@ -354,6 +355,7 @@ function suggestTidy(t: Table, level: number): ChartSpec[] {
     out.push({
       id: 'tid-agr', kind: 'pivot', style: 'stacked', x: td.period, seriesBy: td.agravo, agg: 'sum', y: td.value, keepOrder: true, where: td.situation && f.mainSit ? { [td.situation]: [f.mainSit] } : {},
       rate: rateOpts.length ? { options: rateOpts, agravo: f.mainAgr ? [f.mainAgr, NONE] : undefined } : undefined,
+      why: rateOpts.length ? 'Colunas empilhadas dividem cada período entre os agravos, e a linha de positividade mostra a taxa do mesmo período no eixo da direita.' : undefined,
       title: `${f.mainSit ?? 'Total'} por ${td.agravo.toLowerCase()} em cada ${td.period.toLowerCase()}`,
       description: `Soma de todos os ${td.entity.toLowerCase()}s, separada por ${td.agravo.toLowerCase()}. Mostra se um agravo domina e se o perfil muda ao longo do tempo.`,
       howTo: 'Cada barra é um período; as cores dividem o total entre os agravos. Um agravo muito pequeno quase não aparece (veja a tabela).', score: 80,
