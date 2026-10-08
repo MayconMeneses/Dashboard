@@ -21,15 +21,15 @@
 <main>
   <section id="drop" class="drop" tabindex="0" role="button" aria-label="Escolher arquivo">
     <p><strong>Arraste um arquivo aqui</strong> ou clique para escolher</p>
-    <p class="muted">CSV, Excel (XLSX), JSON, GeoJSON, KML ou KMZ. Tudo é processado no seu navegador; nada é enviado.</p>
-    <input id="file" type="file" accept=".csv,.tsv,.txt,.xlsx,.json,.geojson,.kml,.kmz" hidden>
+    <p class="muted">CSV, Excel (XLSX), PDF com tabelas, JSON, GeoJSON, KML ou KMZ. Tudo é processado no seu navegador; nada é enviado.</p>
+    <input id="file" type="file" accept=".csv,.tsv,.txt,.xlsx,.pdf,.json,.geojson,.kml,.kmz" hidden>
   </section>
   <div id="msg" role="alert"></div>
   <section id="app" hidden>
     <div class="titlebar"><h2 id="ttl"></h2><p id="ctx" class="muted"></p></div>
     <div id="chips" class="chips" hidden></div>
     <div id="kpis" class="kpis"></div>
-    <section class="card" id="alertsBox" hidden><h2>Qualidade dos dados</h2><ul id="alerts"></ul></section>
+    <section class="card" id="alertsBox" hidden><h2>Qualidade dos dados e como li o arquivo</h2><ul id="alerts"></ul></section>
     <div id="charts" class="charts"></div>
     <section class="card"><h2>Dados</h2><input id="q" type="search" placeholder="Filtrar linhas…" aria-label="Filtrar linhas"><div class="tablewrap"><table id="tbl"></table></div><p class="muted">Dica: clique numa barra ou fatia para filtrar todo o painel; clique de novo para remover.</p><p id="tinfo" class="muted"></p></section>
     <section class="card"><h2>Colunas reconhecidas</h2><div class="tablewrap"><table id="cols"></table></div></section>

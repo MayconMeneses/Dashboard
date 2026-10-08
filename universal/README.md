@@ -2,7 +2,7 @@
 
 Projeto independente do painel de triatomíneos (não altera nada dele). Recebe um arquivo e gera sozinho indicadores, gráficos, mapa (quando há coordenadas) e tabela.
 
-- **Formatos:** CSV/TSV, Excel (XLSX, várias abas), JSON, GeoJSON, KML e KMZ.
+- **Formatos:** CSV/TSV, Excel (XLSX, várias abas), **PDF com tabelas (texto selecionável)**, JSON, GeoJSON, KML e KMZ. PDF escaneado (imagem) não é lido: não há OCR.
 - **Automático:** reconhece colunas (número, data, categoria, sim/não, identificador, latitude/longitude) e sugere gráficos; o seletor *Gráficos* mostra menos ou mais.
 - **Qualidade:** alertas de duplicatas, colunas vazias/constantes, muitas células vazias e valores muito distantes; dispersão automática quando há correlação ≥ 0,5 entre duas colunas numéricas.
 - **Correção manual:** na tabela *Colunas reconhecidas* dá para trocar o tipo de qualquer coluna e os gráficos se refazem.
@@ -12,6 +12,8 @@ Projeto independente do painel de triatomíneos (não altera nada dele). Recebe 
 - **Imprimir / PDF:** botão que usa a impressão do navegador (A4, gráficos redimensionados).
 - **Filtro por clique:** clique numa barra ou fatia para filtrar KPIs, gráficos, tabela e o CSV exportado; o filtro aparece como etiqueta removível.
 - **Celular:** layout ajustado para telas pequenas, sem rolagem lateral.
+- **Blocos repetidos (ex.: um por mês):** planilhas com o mesmo cabeçalho repetido (Mês × Município × indicador) são reunidas numa tabela só, com gráficos de evolução, ranking, composição e comparação; células em branco continuam “sem dado”, coluna de total vazia é ignorada e inconsistências (ex.: “Zica”/“Zika”) viram alerta.
+- **Cada gráfico se explica:** descrição do que mostra, frase de **destaque calculada dos próprios dados** (maior, menor, pico, variação, pontos sem dado) e “Como ler este gráfico”.
 - **Regra de dados:** célula vazia nunca vira zero; aparece como “—” e fica fora das contas.
 - **Privacidade:** tudo roda no navegador; nada é enviado.
 - **Compartilhar:** *Baixar HTML compartilhável* gera um único arquivo com os dados embutidos; *Baixar CSV* exporta a tabela.

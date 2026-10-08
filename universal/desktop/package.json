@@ -1,6 +1,6 @@
 {
   "name": "dashboard-universal-desktop",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "main": "main.cjs",
   "description": "Dashboard Universal – gera painéis automáticos a partir de CSV, Excel, JSON, GeoJSON, KML e KMZ",
@@ -52,6 +52,7 @@
         "ext": [
           "csv",
           "xlsx",
+          "pdf",
           "json",
           "geojson",
           "kml",
@@ -66,6 +67,6 @@
     "electron": "44.7.0",
     "electron-builder": "26.15.3"
   },
-  "painelVersao": "0.2.0",
+  "painelVersao": "0.3.0",
   "programaMinimo": "0.2.0"
 }

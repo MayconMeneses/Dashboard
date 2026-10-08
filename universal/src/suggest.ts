@@ -5,6 +5,8 @@ export const fmtNum = (n: number) => new Intl.NumberFormat('pt-BR', { maximumFra
 
 /** Sugere gráficos conforme os tipos de coluna; `level` 1 = enxuto … 3 = completo. */
 export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpec[] {
+  if (t.noCharts) return [];
+  if (t.tidy) return suggestTidy(t, level);
   const out: ChartSpec[] = [];
   const labelCol = t.rows.length >= 3 && t.rows.length <= 40 ? prof.find((p) => (p.type === 'category' || p.type === 'text' || p.type === 'id') && p.filled === t.rows.length && p.unique === t.rows.length) : undefined;
   const cats = prof.filter((p) => p.type === 'category' && p.unique >= 2 && p.unique < p.filled).sort((a, b) => a.unique - b.unique);
@@ -101,6 +103,7 @@ export function bestCorrelation(t: Table, nums: ColProfile[]): { a: string; b: s
 
 /** Alertas de qualidade dos dados (ausentes, colunas constantes, duplicadas, valores extremos). */
 export function qualityAlerts(t: Table, prof: ColProfile[]): Alert[] {
+  if (t.tidy) return tidyAlerts(t);
   const out: Alert[] = [];
   const dup = t.rows.length - new Set(t.rows.map((r) => JSON.stringify(t.columns.map((c) => r[c])))).size;
   if (dup > 0) out.push({ level: 'aviso', text: `${dup} linha(s) idêntica(s) a outra (possíveis duplicatas).` });
@@ -116,10 +119,12 @@ export function qualityAlerts(t: Table, prof: ColProfile[]): Alert[] {
       if (out_) out.push({ level: 'info', text: `“${p.name}” tem ${out_} valor(es) muito distante(s) dos demais (confira se são erros de digitação).` });
     }
   }
+  for (const n of t.notes ?? []) out.push({ level: 'info', text: n });
   return out;
 }
 
 export function kpis(t: Table, prof: ColProfile[]): Kpi[] {
+  if (t.tidy) return tidyKpis(t);
   const out: Kpi[] = [{ label: 'Registros', value: fmtNum(t.rows.length) }, { label: 'Colunas', value: String(t.columns.length) }];
   const m = prof.find((p) => p.type === 'number' || p.type === 'integer');
   if (m?.sum != null) out.push({ label: `Total de ${m.name}`, value: fmtNum(m.sum), hint: `média ${fmtNum(m.mean!)} · mediana ${fmtNum(m.median!)}` });
@@ -156,6 +161,7 @@ function agg(rows: Row[], key: (r: Row) => string | null, val: (r: Row) => numbe
 
 /** Calcula os dados de um gráfico. Valores ausentes ficam de fora (nunca viram zero). */
 export function chartData(t: Table, spec: ChartSpec): SeriesData {
+  if (spec.kind === 'pivot') return pivotData(t, spec);
   const how = spec.agg ?? 'count';
   const get = (c: string) => (r: Row) => (r[c] == null ? null : String(r[c]));
   const num = (c?: string) => (r: Row) => (c ? toNumber(r[c] ?? null) : null);
@@ -206,4 +212,256 @@ export function chartData(t: Table, spec: ChartSpec): SeriesData {
     return { labels: e.map((x) => x[0]), values: e.map((x) => x[1]) };
   }
   return { labels: [], values: [] };
+}
+
+/** valor especial em `where`: aceita linhas em que a coluna está vazia (ex.: indicador sem agravo informado) */
+export const NONE = '∅';
+const sumBy = (t: Table, col: string) => {
+  const m = new Map<string, number>();
+  for (const r of t.rows) {
+    const k = r[col];
+    const v = toNumber(r['Valor'] ?? null);
+    if (k == null || v == null) continue;
+    m.set(String(k), (m.get(String(k)) ?? 0) + v);
+  }
+  return [...m.entries()].sort((a, b) => b[1] - a[1]);
+};
+
+/** Fatos principais de uma tabela organizada (situação e agravo dominantes). */
+export function tidyFacts(t: Table) {
+  const td = t.tidy!;
+  const situ = td.situation ? sumBy(t, td.situation) : [];
+  const mainSit = situ[0]?.[0];
+  const rowsMain = mainSit ? t.rows.filter((r) => r[td.situation!] === mainSit) : t.rows;
+  const agr = new Map<string, number>();
+  if (td.agravo) for (const r of rowsMain) {
+    const v = toNumber(r['Valor'] ?? null);
+    if (v != null && r[td.agravo] != null) agr.set(String(r[td.agravo]), (agr.get(String(r[td.agravo])) ?? 0) + v);
+  }
+  const agrList = [...agr.entries()].sort((a, b) => b[1] - a[1]);
+  return { mainSit, mainAgr: agrList[0]?.[0], agrList, situ, periods: [...new Set(t.rows.map((r) => String(r[td.period])))], entities: [...new Set(t.rows.map((r) => String(r[td.entity])))] };
+}
+
+function suggestTidy(t: Table, level: number): ChartSpec[] {
+  const td = t.tidy!;
+  const f = tidyFacts(t);
+  const out: ChartSpec[] = [];
+  const agrWhere: Record<string, string[]> = td.agravo && f.mainAgr ? { [td.agravo]: [f.mainAgr, NONE] } : {};
+  const agrOnly: Record<string, string[]> = td.agravo && f.mainAgr ? { [td.agravo]: [f.mainAgr] } : {};
+  const mainWhere: Record<string, string[]> = { ...agrOnly, ...(td.situation && f.mainSit ? { [td.situation]: [f.mainSit] } : {}) };
+  const agrTxt = f.mainAgr ? ` de ${f.mainAgr}` : '';
+  const sitNames = f.situ.map(([n]) => n);
+  const rest = sitNames.filter((n) => n !== f.mainSit);
+  const partWhere = (names: string[]) => ({ ...(td.situation ? { [td.situation]: names } : {}) });
+  const mp = (n: number) => (f.periods.length > 1 ? `Soma dos ${f.entities.length} ${td.entity.toLowerCase()}s` : '');
+  void mp;
+
+  if (td.situation && rest.length >= 2) {
+    const top = rest.slice(0, 3);
+    out.push({
+      id: 'tid-evol', kind: 'pivot', style: 'line', x: td.period, seriesBy: td.situation, agg: 'sum', y: td.value, keepOrder: true,
+      where: { ...agrWhere, ...partWhere([f.mainSit!, ...top]) },
+      title: `Evolução por ${td.period.toLowerCase()}: ${[f.mainSit, ...top].join(', ')}`,
+      description: `Para cada ${td.period.toLowerCase()}, soma de todos os ${td.entity.toLowerCase()}s, de cada situação${f.mainAgr ? ` (${f.mainAgr}; indicadores sem agravo informado, como “Em Andamento”, entram como estão no arquivo)` : ''}. “${f.mainSit}” é a maior situação e serve de total de referência.`,
+      howTo: 'Cada linha acompanha uma situação ao longo do tempo. Subida = mais casos naquele período; distância entre as linhas mostra quanto do total já foi concluído.', score: 96,
+    });
+  }
+  if (f.mainSit) {
+    out.push({
+      id: 'tid-rank', kind: 'pivot', style: 'hbar', x: td.entity, agg: 'sum', y: td.value, where: mainWhere,
+      title: `${f.mainSit}${agrTxt} por ${td.entity.toLowerCase()} (total do período)`,
+      description: `Soma de todos os ${td.period.toLowerCase()}s, do maior para o menor. Valores em branco no arquivo ficam fora da soma (não são zero), então ${td.entity.toLowerCase()}s com meses sem dado aparecem subestimados.`,
+      howTo: 'Barras mais longas = mais casos no período. Clique numa barra para filtrar todo o painel só por aquele item.', score: 94,
+    });
+    out.push({
+      id: 'tid-mes-ent', kind: 'pivot', style: 'line', x: td.period, seriesBy: td.entity, agg: 'sum', y: td.value, keepOrder: true, where: mainWhere,
+      title: `${f.mainSit}${agrTxt} por ${td.period.toLowerCase()} em cada ${td.entity.toLowerCase()}`,
+      description: `Uma linha por ${td.entity.toLowerCase()}, mostrando como o número variou a cada ${td.period.toLowerCase()}. Lacunas na linha são períodos sem dado no arquivo.`,
+      howTo: 'Compare a forma das linhas: picos mostram quando cada local teve mais casos. Clique na legenda para esconder/mostrar um item.', score: 90,
+    });
+  }
+  if (td.situation && rest.length >= 2) {
+    out.push({
+      id: 'tid-comp', kind: 'pivot', style: 'stacked', x: td.entity, seriesBy: td.situation, agg: 'sum', y: td.value, where: { ...agrWhere, ...partWhere(rest.slice(0, 3)) },
+      title: `Situação dos casos por ${td.entity.toLowerCase()}: ${rest.slice(0, 3).join(', ')}`,
+      description: `Para cada ${td.entity.toLowerCase()}, quanto foi ${rest.slice(0, 3).join(', ').replace(/, ([^,]*)$/, ' e $1')} no período (soma de todos os ${td.period.toLowerCase()}s).`,
+      howTo: 'A barra inteira é o total concluído ou em investigação; as cores mostram a proporção de cada situação. Muita cor de “em andamento” indica fila de casos sem conclusão.', score: 88,
+    });
+  }
+  if (td.agravo && f.agrList.filter(([, v]) => v > 0).length >= 2 && level >= 2) {
+    out.push({
+      id: 'tid-agr', kind: 'pivot', style: 'stacked', x: td.period, seriesBy: td.agravo, agg: 'sum', y: td.value, keepOrder: true, where: td.situation && f.mainSit ? { [td.situation]: [f.mainSit] } : {},
+      title: `${f.mainSit ?? 'Total'} por ${td.agravo.toLowerCase()} em cada ${td.period.toLowerCase()}`,
+      description: `Soma de todos os ${td.entity.toLowerCase()}s, separada por ${td.agravo.toLowerCase()}. Mostra se um agravo domina e se o perfil muda ao longo do tempo.`,
+      howTo: 'Cada barra é um período; as cores dividem o total entre os agravos. Um agravo muito pequeno quase não aparece (veja a tabela).', score: 80,
+    });
+  }
+  if (level >= 3 && td.situation) {
+    for (const sname of rest.slice(0, 2)) {
+      out.push({
+        id: `tid-s-${sname}`, kind: 'pivot', style: 'hbar', x: td.entity, agg: 'sum', y: td.value, where: { ...agrWhere, [td.situation]: [sname] },
+        title: `${sname}${agrTxt} por ${td.entity.toLowerCase()}`,
+        description: `Soma de todos os ${td.period.toLowerCase()}s da situação “${sname}”.`,
+        howTo: 'Barras mais longas = maior número nesta situação.', score: 60,
+      });
+    }
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, level === 1 ? 3 : level === 2 ? 5 : 8);
+}
+
+/** Dados de um gráfico "pivot": soma de y por x, com uma série por valor de seriesBy; vazio ≠ zero. */
+export function pivotData(t: Table, spec: ChartSpec): SeriesData {
+  const x = spec.x!;
+  const yCol = spec.y ?? 'Valor';
+  const rows = t.rows.filter((r) => Object.entries(spec.where ?? {}).every(([c, vals]) => (r[c] == null ? vals.includes(NONE) : vals.includes(String(r[c])))));
+  const xs: string[] = [];
+  for (const r of rows) {
+    const k = r[x];
+    if (k != null && !xs.includes(String(k))) xs.push(String(k));
+  }
+  const seriesKeys: string[] = [];
+  if (spec.seriesBy) for (const r of rows) {
+    const k = r[spec.seriesBy];
+    if (k != null && !seriesKeys.includes(String(k))) seriesKeys.push(String(k));
+  }
+  const sum = (pred: (r: Row) => boolean): number => {
+    let s = 0;
+    let n = 0;
+    for (const r of rows) {
+      if (!pred(r)) continue;
+      const v = toNumber(r[yCol] ?? null);
+      if (v == null) continue;
+      s += v;
+      n++;
+    }
+    return n ? s : Number.NaN;
+  };
+  if (!spec.seriesBy) {
+    let e = xs.map((k) => [k, sum((r) => String(r[x]) === k)] as const);
+    if (!spec.keepOrder) e = e.filter(([, v]) => !Number.isNaN(v)).sort((a, b) => b[1] - a[1]).slice(0, 25);
+    return { labels: e.map((a) => a[0]), values: e.map((a) => a[1]) };
+  }
+  const order = spec.keepOrder ? xs : [...xs].sort((a, b) => (sum((r) => String(r[x]) === b) || 0) - (sum((r) => String(r[x]) === a) || 0));
+  return {
+    labels: order,
+    values: order.map((k) => sum((r) => String(r[x]) === k)),
+    datasets: seriesKeys.map((sk) => ({ label: sk, values: order.map((k) => sum((r) => String(r[x]) === k && String(r[spec.seriesBy!]) === sk)) })),
+  };
+}
+
+const br = (n: number) => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(n);
+
+/** Frase de destaque calculada a partir dos próprios dados do gráfico. */
+export function insightFor(spec: ChartSpec, d: SeriesData): string {
+  const valid = (a: number[]) => a.map((v, i) => [v, i] as const).filter(([v]) => !Number.isNaN(v));
+  const nanCount = d.datasets ? d.datasets.reduce((a, s) => a + s.values.filter((v) => Number.isNaN(v)).length, 0) : d.values.filter((v) => Number.isNaN(v)).length;
+  const gap = nanCount ? ` Há ${nanCount} ponto(s) sem dado, que não foram tratados como zero.` : '';
+  if (d.datasets) {
+    const tot = d.datasets.map((s) => ({ l: s.label, v: s.values.filter((x) => !Number.isNaN(x)).reduce((a, b) => a + b, 0), peak: valid(s.values).sort((a, b) => b[0] - a[0])[0] }));
+    tot.sort((a, b) => b.v - a.v);
+    const all = tot.reduce((a, b) => a + b.v, 0) || 1;
+    const lead = tot[0]!;
+    const pk = lead.peak ? ` Maior valor: ${br(lead.peak[0])} em ${d.labels[lead.peak[1]]}.` : '';
+    return `Maior total: ${lead.l} (${br(lead.v)}, ${br((lead.v / all) * 100)}% da soma das séries).${pk}${gap}`;
+  }
+  const v = valid(d.values);
+  if (!v.length) return 'Sem valores para este gráfico.';
+  const sorted = [...v].sort((a, b) => b[0] - a[0]);
+  const total = v.reduce((a, [x]) => a + x, 0);
+  const top = sorted[0]!;
+  const low = sorted[sorted.length - 1]!;
+  if (spec.kind === 'line' || (spec.keepOrder && spec.kind !== 'donut')) {
+    const first = v[0]!;
+    const last = v[v.length - 1]!;
+    const delta = first[0] ? ` De ${d.labels[first[1]]} a ${d.labels[last[1]]}: ${last[0] >= first[0] ? '+' : ''}${br(((last[0] - first[0]) / first[0]) * 100)}%.` : '';
+    return `Pico: ${br(top[0])} em ${d.labels[top[1]]}; mínimo: ${br(low[0])} em ${d.labels[low[1]]}.${delta}${gap}`;
+  }
+  return `Maior: ${d.labels[top[1]]} (${br(top[0])}, ${br((top[0] / (total || 1)) * 100)}% do total ${br(total)}); menor: ${d.labels[low[1]]} (${br(low[0])}).${gap}`;
+}
+
+export const HOW_TO: Record<string, string> = {
+  bar: 'Cada barra é um valor; quanto mais alta, maior o número.',
+  hbar: 'Cada barra é um item, do maior para o menor; quanto mais longa, maior o número.',
+  donut: 'Cada fatia é a parte do total; fatias maiores = mais registros.',
+  line: 'A linha liga os períodos em ordem; subida = aumento, descida = queda.',
+  hist: 'Cada barra é uma faixa de valores; a altura é quantos registros caem nela.',
+  stacked: 'Cada barra é dividida em cores; o tamanho de cada cor é a parte daquela categoria.',
+  scatter: 'Cada ponto é um registro; pontos subindo da esquerda para a direita indicam que as duas colunas crescem juntas.',
+  multi: 'Barras lado a lado comparam as colunas em cada linha do arquivo.',
+  map: 'Cada ponto é um registro com coordenadas; aproxime para ver detalhes.',
+  pivot: 'Veja a descrição acima.',
+};
+
+/** Alertas e KPIs específicos de tabelas organizadas. */
+export function tidyKpis(t: Table): Kpi[] {
+  const td = t.tidy!;
+  const f = tidyFacts(t);
+  const out: Kpi[] = [];
+  const mainRows = t.rows.filter((r) => (!f.mainSit || r[td.situation!] === f.mainSit) && (!f.mainAgr || r[td.agravo!] === f.mainAgr));
+  const total = mainRows.reduce((a, r) => a + (toNumber(r['Valor'] ?? null) ?? 0), 0);
+  out.push({ label: `${f.mainSit ?? 'Total'}${f.mainAgr ? ' ' + f.mainAgr : ''}`, value: fmtNum(total), hint: `soma de todos os ${td.entity.toLowerCase()}s e ${td.period.toLowerCase()}s` });
+  const by = (col: string, rows: Row[]) => {
+    const m = new Map<string, number>();
+    for (const r of rows) {
+      const v = toNumber(r['Valor'] ?? null);
+      if (v != null) m.set(String(r[col]), (m.get(String(r[col])) ?? 0) + v);
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  };
+  const ent = by(td.entity, mainRows);
+  if (ent[0]) out.push({ label: `Maior ${td.entity.toLowerCase()}`, value: ent[0][0], hint: `${fmtNum(ent[0][1])} no período` });
+  const per = by(td.period, mainRows);
+  if (per[0]) out.push({ label: `Pico (${td.period.toLowerCase()})`, value: per[0][0], hint: `${fmtNum(per[0][1])}` });
+  if (td.situation && f.mainSit) {
+    const scoped = t.rows.filter((r) => !td.agravo || r[td.agravo] == null || r[td.agravo] === f.mainAgr);
+    const sums = by(td.situation, scoped).filter(([n]) => n !== f.mainSit);
+    const base = by(td.situation, scoped).find(([n]) => n === f.mainSit)?.[1] || 1;
+    for (const [n, v] of sums.slice(0, 3)) out.push({ label: n, value: fmtNum(v), hint: `${((v / base) * 100).toFixed(1).replace('.', ',')}% de ${f.mainSit}${f.mainAgr ? ' ' + f.mainAgr : ''}` });
+  }
+  out.push({ label: 'Períodos × itens', value: `${f.periods.length} × ${f.entities.length}`, hint: f.periods.join(', ') });
+  return out;
+}
+
+export function tidyAlerts(t: Table): Alert[] {
+  const td = t.tidy!;
+  const out: Alert[] = [];
+  const key = (r: Row) => `${r[td.entity]}\u0001${r[td.period]}`;
+  const tot = new Map<string, { n: number; nulls: number }>();
+  for (const r of t.rows) {
+    const e = tot.get(key(r)) ?? { n: 0, nulls: 0 };
+    e.n++;
+    if (r['Valor'] == null) e.nulls++;
+    tot.set(key(r), e);
+  }
+  const full = new Map<string, string[]>();
+  for (const [k, v] of tot) if (v.nulls === v.n) {
+    const [ent, per] = k.split('\u0001') as [string, string];
+    full.set(ent, [...(full.get(ent) ?? []), per]);
+  }
+  for (const [ent, pers] of full) out.push({ level: 'aviso', text: `${ent}: sem nenhum dado em ${pers.join(', ')}. Não é zero: os totais e comparações desse item estão subestimados nesses períodos.` });
+  // valores em branco isolados
+  const isolated = [...tot.entries()].filter(([, v]) => v.nulls > 0 && v.nulls < v.n);
+  if (isolated.length) out.push({ level: 'info', text: `${isolated.length} combinação(ões) ${td.entity.toLowerCase()}/${td.period.toLowerCase()} têm só alguns indicadores em branco (ex.: ${isolated[0]![0].replace('\u0001', ' em ')}).` });
+  // grafias parecidas
+  if (td.agravo) {
+    const names = [...new Set(t.rows.map((r) => r[td.agravo!]).filter((v): v is string => typeof v === 'string'))];
+    for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) {
+      const a = names[i]!.toLowerCase();
+      const b = names[j]!.toLowerCase();
+      if (a.length === b.length && a.length > 3 && [...a].filter((c, k) => c !== b[k]).length === 1) out.push({ level: 'aviso', text: `“${names[i]}” e “${names[j]}” parecem o mesmo agravo escrito de duas formas; os gráficos os tratam como diferentes.` });
+    }
+  }
+  if (td.agravo) {
+    const ag = [...new Set(t.rows.map((r) => r[td.agravo!]).filter((v): v is string => typeof v === 'string'))];
+    const labels = [...new Set(t.rows.map((r) => String(r['Indicador'])))];
+    for (const l of labels) {
+      const w = l.split(/\s+/);
+      const last = w[w.length - 1]!.toLowerCase();
+      if (w.length < 2 || ag.some((a) => a.toLowerCase() === last)) continue;
+      const near = ag.find((a) => a.length === last.length && [...a.toLowerCase()].filter((c, k) => c !== last[k]).length === 1);
+      if (near) out.push({ level: 'aviso', text: `“${l}” parece usar outra grafia de “${near}” (${w.slice(0, -1).join(' ')} ${near}); por isso não foi agrupado com os demais indicadores de ${near}. Vale corrigir no arquivo.` });
+    }
+  }
+  for (const n of t.notes ?? []) out.push({ level: 'info', text: n });
+  return out;
 }

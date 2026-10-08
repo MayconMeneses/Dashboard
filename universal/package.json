@@ -1,6 +1,6 @@
 {
   "name": "dashboard-universal",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,6 +15,7 @@
     "fflate": "^0.8.3",
     "leaflet": "^1.9.4",
     "papaparse": "^5.7.0",
+    "pdfjs-dist": "^6.4.299",
     "read-excel-file": "^9.3.12"
   },
   "devDependencies": {
