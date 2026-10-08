@@ -10,3 +10,6 @@ compartilhar/
 
 universal/node_modules/
 universal/dist/
+universal/desktop/node_modules/
+universal/desktop/release/
+universal/desktop/app/

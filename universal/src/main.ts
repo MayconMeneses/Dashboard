@@ -278,3 +278,14 @@ function init() {
   }
 }
 init();
+
+// ponte usada pelo aplicativo de desktop (Electron) para abrir arquivos pelo menu ou pelo Windows
+(window as unknown as { __abrirArquivo: (name: string, b64: string) => Promise<void> }).__abrirArquivo = async (name, b64) => {
+  try {
+    const bin = atob(b64);
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    load(await parseFile(name, bytes));
+  } catch (e) {
+    fail(e instanceof Error ? e.message : 'Não foi possível ler o arquivo.');
+  }
+};
