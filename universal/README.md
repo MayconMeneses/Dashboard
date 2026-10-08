@@ -13,6 +13,12 @@ Projeto independente do painel de triatomíneos (não altera nada dele). Recebe 
 - **Filtro por clique:** clique numa barra ou fatia para filtrar KPIs, gráficos, tabela e o CSV exportado; o filtro aparece como etiqueta removível.
 - **Celular:** layout ajustado para telas pequenas, sem rolagem lateral.
 - **Blocos repetidos (ex.: um por mês):** planilhas com o mesmo cabeçalho repetido (Mês × Município × indicador) são reunidas numa tabela só, com gráficos de evolução, ranking, composição e comparação; células em branco continuam “sem dado”, coluna de total vazia é ignorada e inconsistências (ex.: “Zica”/“Zika”) viram alerta.
+- **Variedade de gráficos com escolha automática:** linhas, colunas, barras, áreas, 100% empilhado, rosca, radar, mapa de calor, gráficos pequenos (um por série, mesma escala), Pareto, funil e bolhas. O sistema escolhe o desenho pelas regras abaixo, explica o motivo em “Por que este gráfico e como ler” e deixa trocar por qualquer alternativa compatível (o recomendado vem marcado).
+  - Tempo (eixo em sequência): poucas séries → linha; muitas séries (≥ 6) → gráficos pequenos; um único valor com poucos períodos → colunas.
+  - Categorias: ranking → barras horizontais; muitos itens (> 15) → Pareto; 2 a 4 partes de um todo → rosca; categoria × série → colunas empilhadas.
+  - Proporção/área/radar só são oferecidos quando todos os valores são positivos.
+  - Etapas em sequência (notificados → concluídos → confirmados) → funil; volume × taxa × tamanho por item → bolhas; item × período → mapa de calor.
+- **Gerar HTML para compartilhar:** botão no topo; pede título e nome do arquivo e gera um único `.html` que abre exatamente como você está vendo (filtros, tipos de gráfico, gráficos removidos). Opção de versão só para leitura. Os dados vão dentro do arquivo.
 - **Positividade sobre as colunas:** quando há situações como confirmados/descartados/notificados, as colunas por mês ganham uma linha (eixo da direita, em %) com a positividade do mesmo mês; um seletor troca a definição (confirmados ÷ concluídos, ou confirmados ÷ notificados). Meses sem casos concluídos ficam sem ponto (não é zero).
 - **Cada gráfico se explica:** descrição do que mostra, frase de **destaque calculada dos próprios dados** (maior, menor, pico, variação, pontos sem dado) e “Como ler este gráfico”.
 - **Regra de dados:** célula vazia nunca vira zero; aparece como “—” e fica fora das contas.

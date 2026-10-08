@@ -12,7 +12,7 @@
   <div class="actions" id="actions" hidden>
     <label>Gráficos <select id="level"><option value="1">Menos</option><option value="2" selected>Padrão</option><option value="3">Mais</option></select></label>
     <select id="tableSel" aria-label="Aba ou tabela"></select>
-    <button id="btnHtml" type="button">Baixar HTML compartilhável</button>
+    <button id="btnHtml" type="button">Gerar HTML para compartilhar</button>
     <button id="btnPrint" type="button">Imprimir / PDF</button>
     <button id="btnCsv" type="button">Baixar CSV</button>
     <button id="btnNew" type="button">Outro arquivo</button>
@@ -35,6 +35,15 @@
     <section class="card"><h2>Colunas reconhecidas</h2><div class="tablewrap"><table id="cols"></table></div></section>
   </section>
 </main>
+<dialog id="shareDlg" aria-labelledby="shH"><form method="dialog" onsubmit="return false">
+  <h2 id="shH">Gerar HTML para compartilhar</h2>
+  <p class="muted">Cria um único arquivo .html que qualquer pessoa abre no navegador, sem instalar nada. Ele abre exatamente como você está vendo agora (filtros, tipos de gráfico e gráficos removidos).</p>
+  <label>Título do painel<br><input id="shTitle" type="text" maxlength="120"></label>
+  <label>Nome do arquivo<br><input id="shFile" type="text" maxlength="80"></label>
+  <label class="chk"><input id="shRead" type="checkbox" checked> Versão para leitura (esconde o envio de outros arquivos)</label>
+  <p class="muted"><b>Atenção:</b> os dados da tabela vão dentro do arquivo. Quem receber poderá ver todas as linhas; não inclua informações pessoais ou restritas.</p>
+  <div class="dlg-actions"><button id="shCancel" type="button">Cancelar</button><button id="shGo" type="button" class="primary">Gerar arquivo</button></div>
+</form></dialog>
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
