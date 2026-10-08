@@ -1,6 +1,9 @@
 import { toNumber } from './profile.js';
 import type { Row, Table } from './types.js';
 
+/** nome da coluna numérica da tabela organizada */
+export const VALUE_COL = 'Total';
+
 const str = (v: unknown): string => (v == null ? '' : String(v).trim());
 const filled = (r: unknown[]) => r.map((c, i) => [i, str(c)] as const).filter(([, s]) => s !== '');
 const isNumeric = (s: string) => toNumber(s) != null;
@@ -54,7 +57,7 @@ function splitLabels(labels: string[]): Map<string, { situation: string; agravo:
 
 /**
  * Detecta planilhas com o MESMO cabeçalho repetido em vários blocos (ex.: um bloco por mês, colunas = municípios,
- * linhas = indicadores) e as converte em uma tabela "organizada": Período | Entidade | Indicador | Situação | Agravo | Valor.
+ * linhas = indicadores) e as converte em uma tabela "organizada": Período | Entidade | Indicador | Situação | Agravo | Total.
  * Células em branco ficam como "sem dado" (nunca viram zero). Devolve null se o padrão não existir.
  */
 export function detectRepeatedBlocks(name: string, matrix: unknown[][]): Table | null {
@@ -112,7 +115,7 @@ export function detectRepeatedBlocks(name: string, matrix: unknown[][]): Table |
   const labels = [...new Set(kept.map((x) => x.label))];
   const split = splitLabels(labels);
 
-  const columns = [periodKey, entityName, 'Indicador', ...(split ? ['Situação', 'Agravo'] : []), 'Valor'];
+  const columns = [periodKey, entityName, 'Indicador', ...(split ? ['Situação', 'Agravo'] : []), VALUE_COL];
   const rows: Row[] = kept.map((x) => {
     const o: Row = { [periodKey]: x.period, [entityName]: x.entity, Indicador: x.label };
     if (split) {
@@ -120,12 +123,12 @@ export function detectRepeatedBlocks(name: string, matrix: unknown[][]): Table |
       o['Situação'] = sp.situation;
       o['Agravo'] = sp.agravo;
     }
-    o['Valor'] = x.value;
+    o[VALUE_COL] = x.value;
     return o;
   });
 
   const notes = [`Reconheci ${sections.length} blocos com o mesmo cabeçalho (${sections.map((s) => s.period).join(', ')}) e os reuni em uma única tabela: ${periodKey} × ${entityName} × indicador.`];
-  if (emptyEntities.size) notes.push(`A coluna “${[...emptyEntities].join('”, “')}” está sem valores no arquivo (provavelmente fórmula não calculada) e foi ignorada; os totais são calculados aqui.`);
+  if (emptyEntities.size) notes.push(`A coluna “${[...emptyEntities].join('”, “')}” do arquivo está sem valores (provavelmente fórmula não calculada) e foi ignorada. Nesta tabela, “${VALUE_COL}” é o número de cada célula (município/mês/indicador); as somas por mês, município e situação são calculadas pelos gráficos.`);
   if (split) notes.push('Separei o nome do indicador em “Situação” e “Agravo” pela última palavra, que se repete em vários indicadores.');
   const missing = kept.filter((x) => x.value == null).length;
   if (missing) notes.push(`${missing} células em branco foram mantidas como “sem dado” (não são zero).`);
@@ -144,6 +147,6 @@ export function detectRepeatedBlocks(name: string, matrix: unknown[][]): Table |
     columns,
     rows,
     notes,
-    tidy: { period: periodKey, entity: entityName, label: 'Indicador', value: 'Valor', ...(split ? { situation: 'Situação', agravo: 'Agravo' } : {}) },
+    tidy: { period: periodKey, entity: entityName, label: 'Indicador', value: VALUE_COL, ...(split ? { situation: 'Situação', agravo: 'Agravo' } : {}) },
   };
 }

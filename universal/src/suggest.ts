@@ -1,3 +1,4 @@
+import { VALUE_COL } from './grid.js';
 import { toDate, toNumber } from './profile.js';
 import { compatibleStyles } from './shapes.js';
 import type { Alert, ChartSpec, ColProfile, Kpi, Row, Table } from './types.js';
@@ -223,7 +224,7 @@ const sumBy = (t: Table, col: string) => {
   const m = new Map<string, number>();
   for (const r of t.rows) {
     const k = r[col];
-    const v = toNumber(r['Valor'] ?? null);
+    const v = toNumber(r[VALUE_COL] ?? null);
     if (k == null || v == null) continue;
     m.set(String(k), (m.get(String(k)) ?? 0) + v);
   }
@@ -238,7 +239,7 @@ export function tidyFacts(t: Table) {
   const rowsMain = mainSit ? t.rows.filter((r) => r[td.situation!] === mainSit) : t.rows;
   const agr = new Map<string, number>();
   if (td.agravo) for (const r of rowsMain) {
-    const v = toNumber(r['Valor'] ?? null);
+    const v = toNumber(r[VALUE_COL] ?? null);
     if (v != null && r[td.agravo] != null) agr.set(String(r[td.agravo]), (agr.get(String(r[td.agravo])) ?? 0) + v);
   }
   const agrList = [...agr.entries()].sort((a, b) => b[1] - a[1]);
@@ -264,8 +265,8 @@ export function rateData(t: Table, spec: ChartSpec, optIdx: number): { labels: s
   if (!td?.situation || !opt || !spec.x) return null;
   const rows = t.rows.filter((r) => !td.agravo || !spec.rate?.agravo || (r[td.agravo] == null ? spec.rate.agravo.includes(NONE) : spec.rate.agravo.includes(String(r[td.agravo]))));
   const labels = pivotData(t, { ...spec, seriesBy: undefined }).labels;
-  const sum = (k: string, names: string[]) => rows.reduce((a, r) => (String(r[spec.x!]) === k && names.includes(String(r[td.situation!])) ? a + (toNumber(r['Valor'] ?? null) ?? 0) : a), 0);
-  const has = (k: string, names: string[]) => rows.some((r) => String(r[spec.x!]) === k && names.includes(String(r[td.situation!])) && r['Valor'] != null);
+  const sum = (k: string, names: string[]) => rows.reduce((a, r) => (String(r[spec.x!]) === k && names.includes(String(r[td.situation!])) ? a + (toNumber(r[VALUE_COL] ?? null) ?? 0) : a), 0);
+  const has = (k: string, names: string[]) => rows.some((r) => String(r[spec.x!]) === k && names.includes(String(r[td.situation!])) && r[VALUE_COL] != null);
   const values = labels.map((k) => (has(k, opt.denominator) && sum(k, opt.denominator) > 0 ? (sum(k, opt.numerator) / sum(k, opt.denominator)) * 100 : Number.NaN));
   return { labels, values, explain: opt.explain, name: `Positividade (${opt.label})` };
 }
@@ -391,7 +392,7 @@ function suggestTidy(t: Table, level: number): ChartSpec[] {
 /** Dados de um gráfico "pivot": soma de y por x, com uma série por valor de seriesBy; vazio ≠ zero. */
 export function pivotData(t: Table, spec: ChartSpec): SeriesData {
   const x = spec.x!;
-  const yCol = spec.y ?? 'Valor';
+  const yCol = spec.y ?? VALUE_COL;
   const counting = spec.agg === 'count';
   const rows = t.rows.filter((r) => Object.entries(spec.where ?? {}).every(([c, vals]) => (r[c] == null ? vals.includes(NONE) : vals.includes(String(r[c])))));
   const xs: string[] = [];
@@ -492,12 +493,12 @@ export function tidyKpis(t: Table): Kpi[] {
   const f = tidyFacts(t);
   const out: Kpi[] = [];
   const mainRows = t.rows.filter((r) => (!f.mainSit || r[td.situation!] === f.mainSit) && (!f.mainAgr || r[td.agravo!] === f.mainAgr));
-  const total = mainRows.reduce((a, r) => a + (toNumber(r['Valor'] ?? null) ?? 0), 0);
+  const total = mainRows.reduce((a, r) => a + (toNumber(r[VALUE_COL] ?? null) ?? 0), 0);
   out.push({ label: `${f.mainSit ?? 'Total'}${f.mainAgr ? ' ' + f.mainAgr : ''}`, value: fmtNum(total), hint: `soma de todos os ${td.entity.toLowerCase()}s e ${td.period.toLowerCase()}s` });
   const by = (col: string, rows: Row[]) => {
     const m = new Map<string, number>();
     for (const r of rows) {
-      const v = toNumber(r['Valor'] ?? null);
+      const v = toNumber(r[VALUE_COL] ?? null);
       if (v != null) m.set(String(r[col]), (m.get(String(r[col])) ?? 0) + v);
     }
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
@@ -524,7 +525,7 @@ export function tidyAlerts(t: Table): Alert[] {
   for (const r of t.rows) {
     const e = tot.get(key(r)) ?? { n: 0, nulls: 0 };
     e.n++;
-    if (r['Valor'] == null) e.nulls++;
+    if (r[VALUE_COL] == null) e.nulls++;
     tot.set(key(r), e);
   }
   const full = new Map<string, string[]>();

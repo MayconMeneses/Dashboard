@@ -149,9 +149,9 @@ describe('blocos repetidos (um por mês)', () => {
   it('reúne os blocos, ignora coluna vazia, mantém sem dado e separa situação/agravo', async () => {
     const t = (await parseFile('c.csv', enc(csv))).tables[0]!;
     expect(t.tidy).toBeDefined();
-    expect(t.columns).toEqual(['Mês', 'Município', 'Indicador', 'Situação', 'Agravo', 'Valor']);
+    expect(t.columns).toEqual(['Mês', 'Município', 'Indicador', 'Situação', 'Agravo', 'Total']);
     expect([...new Set(t.rows.map((r) => r['Mês']))]).toEqual(['Janeiro', 'Fevereiro']);
-    expect(t.rows.filter((r) => r['Valor'] == null)).toHaveLength(2); // C em Notificados/Descartados Dengue de janeiro
+    expect(t.rows.filter((r) => r['Total'] == null)).toHaveLength(2); // C em Notificados/Descartados Dengue de janeiro
     expect(t.rows.find((r) => r['Indicador'] === 'Em Andamento')!['Agravo']).toBeNull();
     expect(t.notes!.join(' ')).toMatch(/“Total”/);
   });
