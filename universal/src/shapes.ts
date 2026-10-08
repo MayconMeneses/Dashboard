@@ -1,3 +1,4 @@
+import { VALUE_COL } from './grid.js';
 import { toNumber } from './profile.js';
 import type { ChartSpec, ChartStyle, Table } from './types.js';
 import type { SeriesData } from './suggest.js';
@@ -33,7 +34,7 @@ export function funnelData(t: Table, spec: ChartSpec) {
   if (!td?.situation || !spec.stages) return null;
   const agr = spec.where?.[td.agravo ?? ''] ?? null;
   const rows = t.rows.filter((r) => !td.agravo || !agr || (r[td.agravo] == null ? agr.includes('∅') : agr.includes(String(r[td.agravo]))));
-  const vals = spec.stages.map((s) => rows.reduce((a, r) => (s.situations.includes(String(r[td.situation!])) ? a + (toNumber(r['Valor'] ?? null) ?? 0) : a), 0));
+  const vals = spec.stages.map((s) => rows.reduce((a, r) => (s.situations.includes(String(r[td.situation!])) ? a + (toNumber(r[VALUE_COL] ?? null) ?? 0) : a), 0));
   return { labels: spec.stages.map((s, i) => `${s.label}: ${new Intl.NumberFormat('pt-BR').format(vals[i]!)}${i ? ` (${vals[i - 1] ? ((vals[i]! / vals[i - 1]!) * 100).toFixed(1).replace('.', ',') : '—'}% da etapa anterior)` : ''}`), values: vals };
 }
 
@@ -45,7 +46,7 @@ export function bubbleData(t: Table, spec: ChartSpec) {
   const agr = spec.rate?.agravo;
   const rows = t.rows.filter((r) => !td.agravo || !agr || (r[td.agravo] == null ? agr.includes('∅') : agr.includes(String(r[td.agravo]))));
   const ents = [...new Set(rows.map((r) => String(r[td.entity])))];
-  const sum = (e: string, names: string[]) => rows.reduce((a, r) => (String(r[td.entity]) === e && names.includes(String(r[td.situation!])) ? a + (toNumber(r['Valor'] ?? null) ?? 0) : a), 0);
+  const sum = (e: string, names: string[]) => rows.reduce((a, r) => (String(r[td.entity]) === e && names.includes(String(r[td.situation!])) ? a + (toNumber(r[VALUE_COL] ?? null) ?? 0) : a), 0);
   return ents
     .map((e) => {
       const den = sum(e, opt.denominator);
