@@ -12,5 +12,6 @@ const base = join(cache, 'nsis-3.0.4.1');
 const dir = readdirSync(base).map((d) => join(base, d)).find((d) => existsSync(join(d, 'Include', 'MUI2.nsh')));
 if (!dir) throw new Error('NSIS não encontrado no cache do electron-builder; rode "npm run dist:win" uma vez antes.');
 const exe = process.platform === 'win32' ? join(dir, 'makensis.exe') : join(dir, 'linux', 'makensis');
-const r = spawnSync(exe, ['-V2', 'instalador.nsi'], { cwd: join(here, 'leve'), stdio: 'inherit', env: { ...process.env, NSISDIR: dir, NSISCONFDIR: dir } });
+const versao = JSON.parse((await import('node:fs')).readFileSync(join(here, 'package.json'), 'utf8')).version;
+const r = spawnSync(exe, ['-V2', `-DVERSAO=${versao}`, 'instalador.nsi'], { cwd: join(here, 'leve'), stdio: 'inherit', env: { ...process.env, NSISDIR: dir, NSISCONFDIR: dir } });
 process.exit(r.status ?? 1);
