@@ -9,7 +9,8 @@ import { inferLocale, locale, profileTable, toNumber } from './profile.js';
 import type { LocaleInfo } from './profile.js';
 import { delimiterName } from './csv.js';
 import type { DelimiterChoice, Encoding } from './csv.js';
-import { describeState, formatBytes } from './report.js';
+import { buildPdfDoc, describeState, formatBytes } from './report.js';
+import type { ReportChart, ReportModel } from './report.js';
 import { applyMerges } from './similar.js';
 import { filterByDate, pageOf, sortRows } from './tableview.js';
 import type { SortDir } from './tableview.js';
@@ -290,6 +291,7 @@ function drawHeatmap(card: HTMLElement, spec: ChartSpec, d: SeriesData): HTMLEle
       return td;
     })))),
   );
+  card.dataset.heat = JSON.stringify({ rows: h.rows, cols: h.cols, cells: h.cells.map((r) => r.map((v) => (Number.isNaN(v) ? null : v))), min: h.min, max: h.max });
   card.append(el('div', { className: 'heatwrap' }, table));
   return card;
 }
@@ -703,8 +705,8 @@ function exportHtml(opts: { title: string; fileName: string; readonly: boolean }
   download(`${name}.html`, 'text/html', '<!doctype html>\n' + clone.outerHTML.replace(/<canvas[^>]*><\/canvas>/g, ''));
 }
 
-/** Relatório estruturado para imprimir ou salvar em PDF: origem, registros, filtros, indicadores, gráficos, critérios e limitações. */
-function openReport() {
+/** Plano B: relatório pela impressão do navegador (usado se a geração direta do PDF falhar). */
+function openPrintReport() {
   if (!dataset || !table) return;
   const full = mergedTable();
   const t = view();
@@ -792,6 +794,112 @@ function openReport() {
     { once: true },
   );
   window.print();
+}
+
+/** Texto de cada cartão de gráfico + imagens em alta resolução, lidos da tela para montar o PDF. */
+function collectChart(card: HTMLElement): ReportChart {
+  const text = (sel: string) => (card.querySelector(sel) as HTMLElement | null)?.innerText.trim() ?? '';
+  const paragraphs: string[] = [];
+  const desc = card.children[1] as HTMLElement | undefined;
+  if (desc?.tagName === 'P') paragraphs.push(desc.innerText.trim());
+  const rate = card.querySelector('.rate-pick .muted') as HTMLElement | null;
+  if (rate) paragraphs.push(rate.innerText.trim());
+  const howto = [...card.querySelectorAll('.howto p')].map((x) => (x.textContent ?? '').trim());
+  const strip = (s: string | undefined, label: string) => (s ?? '').replace(new RegExp(`^${label}\\s*`), '');
+  const chart: ReportChart = {
+    title: text('h3'),
+    paragraphs,
+    insight: strip(text('.insight'), 'Destaque:') || undefined,
+    why: strip(howto[0], 'Por que:') || undefined,
+    howTo: strip(howto[1], 'Como ler:') || undefined,
+    images: [],
+  };
+  if (card.dataset.heat) chart.heat = JSON.parse(card.dataset.heat) as ReportChart['heat'];
+  else if (card.querySelector('.map')) chart.note = 'Mapa omitido do relatório (depende de imagens externas); veja o painel.';
+  else {
+    for (const cv of card.querySelectorAll('canvas')) {
+      const inst = charts.find((c) => c.canvas === cv);
+      let url = '';
+      try {
+        if (inst) {
+          const prev = inst.options.devicePixelRatio;
+          inst.options.devicePixelRatio = 2.5;
+          inst.resize();
+          url = (cv as HTMLCanvasElement).toDataURL('image/png');
+          inst.options.devicePixelRatio = prev;
+          inst.resize();
+        } else url = (cv as HTMLCanvasElement).toDataURL('image/png');
+      } catch {
+        /* sem imagem */
+      }
+      if (url) chart.images.push({ title: cv.closest('.small-cell')?.querySelector('.small-title')?.textContent ?? undefined, dataUrl: url });
+    }
+  }
+  return chart;
+}
+
+function buildReportModel(): ReportModel {
+  const full = mergedTable();
+  const t = view();
+  const info = dataset!.info;
+  const n = (x: number) => new Intl.NumberFormat('pt-BR').format(x);
+  const origin: [string, string][] = [['Arquivo', dataset!.fileName]];
+  if (info) {
+    origin.push(['Formato', `.${info.format}`], ['Tamanho', formatBytes(info.bytes)]);
+    if (info.sha256) origin.push(['SHA-256 do arquivo original', info.sha256]);
+    if (info.readAt) origin.push(['Lido em', new Date(info.readAt).toLocaleString('pt-BR')]);
+    if (info.encoding) origin.push(['Codificação do texto', info.encoding]);
+    if (info.delimiter) origin.push(['Separador de colunas', delimiterName(info.delimiter)]);
+  }
+  origin.push(['Tabela analisada', `${table!.title ?? table!.name} (${n(table!.rows.length)} linhas, ${table!.columns.length} colunas)`], ['Versão do painel', __APP_VERSION__]);
+  const records: [string, string][] = [];
+  if (info) records.push(['Linhas lidas (todas as tabelas)', n(info.rowsRead)], ['Linhas ignoradas (em branco ou título)', n(info.rowsDropped)], ['Linhas não lidas (acima do limite)', n(info.truncated)]);
+  records.push(['Linhas da tabela analisada', n(table!.rows.length)], ['Linhas após filtros e período', n(t.rows.length)]);
+  const criteria: string[] = [];
+  for (const sp of lastSpecs) {
+    criteria.push(`${sp.title}: ${sp.description}`);
+    for (const o of sp.rate?.options ?? []) criteria.push(`${o.label}: ${o.explain}`);
+  }
+  criteria.push('Células em branco ou com marcadores de ausência (n/d, -, s/i) são “sem dado” e nunca entram como zero.', 'Somas e médias usam só as células com valor; uma série sem nenhum valor num período aparece como lacuna.');
+  const limits = [...qualityAlerts(full, lastProf, currentLoc()).map((a) => a.text), ...(info?.notes ?? [])];
+  const cols = t.columns.slice(0, 8);
+  return {
+    title: table!.title ?? table!.name,
+    generatedAt: new Date().toLocaleString('pt-BR'),
+    version: __APP_VERSION__,
+    origin,
+    records,
+    adjustments: describeState({ filters, dateRange, merges, forced, removed: [...removed], locale: { dateOrder: locale.dateOrder, numbers: locale.numbers } }),
+    kpis: kpis(t, lastProf).map((k) => [k.label, k.hint ? `${k.value} (${k.hint})` : k.value] as [string, string]),
+    charts: ([...document.querySelectorAll('#charts .chart')] as HTMLElement[]).map(collectChart),
+    criteria,
+    limits,
+    reproduce: `Abra o mesmo arquivo${info?.sha256 ? ' (confira o SHA-256 acima)' : ''} no Dashboard Universal ${__APP_VERSION__} com as mesmas opções de leitura e os mesmos ajustes listados na seção 3, ou use o HTML compartilhado gerado a partir desta análise. Este relatório descreve o estado do painel no momento da geração.`,
+    sample: { columns: cols, rows: t.rows.slice(0, 40).map((r) => cols.map((c) => cellText(r[c]))) },
+  };
+}
+
+/** Relatório em PDF de verdade (texto selecionável, tabelas, páginas numeradas), gerado aqui mesmo e baixado direto. */
+async function openReport() {
+  if (!dataset || !table) return;
+  const btn = $('btnReport') as HTMLButtonElement;
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Gerando PDF…';
+  try {
+    const model = buildReportModel();
+    const [{ default: pdfMake }, vfs] = await Promise.all([import('pdfmake/build/pdfmake'), import('pdfmake/build/vfs_fonts')]);
+    (pdfMake as unknown as { addVirtualFileSystem: (v: unknown) => void }).addVirtualFileSystem((vfs as { default?: unknown }).default ?? vfs);
+    const base = dataset.fileName.replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]+/g, '-');
+    await (pdfMake as unknown as { createPdf: (d: unknown) => { download: (n: string) => Promise<void> } }).createPdf(buildPdfDoc(model)).download(`relatorio-${base}.pdf`);
+  } catch (e) {
+    console.error(e);
+    fail('Não consegui gerar o PDF direto; abrindo o relatório para impressão (use “Salvar como PDF”).');
+    openPrintReport();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
 }
 
 function openShareDialog() {
