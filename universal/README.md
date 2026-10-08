@@ -9,6 +9,11 @@ Projeto independente do painel de triatomíneos (não altera nada dele). Recebe 
 - **Valores inválidos e marcadores de ausência:** coluna numérica com texto isolado continua numérica e lista as linhas problemáticas; “n/d”, “-” e “s/i” contam como sem dado.
 - **Categorias parecidas:** acento, caixa e 1 letra de diferença (“Croatá/Croata/CROATÁ”) geram aviso com botão “Juntar” (reversível; o original não é alterado).
 - **Tabela de dados:** ordenar por coluna, paginar (25/50/100/500) e filtrar por período.
+- **Métricas próprias:** crie contas com as colunas (`[Notificados] / [População] * 100000`, `SUM`, `AVG`, `SUMIF`, `COUNTIF`…). A fórmula fica visível, vazio ou divisão por zero dá “sem dado” (nunca zero) e entra no relatório e no Excel.
+- **Renomear campos e unidades:** na tabela de colunas; filtros, junções e fórmulas acompanham o novo nome.
+- **Projeto:** “Salvar projeto” grava só a configuração (sem os dados); “Abrir projeto” e “Atualizar dados” reaplicam tudo a um arquivo novo, listam o que foi descartado e comparam com a versão anterior (linhas, somas, colunas e valores novos/sumidos).
+- **Excel (.xlsx):** exporta os dados visíveis (números como números, datas, unidades) e uma aba “Origem e ajustes”.
+- **Acessibilidade:** paleta amigável a daltonismo, gráficos com tabela de dados equivalente, mapa de calor com legenda, foco visível, contraste mínimo 4,5:1 testado, rótulos para leitores de tela.
 - **Relatório (PDF):** baixa direto um PDF de verdade (texto selecionável, tabelas, imagens dos gráficos em alta resolução, páginas numeradas e rodapé), gerado no próprio painel com pdfmake — sem diálogo de impressão. Se a geração falhar, abre a versão para impressão como plano B. O documento traz origem (arquivo, SHA-256, data da leitura), registros lidos/ignorados/analisados, filtros e ajustes, indicadores, gráficos, critérios de cálculo, limitações e como reproduzir. Os mapas ficam de fora (dependem de imagens externas); o mapa de calor sai como tabela colorida.
 - **Qualidade:** alertas de duplicatas, colunas vazias/constantes, muitas células vazias e valores muito distantes; dispersão automática quando há correlação ≥ 0,5 entre duas colunas numéricas.
 - **Correção manual:** na tabela *Colunas reconhecidas* dá para trocar o tipo de qualquer coluna e os gráficos se refazem.
@@ -43,5 +48,6 @@ Próximos passos previstos: filtros interativos, mapa por polígonos e temas por
 Prontos em [`instaladores/`](instaladores/LEIA-ME.md): versão leve (0,2 MB) e versão completa em 2 partes (junte com `JUNTAR.bat`), que se **atualiza sozinha** pelo GitHub. Para gerar de novo: `desktop/README.md`.
 
 ## Testes
+- `npm run lint` (ESLint) e `npm run typecheck`.
 - `npm test`: testes unitários (leitura de CSV, XLSX, DOCX, PDF, KML/KMZ, GeoJSON, codificação e separador, valores inválidos, datas e números regionais, categorias parecidas, gráficos, tabela e relatório).
 - `npm run build && npm run test:e2e`: teste de ponta a ponta no navegador (prévia, juntar grafias, ordenar/paginar, período, relatório, HTML compartilhável, arquivo de 120 mil linhas). Requer Chromium (`CHROME_PATH`) e o `playwright-core` da raiz do repositório; não roda no CI.

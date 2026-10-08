@@ -1,6 +1,6 @@
 // Teste de ponta a ponta no navegador (Chromium). Uso: npm run build && npm run test:e2e
 // Variáveis: CHROME_PATH (padrão /opt/pw-browsers/chromium), PLAYWRIGHT_MODULE (padrão ../../node_modules/playwright-core/index.mjs)
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -70,13 +70,72 @@ const info = await page.locator('#tinfo').innerText();
 assert.match(info, /filtradas de 40/);
 ok('filtro por período');
 
+// 4b. Métrica própria, renomear campo, restaurar gráfico, Excel, projeto e "Atualizar dados"
+await page.fill('input[aria-label="Nome da métrica"]', 'Soma dobrada');
+await page.fill('input[aria-label="Fórmula da métrica"]', 'SUM([qtd]) * 2');
+await page.click('button:has-text("Adicionar métrica")');
+await page.waitForTimeout(300);
+assert.ok((await page.locator('#kpis .kpi').allInnerTexts()).some((x) => x.includes('Soma dobrada')), 'KPI da métrica');
+assert.match(await page.locator('#metricsBox').innerText(), /SUM\(\[qtd\]\) \* 2/, 'fórmula visível');
+await page.fill('input[aria-label="Nome da coluna qtd"]', 'quantidade');
+await page.dispatchEvent('input[aria-label="Nome da coluna qtd"]', 'change');
+await page.waitForTimeout(300);
+assert.match(await page.locator('#metricsBox').innerText(), /\[quantidade\]/, 'fórmula acompanha o renome');
+assert.ok((await page.locator('#tbl th').allInnerTexts()).join('|').includes('quantidade'));
+ok('métrica própria com fórmula visível e renomear campo (fórmula acompanha)');
+
+const nCharts = await page.locator('.chart').count();
+await page.locator('.chart .x').first().click();
+assert.equal(await page.locator('.chart').count(), nCharts - 1);
+await page.click('#btnRestore');
+assert.equal(await page.locator('.chart').count(), nCharts);
+ok('remover e restaurar gráfico');
+
+const { unzipSync } = await import('fflate');
+const [xl] = await Promise.all([page.waitForEvent('download'), page.click('#btnXlsx')]);
+await xl.saveAs(join(dir, 'saida.xlsx'));
+const zx = unzipSync(new Uint8Array(readFileSync(join(dir, 'saida.xlsx'))));
+assert.ok(zx['xl/workbook.xml'] && zx['[Content_Types].xml'], 'xlsx válido');
+assert.match(new TextDecoder().decode(zx['xl/workbook.xml']), /Origem e ajustes/);
+ok('Excel (.xlsx) com aba de dados e aba de origem/ajustes');
+
+const [pj] = await Promise.all([page.waitForEvent('download'), page.click('#btnSaveProj')]);
+await pj.saveAs(join(dir, 'p.projeto.json'));
+const proj = JSON.parse(readFileSync(join(dir, 'p.projeto.json'), 'utf8'));
+assert.equal(proj.estado.metrics.length, 1);
+assert.equal(proj.estado.renames.qtd, 'quantidade');
+ok('projeto salvo (sem os dados) com métrica e renomes');
+
+const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#btnUpdate')]);
+await fc.setFiles(join(dir, 'cp1252.csv'));
+await page.waitForSelector('#preview:not([hidden]) .notice');
+assert.match(await page.locator('#preview .notice').innerText(), /Configuração reaplicada/);
+assert.match(await page.locator('#preview .notice').innerText(), /Linhas: 40 → 40/);
+await page.click('#preview button.primary');
+await page.waitForSelector('#kpis .kpi');
+assert.ok((await page.locator('#kpis .kpi').allInnerTexts()).some((x) => x.includes('Soma dobrada')));
+assert.match(await page.locator('#tinfo').innerText(), /filtradas de 40/);
+ok('Atualizar dados reaplica métrica, período e ajustes e mostra o que mudou');
+
+const p4 = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+p4.on('pageerror', (e) => errors.push(e.message));
+await p4.goto(app);
+await p4.setInputFiles('#projFile', join(dir, 'p.projeto.json'));
+await p4.waitForFunction(() => document.getElementById('note')?.textContent?.includes('Projeto aberto'));
+await p4.setInputFiles('#file', join(dir, 'cp1252.csv'));
+await p4.waitForSelector('#preview:not([hidden]) .notice');
+await p4.click('#preview button.primary');
+await p4.waitForSelector('#kpis .kpi');
+assert.ok((await p4.locator('#kpis .kpi').allInnerTexts()).some((x) => x.includes('Soma dobrada')));
+await p4.close();
+ok('abrir projeto salvo e aplicar a um arquivo');
+
 // 5. Relatório em PDF de verdade (download direto, sem diálogo de impressão)
 const [pdfDl] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.click('#btnReport')]);
 assert.match(pdfDl.suggestedFilename(), /^relatorio-cp1252\.pdf$/);
 const pdfPath = join(dir, 'relatorio.pdf');
 await pdfDl.saveAs(pdfPath);
 const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-const { readFileSync } = await import('node:fs');
 const doc = await pdfjs.getDocument({ data: new Uint8Array(readFileSync(pdfPath)) }).promise;
 assert.ok(doc.numPages >= 2, 'PDF com 2 ou mais páginas');
 let pdfText = '';

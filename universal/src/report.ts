@@ -7,6 +7,9 @@ export interface StateForReport {
   merges: Record<string, Record<string, string>>;
   forced: Record<string, ColType>;
   removed: string[];
+  renames?: Record<string, string>;
+  units?: Record<string, string>;
+  metrics?: { name: string; unit?: string; formula: string }[];
   locale: { dateOrder: 'dmy' | 'mdy'; numbers: 'br' | 'us' };
 }
 
@@ -27,6 +30,9 @@ export function describeState(s: StateForReport): string[] {
   }
   for (const [col, map] of Object.entries(s.merges)) out.push(`Grafias unificadas em “${col}”: ${Object.entries(map).map(([a, b]) => `“${a}” → “${b}”`).join(', ')}`);
   for (const [col, t] of Object.entries(s.forced)) out.push(`Tipo da coluna “${col}” definido manualmente: ${TYPE_PT[t] ?? t}`);
+  for (const [a, b] of Object.entries(s.renames ?? {})) if (b && b !== a) out.push(`Campo renomeado: “${a}” → “${b}”`);
+  for (const [c, u] of Object.entries(s.units ?? {})) if (u) out.push(`Unidade de “${c}”: ${u}`);
+  for (const m of s.metrics ?? []) out.push(`Métrica própria “${m.name}${m.unit ? ` (${m.unit})` : ''}” = ${m.formula}`);
   if (s.removed.length) out.push(`${s.removed.length} gráfico(s) removido(s) do painel pelo usuário`);
   out.push(`Interpretação regional: datas com barra como ${s.locale.dateOrder === 'dmy' ? 'dia/mês/ano' : 'mês/dia/ano'}; números com ${s.locale.numbers === 'br' ? 'ponto de milhar e vírgula decimal (padrão brasileiro)' : 'vírgula de milhar e ponto decimal (padrão americano)'}`);
   return out;
