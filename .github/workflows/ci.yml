@@ -24,3 +24,20 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run build:static
+
+  universal:
+    name: Dashboard Universal
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-workspaces
+        working-directory: universal
+      - run: npx tsc --noEmit
+        working-directory: universal
+      - run: npm test
+        working-directory: universal
+      - run: npm run build
+        working-directory: universal
