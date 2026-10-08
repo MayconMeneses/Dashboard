@@ -25,4 +25,4 @@ npm test
 Próximos passos previstos: filtros interativos, mapa por polígonos e temas por assunto.
 
 ## Instaladores (Windows)
-Prontos em [`instaladores/`](instaladores/LEIA-ME.md): versão leve (0,2 MB) e versão completa em 2 partes (junte com `JUNTAR.bat`). Para gerar de novo: `desktop/README.md`.
+Prontos em [`instaladores/`](instaladores/LEIA-ME.md): versão leve (0,2 MB) e versão completa em 2 partes (junte com `JUNTAR.bat`), que se **atualiza sozinha** pelo GitHub. Para gerar de novo: `desktop/README.md`.

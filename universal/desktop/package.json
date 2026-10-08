@@ -1,6 +1,6 @@
 {
   "name": "dashboard-universal-desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "main": "main.cjs",
   "description": "Dashboard Universal – gera painéis automáticos a partir de CSV, Excel, JSON, GeoJSON, KML e KMZ",
@@ -9,7 +9,8 @@
     "prepare-app": "node prepare.mjs",
     "start": "npm run prepare-app && electron .",
     "dist:win": "npm run prepare-app && electron-builder --win nsis --x64",
-    "dist:leve": "npm run prepare-app && node build-leve.mjs"
+    "dist:leve": "npm run prepare-app && node build-leve.mjs",
+    "publicar": "node publicar-atualizacao.mjs"
   },
   "build": {
     "publish": null,
@@ -64,5 +65,7 @@
   "devDependencies": {
     "electron": "44.7.0",
     "electron-builder": "26.15.3"
-  }
+  },
+  "painelVersao": "0.2.0",
+  "programaMinimo": "0.2.0"
 }
