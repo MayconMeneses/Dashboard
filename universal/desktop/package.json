@@ -8,7 +8,8 @@
   "scripts": {
     "prepare-app": "node prepare.mjs",
     "start": "npm run prepare-app && electron .",
-    "dist:win": "npm run prepare-app && electron-builder --win nsis --x64"
+    "dist:win": "npm run prepare-app && electron-builder --win nsis --x64",
+    "dist:leve": "npm run prepare-app && node build-leve.mjs"
   },
   "build": {
     "publish": null,
