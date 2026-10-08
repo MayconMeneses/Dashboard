@@ -4,11 +4,20 @@ import 'leaflet/dist/leaflet.css';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import PdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&inline';
 import { parseFile } from './parse.js';
-import { profileTable, toNumber } from './profile.js';
+import type { ParseOptions } from './parse.js';
+import { inferLocale, locale, profileTable, toNumber } from './profile.js';
+import type { LocaleInfo } from './profile.js';
+import { delimiterName } from './csv.js';
+import type { DelimiterChoice, Encoding } from './csv.js';
+import { describeState, formatBytes } from './report.js';
+import { applyMerges } from './similar.js';
+import { filterByDate, pageOf, sortRows } from './tableview.js';
+import type { SortDir } from './tableview.js';
 import { bubbleData, compatibleStyles, funnelData, toHeatmap, toPercent, toPareto } from './shapes.js';
 import { chartData, HOW_TO, HOWTO_SHAPE, insightFor, kpis, qualityAlerts, rateData, rateInsight, suggestCharts } from './suggest.js';
 import type { SeriesData } from './suggest.js';
-import type { ChartSpec, ColType, Dataset, Table } from './types.js';
+import type { ChartSpec, ColProfile, ColType, Dataset, Table } from './types.js';
+import { maxOf } from './util.js';
 
 Chart.register(...registerables);
 pdfjs.GlobalWorkerOptions.workerPort = new PdfWorker();
@@ -25,17 +34,50 @@ const rateChoice: Record<string, number> = {};
 const styleChoice: Record<string, string> = {};
 let forced: Record<string, ColType> = {};
 let filters: Record<string, string> = {};
+let merges: Record<string, Record<string, string>> = {};
+let dateRange: { col?: string; from?: string; to?: string } = {};
+let sortState: { col: string; dir: SortDir } | null = null;
+let page = 1;
+let pageSize = 50;
+let basemap: 'esri' | 'none' = 'esri';
+let locInfo: LocaleInfo | null = null;
+let lastProf: ColProfile[] = [];
+let lastSpecs: ChartSpec[] = [];
 
+let mergedFor: Table | null = null;
+let mergedKey = '';
+let mergedVal: Table | null = null;
+/** tabela com as grafias unificadas pelo usuário ("Juntar"); o original nunca é alterado */
+function mergedTable(): Table {
+  const key = JSON.stringify(merges);
+  if (mergedVal && mergedFor === table && key === mergedKey) return mergedVal;
+  mergedFor = table;
+  mergedKey = key;
+  mergedVal = applyMerges(table!, merges);
+  return mergedVal;
+}
+
+const currentLoc = (): LocaleInfo | undefined => {
+  const li = locInfo as LocaleInfo | null;
+  return li ? { ...li, dateOrder: locale.dateOrder, numbers: locale.numbers } : undefined;
+};
+
+/** linhas após os filtros (clique nos gráficos e período) */
 function view(): Table {
-  const t = table!;
+  const base = mergedTable();
   const keys = Object.keys(filters);
-  if (!keys.length) return t;
-  return { ...t, rows: t.rows.filter((r) => keys.every((k) => String(r[k] ?? '') === filters[k])) };
+  const dated = !!dateRange.col && !!(dateRange.from || dateRange.to);
+  if (!keys.length && !dated) return base;
+  let rows = base.rows;
+  if (keys.length) rows = rows.filter((r) => keys.every((k) => String(r[k] ?? '') === filters[k]));
+  if (dated) rows = filterByDate(rows, dateRange.col!, dateRange.from, dateRange.to);
+  return { ...base, rows };
 }
 
 function toggleFilter(col: string, value: string) {
   if (filters[col] === value) delete filters[col];
   else filters = { ...filters, [col]: value };
+  page = 1;
   render();
 }
 const TYPE_NAMES: Record<string, string> = { number: 'número', integer: 'inteiro', date: 'data', category: 'categoria', boolean: 'sim/não', text: 'texto', id: 'identificador', lat: 'latitude', lon: 'longitude' };
@@ -70,11 +112,17 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
     const prof = profileTable(t, forced);
     const lat = prof.find((p) => p.type === 'lat')!.name;
     const lon = prof.find((p) => p.type === 'lon')!.name;
+    const bsel = el('select', { ariaLabel: 'Mapa de fundo' }, el('option', { value: 'esri', selected: basemap === 'esri' }, 'Mapa de fundo: Esri (acessa a internet)'), el('option', { value: 'none', selected: basemap === 'none' }, 'Sem mapa de fundo (não acessa a internet)'));
+    bsel.onchange = () => {
+      basemap = bsel.value as 'esri' | 'none';
+      render();
+    };
+    card.append(el('p', { className: 'rate-pick' }, bsel));
     const div = el('div', { className: 'map' });
     card.append(div);
     queueMicrotask(() => {
       const map = L.map(div);
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Tiles © Esri' }).addTo(map);
+      if (basemap === 'esri') L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Tiles © Esri' }).addTo(map);
       const pts: L.LatLngTuple[] = [];
       for (const r of t.rows.slice(0, 5000)) {
         const a = toNumber(r[lat] ?? null);
@@ -276,7 +324,7 @@ function drawFunnel(card: HTMLElement, spec: ChartSpec, t: Table): HTMLElement {
   card.append(el('details', { className: 'howto' }, el('summary', {}, 'Por que este gráfico e como ler'), el('p', {}, el('b', {}, 'Por que: '), spec.why ?? ''), el('p', {}, el('b', {}, 'Como ler: '), spec.howTo ?? '')));
   const canvas = el('canvas');
   card.append(el('div', { className: 'box short' }, canvas));
-  const max = Math.max(...f.values, 1);
+  const max = maxOf(f.values, 1);
   charts.push(
     new Chart(canvas, {
       type: 'bar',
@@ -293,7 +341,7 @@ function drawBubble(card: HTMLElement, spec: ChartSpec, t: Table): HTMLElement {
     card.append(el('p', {}, 'Sem dados suficientes para este gráfico.'));
     return card;
   }
-  const maxS = Math.max(...pts.map((p) => p.size), 1);
+  const maxS = maxOf(pts.map((p) => p.size), 1);
   const top = [...pts].sort((a, b) => b.y - a.y)[0]!;
   card.append(el('p', { className: 'insight' }, el('b', {}, 'Destaque: '), `maior positividade em ${top.entity} (${top.y.toFixed(1).replace('.', ',')}%, ${new Intl.NumberFormat('pt-BR').format(top.x)} ${spec.bubble!.xLabel.toLowerCase()}).`));
   card.append(el('details', { className: 'howto' }, el('summary', {}, 'Por que este gráfico e como ler'), el('p', {}, el('b', {}, 'Por que: '), spec.why ?? ''), el('p', {}, el('b', {}, 'Como ler: '), spec.howTo ?? '')));
@@ -321,12 +369,13 @@ function drawBubble(card: HTMLElement, spec: ChartSpec, t: Table): HTMLElement {
 function render() {
   if (!table) return;
   reset();
-  const full = table;
+  const full = mergedTable();
   const t = view();
   const prof = profileTable(full, forced);
+  lastProf = prof;
   $('ttl').textContent = full.title ?? full.name;
   $('ctx').textContent = full.context ?? '';
-  const alerts = qualityAlerts(full, prof);
+  const alerts = qualityAlerts(full, prof, currentLoc());
   $('chips').replaceChildren(
     ...Object.entries(filters).map(([k, v]) => {
       const b = el('button', { type: 'button', className: 'chip', title: 'Remover este filtro' }, `${k}: ${v}  ✕`);
@@ -335,13 +384,42 @@ function render() {
     }),
   );
   ($('chips') as HTMLElement).hidden = !Object.keys(filters).length;
-  $('alerts').replaceChildren(...alerts.map((a) => el('li', { className: a.level }, a.text)));
-  ($('alertsBox') as HTMLElement).hidden = !alerts.length;
+  const mergeNotes = Object.entries(merges).map(([col, map]) => {
+    const li = el('li', { className: 'info' }, `Em “${col}”, grafias unificadas por você: ${Object.entries(map).map(([a, b]) => `“${a}” → “${b}”`).join(', ')}. `);
+    const undo = el('button', { type: 'button', className: 'mini' }, 'Desfazer');
+    undo.onclick = () => {
+      const { [col]: _gone, ...rest } = merges;
+      void _gone;
+      merges = rest;
+      render();
+    };
+    li.append(undo);
+    return li;
+  });
+  $('alerts').replaceChildren(
+    ...mergeNotes,
+    ...alerts.map((a) => {
+      const li = el('li', { className: a.level }, a.text);
+      if (a.merge) {
+        const mg = a.merge;
+        const b = el('button', { type: 'button', className: 'mini' }, `Juntar como “${mg.to}”`);
+        b.onclick = () => {
+          merges = { ...merges, [mg.col]: { ...(merges[mg.col] ?? {}), ...Object.fromEntries(mg.values.filter((v) => v !== mg.to).map((v) => [v, mg.to])) } };
+          render();
+        };
+        li.append(' ', b);
+      }
+      return li;
+    }),
+  );
+  ($('alertsBox') as HTMLElement).hidden = !alerts.length && !mergeNotes.length;
+  renderDateBar(prof);
   $('kpis').replaceChildren(...kpis(t, prof).map((k) => el('div', { className: 'kpi', title: k.hint ?? '' }, el('b', {}, k.value), el('span', {}, k.label))));
   const specs = suggestCharts(full, prof, Number(($('level') as HTMLSelectElement).value)).filter((s) => !removed.has(s.id));
+  lastSpecs = specs;
   $('charts').replaceChildren(...(full.noCharts ? [el('div', { className: 'card' }, el('p', {}, 'Sem gráficos: este documento não tem tabelas com colunas alinhadas, só texto. O texto extraído está na tabela abaixo; para gráficos, use o arquivo original em Excel ou CSV.'))] : specs.map((s) => drawChart(s, t))));
-  renderTable(($('q') as HTMLInputElement).value);
-  const th = ['Coluna', 'Tipo (pode corrigir)', 'Preenchidas', 'Vazias', 'Valores distintos'];
+  renderTable();
+  const th = ['Coluna', 'Tipo (pode corrigir)', 'Preenchidas', 'Vazias', 'Valores distintos', 'Valores inválidos'];
   $('cols').replaceChildren(
     el('thead', {}, el('tr', {}, ...th.map((h) => el('th', {}, h)))),
     el(
@@ -354,23 +432,73 @@ function render() {
           removed = new Set();
           render();
         };
-        return el('tr', {}, el('td', {}, p.name), el('td', {}, sel), el('td', {}, String(p.filled)), el('td', {}, String(p.missing)), el('td', {}, String(p.unique)));
+        return el('tr', {}, el('td', {}, p.name), el('td', {}, sel), el('td', {}, String(p.filled)), el('td', {}, String(p.missing)), el('td', {}, String(p.unique)), el('td', {}, p.invalidCount ? `${p.invalidCount} (ex.: linha ${p.invalid![0]!.row}: “${p.invalid![0]!.value}”)` : '—'));
       }),
     ),
   );
 }
 
-function renderTable(q: string) {
+function renderDateBar(prof: ColProfile[]) {
+  const bar = $('dateBar');
+  const dcols = prof.filter((p) => p.type === 'date');
+  bar.hidden = !dcols.length;
+  if (!dcols.length) return;
+  const col = dateRange.col && dcols.some((d) => d.name === dateRange.col) ? dateRange.col : dcols[0]!.name;
+  const cur = dcols.find((d) => d.name === col)!;
+  const iso = (ms?: number) => (ms == null ? undefined : new Date(ms).toISOString().slice(0, 10));
+  const sel = el('select', { ariaLabel: 'Coluna de data do período' }, ...dcols.map((d) => el('option', { value: d.name, selected: d.name === col }, d.name)));
+  const from = el('input', { type: 'date', value: dateRange.from ?? '', min: iso(cur.minDate), max: iso(cur.maxDate), ariaLabel: 'Período: de' });
+  const to = el('input', { type: 'date', value: dateRange.to ?? '', min: iso(cur.minDate), max: iso(cur.maxDate), ariaLabel: 'Período: até' });
+  const apply = () => {
+    dateRange = { col: sel.value, from: from.value || undefined, to: to.value || undefined };
+    page = 1;
+    render();
+  };
+  sel.onchange = apply;
+  from.onchange = apply;
+  to.onchange = apply;
+  const clear = el('button', { type: 'button', className: 'mini' }, 'Limpar período');
+  clear.onclick = () => {
+    dateRange = {};
+    page = 1;
+    render();
+  };
+  bar.replaceChildren(el('b', {}, 'Período: '), sel, ' de ', from, ' até ', to, ' ', clear, el('span', { className: 'muted' }, ' Linhas sem data nessa coluna ficam fora quando o período está ativo.'));
+}
+
+const cellText = (v: unknown) => (v instanceof Date ? v.toLocaleDateString('pt-BR') : v == null ? '—' : String(v));
+
+function renderTable() {
   if (!table) return;
+  const base = mergedTable();
   const tv = view();
-  const needle = q.trim().toLowerCase();
-  const rows = needle ? tv.rows.filter((r) => table!.columns.some((c) => String(r[c] ?? '').toLowerCase().includes(needle))) : tv.rows;
-  const shown = rows.slice(0, 500);
-  $('tbl').replaceChildren(
-    el('thead', {}, el('tr', {}, ...table.columns.map((c) => el('th', {}, c)))),
-    el('tbody', {}, ...shown.map((r) => el('tr', {}, ...table!.columns.map((c) => el('td', {}, r[c] instanceof Date ? (r[c] as Date).toLocaleDateString('pt-BR') : r[c] == null ? '—' : String(r[c])))))),
-  );
-  $('tinfo').textContent = `Mostrando ${shown.length} de ${rows.length} linha(s). “—” significa sem dado (não é zero).`;
+  const needle = ($('q') as HTMLInputElement).value.trim().toLowerCase();
+  let rows = needle ? tv.rows.filter((r) => base.columns.some((c) => String(r[c] ?? '').toLowerCase().includes(needle))) : tv.rows;
+  const types = Object.fromEntries(lastProf.map((p) => [p.name, p.type]));
+  if (sortState && base.columns.includes(sortState.col)) rows = sortRows(rows, sortState.col, sortState.dir, types[sortState.col] as ColType | undefined);
+  const pg = pageOf(rows, page, pageSize);
+  page = pg.page;
+  const heads = base.columns.map((c) => {
+    const th = el('th', {});
+    const active = sortState?.col === c;
+    th.setAttribute('aria-sort', active ? (sortState!.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+    const b = el('button', { type: 'button', className: 'sortbtn', title: 'Clique para ordenar' }, c + (active ? (sortState!.dir === 'asc' ? ' ▲' : ' ▼') : ''));
+    b.onclick = () => {
+      sortState = !active ? { col: c, dir: 'asc' } : sortState!.dir === 'asc' ? { col: c, dir: 'desc' } : null;
+      renderTable();
+    };
+    th.append(b);
+    return th;
+  });
+  $('tbl').replaceChildren(el('thead', {}, el('tr', {}, ...heads)), el('tbody', {}, ...pg.items.map((r) => el('tr', {}, ...base.columns.map((c) => el('td', {}, cellText(r[c])))))));
+  $('tinfo').textContent = `Mostrando ${pg.from}–${pg.to} de ${rows.length} linha(s)${rows.length !== base.rows.length ? ` (filtradas de ${base.rows.length})` : ''}. “—” significa sem dado (não é zero).`;
+  const prev = el('button', { type: 'button', disabled: pg.page <= 1 }, '‹ Anterior');
+  const next = el('button', { type: 'button', disabled: pg.page >= pg.pages }, 'Próxima ›');
+  prev.onclick = () => ((page = pg.page - 1), renderTable());
+  next.onclick = () => ((page = pg.page + 1), renderTable());
+  const sz = el('select', { ariaLabel: 'Linhas por página' }, ...[25, 50, 100, 500].map((n) => el('option', { value: String(n), selected: n === pageSize }, `${n} por página`)));
+  sz.onchange = () => ((pageSize = Number(sz.value)), (page = 1), renderTable());
+  $('pager').replaceChildren(prev, el('span', {}, ` Página ${pg.page} de ${pg.pages} `), next, ' ', sz);
 }
 
 interface SharedState {
@@ -381,13 +509,31 @@ interface SharedState {
   removed?: string[];
   styleChoice?: Record<string, string>;
   rateChoice?: Record<string, number>;
+  merges?: Record<string, Record<string, string>>;
+  locale?: { dateOrder: 'dmy' | 'mdy'; numbers: 'br' | 'us' };
+  dateRange?: { col?: string; from?: string; to?: string };
+  basemap?: 'esri' | 'none';
+  pageSize?: number;
 }
 
 function load(ds: Dataset, st: SharedState = {}) {
   dataset = ds;
+  pending = null;
+  $('preview').hidden = true;
   removed = new Set(st.removed ?? []);
   forced = st.forced ?? {};
   filters = st.filters ?? {};
+  merges = st.merges ?? {};
+  dateRange = st.dateRange ?? {};
+  basemap = st.basemap ?? 'esri';
+  pageSize = st.pageSize ?? 50;
+  sortState = null;
+  page = 1;
+  locInfo = inferLocale(ds.tables);
+  if (st.locale) {
+    locale.dateOrder = st.locale.dateOrder;
+    locale.numbers = st.locale.numbers;
+  }
   Object.assign(styleChoice, st.styleChoice ?? {});
   Object.assign(rateChoice, st.rateChoice ?? {});
   if (st.level) ($('level') as HTMLSelectElement).value = st.level;
@@ -404,12 +550,122 @@ function load(ds: Dataset, st: SharedState = {}) {
   render();
 }
 
-async function handle(f: File) {
+// ---------- prévia: o usuário confere como o arquivo foi lido antes de gerar o painel ----------
+interface Pending {
+  fileName: string;
+  bytes: Uint8Array;
+  opts: ParseOptions;
+  ds: Dataset;
+  tableIndex: number;
+  forcedTmp: Record<string, ColType>;
+  sha?: string;
+}
+let pending: Pending | null = null;
+
+async function sha256(bytes: Uint8Array): Promise<string | undefined> {
   try {
-    load(await parseFile(f.name, new Uint8Array(await f.arrayBuffer()), PDF));
+    const h = await crypto.subtle.digest('SHA-256', bytes.slice());
+    return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return undefined;
+  }
+}
+
+async function startFile(fileName: string, bytes: Uint8Array, opts: ParseOptions = {}, keep?: Pending) {
+  try {
+    const ds = await parseFile(fileName, bytes, { ...PDF, ...opts });
+    const sha = keep?.sha ?? (await sha256(bytes));
+    ds.info = { ...ds.info!, sha256: sha, readAt: keep?.ds.info?.readAt ?? new Date().toISOString() };
+    if (!keep) {
+      const li = inferLocale(ds.tables);
+      locInfo = li;
+      locale.dateOrder = li.dateOrder;
+      locale.numbers = li.numbers;
+    }
+    pending = { fileName, bytes, opts, ds, tableIndex: 0, forcedTmp: keep?.forcedTmp ?? {}, sha };
+    $('msg').textContent = '';
+    renderPreview();
   } catch (e) {
     fail(e instanceof Error ? e.message : 'Não foi possível ler o arquivo.');
   }
+}
+
+function renderPreview() {
+  const p = pending;
+  if (!p) return;
+  const info = p.ds.info!;
+  const t = p.ds.tables[p.tableIndex]!;
+  const prof = profileTable(t, p.forcedTmp);
+  const n = (x: number) => new Intl.NumberFormat('pt-BR').format(x);
+  const box = $('preview');
+  box.hidden = false;
+  $('drop').hidden = true;
+  $('app').hidden = true;
+  $('actions').hidden = true;
+
+  const dl = (rows: [string, string][]) => el('dl', {}, ...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)]));
+  const rows: [string, string][] = [['Arquivo', p.fileName], ['Formato', `.${info.format}`], ['Tamanho', formatBytes(info.bytes)]];
+  if (info.sha256) rows.push(['SHA-256', info.sha256]);
+  if (info.encoding) rows.push(['Codificação do texto', info.encoding]);
+  if (info.delimiter) rows.push(['Separador de colunas', `${delimiterName(info.delimiter)}${info.delimiterGuessed ? ' (detectado)' : ' (escolhido)'}`]);
+  rows.push(['Tabelas encontradas', String(p.ds.tables.length)], ['Linhas lidas', n(info.rowsRead)], ['Linhas ignoradas (em branco ou título)', n(info.rowsDropped)], ['Linhas não lidas (acima do limite)', n(info.truncated)]);
+
+  const sel = <V extends string>(label: string, value: V, options: [V, string][], onChange: (v: V) => void) => {
+    const s = el('select', { ariaLabel: label }, ...options.map(([v, l]) => el('option', { value: v, selected: v === value }, l)));
+    s.onchange = () => onChange(s.value as V);
+    return el('label', {}, label + ' ', s);
+  };
+  const textual = ['csv', 'tsv', 'txt', 'json', 'geojson', 'kml'].includes(info.format);
+  const reparse = (o: ParseOptions) => void startFile(p.fileName, p.bytes, { ...p.opts, ...o }, p);
+  const controls = el('fieldset', {}, el('legend', {}, 'Se algo estiver errado, ajuste aqui'));
+  if (textual) controls.append(sel<Encoding>('Codificação', p.opts.encoding ?? 'auto', [['auto', 'Automática'], ['utf-8', 'UTF-8'], ['windows-1252', 'Windows-1252 (Excel BR)']], (v) => reparse({ encoding: v })));
+  if (['csv', 'tsv', 'txt'].includes(info.format)) controls.append(sel<DelimiterChoice>('Separador', p.opts.delimiter ?? 'auto', [['auto', 'Automático'], [',', 'Vírgula'], [';', 'Ponto e vírgula'], ['\t', 'Tabulação'], ['|', 'Barra vertical']], (v) => reparse({ delimiter: v })));
+  controls.append(
+    sel<'dmy' | 'mdy'>('Datas com barra (03/04/2024)', locale.dateOrder, [['dmy', 'dia/mês/ano'], ['mdy', 'mês/dia/ano']], (v) => ((locale.dateOrder = v), renderPreview())),
+    sel<'br' | 'us'>('Números', locale.numbers, [['br', '1.234,56 (padrão brasileiro)'], ['us', '1,234.56 (padrão americano)']], (v) => ((locale.numbers = v), renderPreview())),
+  );
+  if (p.ds.tables.length > 1) controls.append(sel<string>('Tabela / aba', String(p.tableIndex), p.ds.tables.map((tb, i) => [String(i), `${tb.title ?? tb.name} (${n(tb.rows.length)} linhas)`] as [string, string]), (v) => ((p.tableIndex = Number(v)), renderPreview())));
+
+  const alerts = qualityAlerts(t, prof, currentLoc());
+  const notes = [...info.notes.map((x) => ({ level: 'info', text: x })), ...alerts.map((a) => ({ level: a.level, text: a.text }))];
+  const notesUl = el('ul', {}, ...notes.slice(0, 16).map((x) => el('li', { className: x.level }, x.text)));
+  if (notes.length > 16) notesUl.append(el('li', { className: 'info' }, `…e mais ${notes.length - 16} aviso(s), que aparecem no painel.`));
+
+  const colRows = prof.map((c) => {
+    const s = el('select', { ariaLabel: `Tipo da coluna ${c.name}` }, ...Object.entries(TYPE_NAMES).map(([v, l]) => el('option', { value: v, selected: v === c.type }, l)));
+    s.onchange = () => {
+      p.forcedTmp = { ...p.forcedTmp, [c.name]: s.value as ColType };
+      renderPreview();
+    };
+    return el('tr', {}, el('td', {}, c.name), el('td', {}, s), el('td', {}, String(c.filled)), el('td', {}, String(c.missing)), el('td', {}, c.invalidCount ? `${c.invalidCount} (linha ${c.invalid![0]!.row}: “${c.invalid![0]!.value}”)` : '—'));
+  });
+  const sample = t.rows.slice(0, 8);
+  const go = el('button', { type: 'button', className: 'primary' }, 'Gerar painel');
+  go.onclick = () => load(p.ds, { tableIndex: p.tableIndex, forced: p.forcedTmp, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers } });
+  const cancel = el('button', { type: 'button' }, 'Escolher outro arquivo');
+  cancel.onclick = () => {
+    pending = null;
+    box.hidden = true;
+    $('drop').hidden = false;
+    ($('file') as HTMLInputElement).value = '';
+  };
+  box.replaceChildren(
+    el('h2', {}, 'Prévia: confira como li o arquivo'),
+    el('p', { className: 'muted' }, 'Nada foi aplicado ainda. Confira o que foi lido, corrija se preciso e só então gere o painel.'),
+    dl(rows),
+    controls,
+    el('h3', {}, 'Avisos e decisões da leitura'),
+    notes.length ? notesUl : el('p', { className: 'muted' }, 'Nenhum aviso.'),
+    el('h3', {}, `Colunas da tabela “${t.title ?? t.name}” (${t.columns.length})`),
+    el('div', { className: 'tablewrap' }, el('table', {}, el('thead', {}, el('tr', {}, ...['Coluna', 'Tipo (pode corrigir)', 'Preenchidas', 'Vazias', 'Valores inválidos'].map((h) => el('th', {}, h)))), el('tbody', {}, ...colRows))),
+    el('h3', {}, `Primeiras ${sample.length} linhas`),
+    el('div', { className: 'tablewrap' }, el('table', {}, el('thead', {}, el('tr', {}, ...t.columns.map((c) => el('th', {}, c)))), el('tbody', {}, ...sample.map((r) => el('tr', {}, ...t.columns.map((c) => el('td', {}, cellText(r[c])))))))),
+    el('div', { className: 'btns' }, cancel, go),
+  );
+}
+
+async function handle(f: File) {
+  await startFile(f.name, new Uint8Array(await f.arrayBuffer()));
 }
 
 function download(name: string, mime: string, content: string) {
@@ -424,7 +680,7 @@ const csvCell = (v: unknown) => {
 };
 
 function captureState(): SharedState {
-  return { level: ($('level') as HTMLSelectElement).value, tableIndex: dataset && table ? dataset.tables.indexOf(table) : 0, forced, filters, removed: [...removed], styleChoice: { ...styleChoice }, rateChoice: { ...rateChoice } };
+  return { level: ($('level') as HTMLSelectElement).value, tableIndex: dataset && table ? dataset.tables.indexOf(table) : 0, forced, filters, removed: [...removed], styleChoice: { ...styleChoice }, rateChoice: { ...rateChoice }, merges, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers }, dateRange, basemap, pageSize };
 }
 
 /** Gera um único .html com o painel e os dados embutidos, abrindo igual ao que está na tela. */
@@ -445,6 +701,96 @@ function exportHtml(opts: { title: string; fileName: string; readonly: boolean }
   clone.querySelector('body')!.append(s);
   const name = opts.fileName.replace(/[\\/:*?"<>|]+/g, '-').replace(/\.html?$/i, '') || 'painel';
   download(`${name}.html`, 'text/html', '<!doctype html>\n' + clone.outerHTML.replace(/<canvas[^>]*><\/canvas>/g, ''));
+}
+
+/** Relatório estruturado para imprimir ou salvar em PDF: origem, registros, filtros, indicadores, gráficos, critérios e limitações. */
+function openReport() {
+  if (!dataset || !table) return;
+  const full = mergedTable();
+  const t = view();
+  const info = dataset.info;
+  const n = (x: number) => new Intl.NumberFormat('pt-BR').format(x);
+  const root = $('report');
+  const dl = (rows: [string, string][]) => el('dl', {}, ...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)]));
+  const list = (items: string[]) => (items.length ? el('ul', {}, ...items.map((x) => el('li', {}, x))) : el('p', { className: 'muted' }, 'Nenhum.'));
+
+  const origin: [string, string][] = [['Arquivo', dataset.fileName]];
+  if (info) {
+    origin.push(['Formato', `.${info.format}`], ['Tamanho', formatBytes(info.bytes)]);
+    if (info.sha256) origin.push(['SHA-256 do arquivo original', info.sha256]);
+    if (info.readAt) origin.push(['Lido em', new Date(info.readAt).toLocaleString('pt-BR')]);
+    if (info.encoding) origin.push(['Codificação do texto', info.encoding]);
+    if (info.delimiter) origin.push(['Separador de colunas', delimiterName(info.delimiter)]);
+  }
+  origin.push(['Tabela analisada', `${table.title ?? table.name} (${n(table.rows.length)} linhas, ${table.columns.length} colunas)`], ['Versão do painel', __APP_VERSION__]);
+
+  const records: [string, string][] = [];
+  if (info) records.push(['Linhas lidas (todas as tabelas)', n(info.rowsRead)], ['Linhas ignoradas (em branco ou título)', n(info.rowsDropped)], ['Linhas não lidas (acima do limite)', n(info.truncated)]);
+  records.push(['Linhas da tabela analisada', n(table.rows.length)], ['Linhas após filtros e período', n(t.rows.length)]);
+
+  const live = [...document.querySelectorAll('#charts .chart')] as HTMLElement[];
+  const gallery = el('div', { className: 'charts' });
+  for (const card of live) {
+    const clone = card.cloneNode(true) as HTMLElement;
+    const orig = card.querySelectorAll('canvas');
+    clone.querySelectorAll('canvas').forEach((cv, i) => {
+      const img = document.createElement('img');
+      try {
+        img.src = (orig[i] as HTMLCanvasElement).toDataURL('image/png');
+      } catch {
+        /* sem imagem */
+      }
+      cv.replaceWith(img);
+    });
+    clone.querySelectorAll('button, select').forEach((x) => x.remove());
+    clone.querySelectorAll('.map').forEach((x) => x.replaceWith(el('p', { className: 'muted' }, 'Mapa omitido do relatório (depende de imagens externas); veja o painel.')));
+    clone.querySelectorAll('details').forEach((d) => d.setAttribute('open', ''));
+    gallery.append(clone);
+  }
+
+  const criteria: string[] = [];
+  for (const sp of lastSpecs) {
+    criteria.push(`${sp.title}: ${sp.description}`);
+    for (const o of sp.rate?.options ?? []) criteria.push(`${o.label}: ${o.explain}`);
+  }
+  criteria.push('Células em branco ou com marcadores de ausência (n/d, -, s/i) são “sem dado” e nunca entram como zero.', 'Somas e médias usam só as células com valor; uma série sem nenhum valor num período aparece como lacuna.');
+
+  const alerts = qualityAlerts(full, lastProf, currentLoc()).map((a) => a.text);
+  const limits = [...alerts, ...(info?.notes ?? [])];
+
+  root.replaceChildren(
+    el('h1', {}, table.title ?? table.name),
+    el('p', { className: 'muted' }, `Relatório gerado em ${new Date().toLocaleString('pt-BR')} · Dashboard Universal ${__APP_VERSION__}`),
+    el('h2', {}, '1. Origem dos dados'),
+    dl(origin),
+    el('h2', {}, '2. Registros analisados'),
+    dl(records),
+    el('h2', {}, '3. Filtros, período e ajustes aplicados'),
+    list(describeState({ filters, dateRange, merges, forced, removed: [...removed], locale: { dateOrder: locale.dateOrder, numbers: locale.numbers } })),
+    el('h2', {}, '4. Indicadores'),
+    dl(kpis(t, lastProf).map((k) => [k.label, k.hint ? `${k.value} (${k.hint})` : k.value] as [string, string])),
+    el('h2', {}, '5. Gráficos'),
+    gallery,
+    el('h2', {}, '6. Critérios de cálculo'),
+    list(criteria),
+    el('h2', {}, '7. Limitações e avisos'),
+    list(limits),
+    el('h2', {}, '8. Como reproduzir'),
+    el('p', {}, `Abra o mesmo arquivo${info?.sha256 ? ` (confira o SHA-256 acima)` : ''} no Dashboard Universal ${__APP_VERSION__} com as mesmas opções de leitura e os mesmos ajustes listados na seção 3, ou use o HTML compartilhado gerado a partir desta análise. Este relatório descreve o estado do painel no momento da geração.`),
+  );
+  document.body.classList.add('report-mode');
+  root.hidden = false;
+  window.addEventListener(
+    'afterprint',
+    () => {
+      document.body.classList.remove('report-mode');
+      root.hidden = true;
+      charts.forEach((c) => c.resize());
+      maps.forEach((mp) => mp.invalidateSize());
+    },
+    { once: true },
+  );
+  window.print();
 }
 
 function openShareDialog() {
@@ -476,11 +822,17 @@ function init() {
     removed = new Set();
     forced = {};
     filters = {};
+    merges = {};
+    dateRange = {};
+    sortState = null;
+    page = 1;
     render();
   };
-  $('q').oninput = () => renderTable(($('q') as HTMLInputElement).value);
+  $('q').oninput = () => ((page = 1), renderTable());
   $('btnNew').onclick = () => {
     reset();
+    pending = null;
+    $('preview').hidden = true;
     file.value = '';
     $('drop').hidden = false;
     $('app').hidden = true;
@@ -493,11 +845,12 @@ function init() {
     ($('shareDlg') as HTMLDialogElement).close();
   };
   $('btnPrint').onclick = () => window.print();
+  $('btnReport').onclick = openReport;
   window.addEventListener('beforeprint', () => {
     charts.forEach((c) => c.resize());
     maps.forEach((mp) => mp.invalidateSize());
   });
-  $('btnCsv').onclick = () => table && download(`${table.name}.csv`, 'text/csv;charset=utf-8', '﻿' + [table.columns.map(csvCell).join(';'), ...table.rows.map((r) => table!.columns.map((c) => csvCell(r[c])).join(';'))].join('\n'));
+  $('btnCsv').onclick = () => table && download(`${table.name}.csv`, 'text/csv;charset=utf-8', '﻿' + [table.columns.map(csvCell).join(';'), ...view().rows.map((r) => table!.columns.map((c) => csvCell(r[c])).join(';'))].join('\n'));
 
   const snap = document.getElementById('snapshot');
   if (snap?.textContent) {
@@ -521,7 +874,7 @@ init();
   try {
     const bin = atob(b64);
     const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-    load(await parseFile(name, bytes, PDF));
+    await startFile(name, bytes);
   } catch (e) {
     fail(e instanceof Error ? e.message : 'Não foi possível ler o arquivo.');
   }

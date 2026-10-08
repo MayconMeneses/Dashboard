@@ -2,23 +2,29 @@ import { XMLParser } from 'fast-xml-parser';
 import { unzipSync, strFromU8 } from 'fflate';
 import Papa from 'papaparse';
 import readXlsx from 'read-excel-file/browser';
+import { decodeText, delimiterName, detectDelimiter } from './csv.js';
+import type { DelimiterChoice, Encoding } from './csv.js';
 import { docxToMatrix } from './docx.js';
 import { detectRepeatedBlocks } from './grid.js';
 import { pdfToMatrix } from './pdf.js';
-import type { Cell, Dataset, Row, Table } from './types.js';
+import type { Cell, Dataset, ParseInfo, Row, Table } from './types.js';
+import { maxOf } from './util.js';
 
 const MAX_BYTES = 50 * 1024 * 1024;
 const MAX_ROWS = 200_000;
 
 const ext = (n: string) => n.toLowerCase().split('.').pop() ?? '';
 
-function uniqueNames(names: string[]): string[] {
+function uniqueNames(names: string[], renamed?: string[]): string[] {
   const seen = new Map<string, number>();
   return names.map((n, i) => {
-    const base = (n ?? '').toString().trim() || `Coluna ${i + 1}`;
+    const raw = (n ?? '').toString().trim();
+    const base = raw || `Coluna ${i + 1}`;
     const c = seen.get(base) ?? 0;
     seen.set(base, c + 1);
-    return c ? `${base} (${c + 1})` : base;
+    const out = c ? `${base} (${c + 1})` : base;
+    if (renamed && (c || !raw)) renamed.push(raw ? `“${raw}” → “${out}”` : `(sem nome) → “${out}”`);
+    return out;
   });
 }
 
@@ -33,23 +39,32 @@ function clean(v: unknown): Cell {
 
 function toTableSimple(name: string, matrix: unknown[][]): Table {
   let rows2 = matrix.filter((r) => r.some((c) => c != null && String(c).trim() !== ''));
+  const blank = matrix.length - rows2.length;
   if (!rows2.length) return { name, columns: [], rows: [] };
   // linhas de título (poucas células preenchidas) acima do cabeçalho real são descartadas
   const cnt = (r: unknown[]) => r.filter((c) => c != null && String(c).trim() !== '').length;
-  const max = Math.max(...rows2.map(cnt));
+  const max = maxOf(rows2.map(cnt));
   const start = rows2.findIndex((r) => cnt(r) >= Math.ceil(max * 0.6));
   let title: string | undefined;
   if (start > 0 && rows2.length - start >= 2) {
     title = rows2.slice(0, start).flat().filter((c) => c != null && String(c).trim() !== '').map((c) => String(c).trim()).join(' ');
     rows2 = rows2.slice(start);
   }
-  const columns = uniqueNames((rows2[0] as unknown[]).map((c) => String(c ?? '')));
-  const rows: Row[] = rows2.slice(1, MAX_ROWS + 1).map((r) => {
+  const renamed: string[] = [];
+  const columns = uniqueNames((rows2[0] as unknown[]).map((c) => String(c ?? '')), renamed);
+  const dataRows = rows2.slice(1);
+  const truncated = Math.max(0, dataRows.length - MAX_ROWS);
+  const rows: Row[] = dataRows.slice(0, MAX_ROWS).map((r) => {
     const o: Row = {};
     columns.forEach((c, i) => (o[c] = clean(r[i])));
     return o;
   });
-  return { name, columns, rows, ...(title ? { title } : {}) };
+  const notes: string[] = [];
+  if (truncated) notes.push(`O arquivo tem ${new Intl.NumberFormat('pt-BR').format(dataRows.length)} linhas de dados; só as primeiras ${new Intl.NumberFormat('pt-BR').format(MAX_ROWS)} foram lidas. As ${new Intl.NumberFormat('pt-BR').format(truncated)} restantes ficaram de fora dos números e gráficos.`);
+  if (blank) notes.push(`${blank} linha(s) em branco foram ignoradas.`);
+  if (title && start > 0) notes.push(`${start} linha(s) de título acima do cabeçalho foram usadas como título do painel e não entram nos dados.`);
+  if (renamed.length) notes.push(`Colunas com nome repetido ou vazio foram renomeadas: ${renamed.join('; ')}.`);
+  return { name, columns, rows, ...(title ? { title } : {}), ...(notes.length ? { notes } : {}), stats: { dropped: blank + (title ? start : 0), truncated } };
 }
 
 const filledCount = (r: unknown[]) => r.filter((c) => c != null && String(c).trim() !== '').length;
@@ -75,15 +90,15 @@ export function toTables(name: string, matrix: unknown[][]): Table[] {
   const loose: string[] = [];
   const texts = (rows: unknown[][]) => rows.flat().filter((c) => c != null && String(c).trim() !== '').map((c) => String(c).trim());
   for (const g of groups) {
-    const maxFilled = Math.max(...g.map(filledCount));
+    const maxFilled = maxOf(g.map(filledCount));
     if (g.length < 3 || maxFilled < 3) {
-      loose.push(...texts(g));
+      for (const x of texts(g)) loose.push(x);
       continue;
     }
     const start = g.findIndex((r) => filledCount(r) >= Math.ceil(maxFilled * 0.6));
     const body = g.slice(start);
     if (body.length < 3) {
-      loose.push(...texts(g));
+      for (const x of texts(g)) loose.push(x);
       continue;
     }
     const used = new Set<number>();
@@ -93,7 +108,7 @@ export function toTables(name: string, matrix: unknown[][]): Table[] {
     if (t.columns.length >= 3 && t.rows.length >= 3) {
       if (start > 0) t.title = texts(g.slice(0, start))[0];
       blocks.push(t);
-    } else loose.push(...texts(g));
+    } else for (const x of texts(g)) loose.push(x);
   }
   if (blocks.length >= 2 || (blocks.length === 1 && groups.length > 1)) {
     const context = [...new Set(loose)].join(' · ').slice(0, 300) || undefined;
@@ -111,11 +126,12 @@ export function objectsToTable(name: string, list: Record<string, unknown>[]): T
     for (const c of columns) r[c] = clean(o[c]);
     return r;
   });
-  return { name, columns, rows };
+  const truncated = Math.max(0, list.length - MAX_ROWS);
+  return { name, columns, rows, ...(truncated ? { notes: [`O arquivo tem ${list.length} registros; só os primeiros ${MAX_ROWS} foram lidos.`] } : {}), stats: { dropped: 0, truncated } };
 }
 
-function parseCsv(name: string, text: string): Table[] {
-  const res = Papa.parse<unknown[]>(text.replace(/^﻿/, ''), { skipEmptyLines: false });
+function parseCsv(name: string, text: string, delimiter: string): Table[] {
+  const res = Papa.parse<unknown[]>(text, { skipEmptyLines: false, delimiter });
   return toTables(name, res.data as unknown[][]);
 }
 
@@ -191,7 +207,7 @@ function parseKmlText(name: string, xml: string): Table[] {
 }
 
 async function parseKmz(name: string, bytes: Uint8Array): Promise<Table[]> {
-  const files = unzipSync(bytes, { filter: (f) => f.originalSize < MAX_BYTES });
+  const files = unzipSync(bytes, { filter: (f) => f.name.toLowerCase().endsWith('.kml') && f.originalSize < MAX_BYTES });
   const kml = Object.keys(files).find((k) => k.toLowerCase().endsWith('.kml'));
   if (!kml) throw new Error('KMZ sem arquivo .kml.');
   return parseKmlText(name, strFromU8(files[kml]!));
@@ -199,6 +215,10 @@ async function parseKmz(name: string, bytes: Uint8Array): Promise<Table[]> {
 
 /** Lê qualquer formato suportado e devolve as tabelas encontradas (uma por aba/lista). */
 export interface ParseOptions {
+  /** codificação do texto (CSV/JSON/KML); 'auto' = UTF-8 e, se inválido, Windows-1252 */
+  encoding?: Encoding;
+  /** separador do CSV; 'auto' detecta */
+  delimiter?: DelimiterChoice;
   /** biblioteca pdf.js já configurada (no navegador, com o worker embutido) */
   pdfjs?: Parameters<typeof pdfToMatrix>[0];
 }
@@ -206,20 +226,34 @@ export interface ParseOptions {
 export async function parseFile(fileName: string, bytes: Uint8Array, opts: ParseOptions = {}): Promise<Dataset> {
   if (bytes.byteLength > MAX_BYTES) throw new Error('Arquivo maior que 50 MB.');
   const base = fileName.replace(/\.[^.]+$/, '');
-  const text = () => new TextDecoder('utf-8').decode(bytes);
+  const dec = () => decodeText(bytes, opts.encoding ?? 'auto');
+  const info: ParseInfo = { format: ext(fileName), bytes: bytes.byteLength, rowsRead: 0, rowsDropped: 0, truncated: 0, notes: [] };
   let tables: Table[];
+  const useText = () => {
+    const d = dec();
+    info.encoding = d.encoding;
+    if (d.fellBack) info.notes.push('O arquivo não está em UTF-8; foi lido como Windows-1252 (Latin-1). Se aparecerem caracteres estranhos, escolha outra codificação na prévia.');
+    return d.text;
+  };
   switch (ext(fileName)) {
     case 'csv':
     case 'tsv':
     case 'txt':
-      tables = parseCsv(base, text());
+      {
+        const txt = useText();
+        const chosen = opts.delimiter && opts.delimiter !== 'auto' ? opts.delimiter : detectDelimiter(txt);
+        info.delimiter = chosen;
+        info.delimiterGuessed = !opts.delimiter || opts.delimiter === 'auto';
+        info.notes.push(`Separador de colunas ${info.delimiterGuessed ? 'detectado' : 'escolhido'}: ${delimiterName(chosen)}.`);
+        tables = parseCsv(base, txt, chosen);
+      }
       break;
     case 'json':
     case 'geojson':
-      tables = parseJson(base, text());
+      tables = parseJson(base, useText());
       break;
     case 'kml':
-      tables = parseKmlText(base, text());
+      tables = parseKmlText(base, useText());
       break;
     case 'kmz':
       tables = await parseKmz(base, bytes);
@@ -260,5 +294,10 @@ export async function parseFile(fileName: string, bytes: Uint8Array, opts: Parse
   }
   tables = tables.filter((t) => t.columns.length && t.rows.length);
   if (!tables.length) throw new Error('Nenhum dado tabular encontrado no arquivo.');
-  return { fileName, tables };
+  for (const t of tables) {
+    info.rowsRead += t.rows.length;
+    info.rowsDropped += t.stats?.dropped ?? 0;
+    info.truncated += t.stats?.truncated ?? 0;
+  }
+  return { fileName, tables, info };
 }

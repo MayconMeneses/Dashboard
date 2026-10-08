@@ -2,6 +2,7 @@ import { VALUE_COL } from './grid.js';
 import { toNumber } from './profile.js';
 import type { ChartSpec, ChartStyle, Table } from './types.js';
 import type { SeriesData } from './suggest.js';
+import { maxOf, minOf } from './util.js';
 
 const sumOk = (a: number[]) => a.filter((v) => !Number.isNaN(v)).reduce((x, y) => x + y, 0);
 
@@ -9,7 +10,7 @@ const sumOk = (a: number[]) => a.filter((v) => !Number.isNaN(v)).reduce((x, y) =
 export function toHeatmap(d: SeriesData) {
   const rows = d.datasets ?? [{ label: 'Valor', values: d.values }];
   const flat = rows.flatMap((r) => r.values).filter((v) => !Number.isNaN(v));
-  return { rows: rows.map((r) => r.label), cols: d.labels, cells: rows.map((r) => r.values), min: flat.length ? Math.min(...flat) : 0, max: flat.length ? Math.max(...flat) : 0 };
+  return { rows: rows.map((r) => r.label), cols: d.labels, cells: rows.map((r) => r.values), min: flat.length ? minOf(flat) : 0, max: flat.length ? maxOf(flat) : 0 };
 }
 
 /** Converte cada coluna em proporção (%) do total do rótulo (barras 100% empilhadas). */

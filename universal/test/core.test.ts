@@ -214,3 +214,124 @@ describe('Word (.docx)', () => {
     await expect(parseFile('x.docx', enc('não é zip'))).rejects.toThrow(/inválido|corrompido/);
   });
 });
+
+import { decodeText, detectDelimiter } from '../src/csv.js';
+import { applyMerges, similarGroups } from '../src/similar.js';
+import { inferLocale, isMissingToken, locale } from '../src/profile.js';
+
+describe('arquivos grandes, codificação e separador', () => {
+  it('abre CSV com 200.500 linhas sem estourar a pilha e avisa do que ficou de fora', async () => {
+    let s = 'id,v\n';
+    for (let i = 0; i < 200500; i++) s += `${i},${i % 7}\n`;
+    const d = await parseFile('grande.csv', enc(s));
+    expect(d.tables[0]!.rows).toHaveLength(200000);
+    expect(d.info!.truncated).toBe(500);
+    expect(d.tables[0]!.notes!.join(' ')).toMatch(/só as primeiras/);
+    const p = profileTable(d.tables[0]!);
+    expect(p).toHaveLength(2);
+  }, 30000);
+  it('detecta Windows-1252 e avisa; UTF-8 não dispara o aviso', async () => {
+    const l1 = (x: string) => Uint8Array.from([...x].map((c) => c.charCodeAt(0)));
+    const d = await parseFile('a.csv', l1('cidade;valor\nCroatá;10\nSão Benedito;20\nTianguá;30\n'));
+    expect(d.tables[0]!.rows.map((r) => r['cidade'])).toEqual(['Croatá', 'São Benedito', 'Tianguá']);
+    expect(d.info!.encoding).toBe('Windows-1252');
+    expect(d.info!.notes.join(' ')).toMatch(/Windows-1252/);
+    const u = await parseFile('b.csv', enc('cidade;valor\nCroatá;10\nSão;20\n'));
+    expect(u.info!.encoding).toBe('UTF-8');
+    expect(u.info!.notes.join(' ')).not.toMatch(/não está em UTF-8/);
+    expect(decodeText(l1('Croatá'), 'utf-8').encoding).toBe('UTF-8');
+  });
+  it('detecta o separador (; com 2 colunas, tab, |) e aceita escolha manual', async () => {
+    expect(detectDelimiter('cidade;valor\nCroatá;10\nSão;20\n')).toBe(';');
+    expect(detectDelimiter('a\tb\n1\t2\n3\t4\n')).toBe('\t');
+    expect(detectDelimiter('a|b|c\n1|2|3\n')).toBe('|');
+    expect(detectDelimiter('nome,valor\nA,10\nB,20\n')).toBe(',');
+    expect(detectDelimiter('nome;valor\nA;1,5\nB;2,5\nC;3,5\n')).toBe(';');
+    const d = await parseFile('x.csv', enc('a;b\n1;2\n3;4\n5;6\n'), { delimiter: ',' });
+    expect(d.tables[0]!.columns).toEqual(['a;b']);
+    expect((await parseFile('x.csv', enc('a;b\n1;2\n3;4\n5;6\n'))).tables[0]!.columns).toEqual(['a', 'b']);
+  });
+  it('avisa colunas com nome repetido e linhas em branco', async () => {
+    const t = (await parseFile('d.csv', enc('a,a,b\n1,2,3\n\n4,5,6\n7,8,9\n'))).tables[0]!;
+    expect(t.columns).toEqual(['a', 'a (2)', 'b']);
+    expect(t.notes!.join(' ')).toMatch(/renomeadas/);
+    expect(t.notes!.join(' ')).toMatch(/em branco/);
+  });
+});
+
+describe('valores inválidos, marcadores e interpretação regional', () => {
+  it('coluna numérica com 1 valor inválido continua numérica e lista a linha', async () => {
+    const t = (await parseFile('n.csv', enc('v\n10\n20\n30\n40\n50\n60\n70\n80\n90\nabc\n'))).tables[0]!;
+    const c = profileTable(t)[0]!;
+    expect(c.type).toBe('integer');
+    expect(c.invalid).toEqual([{ row: 10, value: 'abc' }]);
+    expect(qualityAlerts(t, profileTable(t)).map((a) => a.text).join(' ')).toMatch(/linha 10: “abc”/);
+  });
+  it('n/d e "-" são ausência, não valor inválido', async () => {
+    const t = (await parseFile('m.csv', enc('v\n1\n2\nn/d\n4\n-\n6\n7\n8\n9\n'))).tables[0]!;
+    const c = profileTable(t)[0]!;
+    expect(c.invalidCount).toBeUndefined();
+    expect(c.missingMarkers).toBe(2);
+    expect(c.missing).toBe(2);
+    expect(isMissingToken('S/I')).toBe(true);
+  });
+  it('datas: detecta ordem pelo dia > 12 e avisa quando é ambígua', async () => {
+    const mk = (cells: string[]) => [{ name: 't', columns: ['d'], rows: cells.map((d) => ({ d })) }];
+    expect(inferLocale(mk(['13/04/2024', '05/04/2024'])).dateOrder).toBe('dmy');
+    expect(inferLocale(mk(['04/13/2024', '04/05/2024'])).dateOrder).toBe('mdy');
+    const amb = inferLocale(mk(['03/04/2024', '05/06/2024']));
+    expect(amb.dateAmbiguous).toBe(true);
+    expect(amb.dateOrder).toBe('dmy');
+    locale.dateOrder = 'mdy';
+    expect(new Date(toDate('03/04/2024')!).toISOString().slice(0, 10)).toBe('2024-03-04');
+    locale.dateOrder = 'dmy';
+    expect(new Date(toDate('03/04/2024')!).toISOString().slice(0, 10)).toBe('2024-04-03');
+  });
+  it('números: formatos inequívocos sempre funcionam; "1.234" é ambíguo e depende da escolha', () => {
+    expect(toNumber('1.234,56')).toBe(1234.56);
+    expect(toNumber('1,234.56')).toBe(1234.56);
+    expect(toNumber('1.234')).toBe(1234);
+    locale.numbers = 'us';
+    expect(toNumber('1.234')).toBe(1.234);
+    expect(toNumber('1,234')).toBe(1234);
+    locale.numbers = 'br';
+    const mk = (cells: string[]) => [{ name: 't', columns: ['v'], rows: cells.map((v) => ({ v })) }];
+    expect(inferLocale(mk(['1.234', '2.500'])).numberAmbiguous).toBe(true);
+    expect(inferLocale(mk(['1,234.56', '2,500.10'])).numbers).toBe('us');
+  });
+});
+
+describe('categorias parecidas', () => {
+  const csv = ['cidade,valor', ...Array.from({ length: 40 }, (_, i) => `${['Croatá', 'Croata', 'CROATÁ', 'Tianguá', 'Tiangua'][i % 5]},${i}`)].join('\n');
+  it('agrupa acento, caixa e 1 letra de diferença, e sugere a grafia mais frequente', async () => {
+    const t = (await parseFile('c.csv', enc(csv))).tables[0]!;
+    const g = similarGroups(t, profileTable(t));
+    expect(g.map((x) => x.values.map((v) => v.value).sort())).toEqual([['CROATÁ', 'Croata', 'Croatá'], ['Tiangua', 'Tianguá']]);
+    const a = qualityAlerts(t, profileTable(t)).find((x) => x.merge?.col === 'cidade')!;
+    expect(a.merge!.values).toContain('Croata');
+  });
+  it('juntar grafias troca os valores e unifica os gráficos', async () => {
+    const t = (await parseFile('c.csv', enc(csv))).tables[0]!;
+    const m = applyMerges(t, { cidade: { Croata: 'Croatá', CROATÁ: 'Croatá', Tiangua: 'Tianguá' } });
+    expect(new Set(m.rows.map((r) => r['cidade'])).size).toBe(2);
+    expect(t.rows.some((r) => r['cidade'] === 'Croata')).toBe(true); // original intacto
+  });
+});
+
+describe('XLSX e KMZ', () => {
+  it('lê todas as abas de um XLSX, com título, datas e fórmula sem valor calculado', async () => {
+    const d = await parseFile('planilha.xlsx', new Uint8Array(readFileSync(new URL('./fixtures/planilha.xlsx', import.meta.url))));
+    expect(d.tables.length).toBeGreaterThanOrEqual(2);
+    const v = d.tables.find((t) => t.columns.includes('Quantidade'))!;
+    expect(v.rows).toHaveLength(12);
+    expect(profileTable(v).find((c) => c.name === 'Data')!.type).toBe('date');
+    expect(d.tables.some((t) => t.columns.includes('Meta'))).toBe(true);
+  });
+  it('lê KMZ (zip com .kml) e ignora outros arquivos do zip', async () => {
+    const kml = '<kml><Document><Placemark><name>P1</name><Point><coordinates>-40.9,-4.4,0</coordinates></Point></Placemark><Placemark><name>P2</name><Point><coordinates>-40.8,-4.5,0</coordinates></Point></Placemark><Placemark><name>P3</name><Point><coordinates>-40.7,-4.6,0</coordinates></Point></Placemark></Document></kml>';
+    const z = zipSync({ 'doc.kml': strToU8(kml), 'imagem.png': new Uint8Array([1, 2, 3]) });
+    const d = await parseFile('a.kmz', z);
+    expect(d.tables[0]!.rows.map((r) => r['nome'])).toEqual(['P1', 'P2', 'P3']);
+    await expect(parseFile('b.kmz', zipSync({ 'x.txt': strToU8('oi') }))).rejects.toThrow(/sem arquivo .kml/);
+  });
+});

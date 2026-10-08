@@ -1,7 +1,10 @@
 import { VALUE_COL } from './grid.js';
 import { toDate, toNumber } from './profile.js';
 import { compatibleStyles } from './shapes.js';
+import { similarGroups } from './similar.js';
+import type { LocaleInfo } from './profile.js';
 import type { Alert, ChartSpec, ColProfile, Kpi, Row, Table } from './types.js';
+import { maxOf, minOf } from './util.js';
 
 export const fmtNum = (n: number) => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(n);
 
@@ -106,9 +109,16 @@ export function bestCorrelation(t: Table, nums: ColProfile[]): { a: string; b: s
 }
 
 /** Alertas de qualidade dos dados (ausentes, colunas constantes, duplicadas, valores extremos). */
-export function qualityAlerts(t: Table, prof: ColProfile[]): Alert[] {
+export function qualityAlerts(t: Table, prof: ColProfile[], loc?: LocaleInfo): Alert[] {
   if (t.tidy) return tidyAlerts(t);
   const out: Alert[] = [];
+  for (const p of prof) {
+    if (p.invalidCount) out.push({ level: 'aviso', text: `“${p.name}” é numérica, mas ${p.invalidCount} valor(es) não são número e ficam fora das contas: ${p.invalid!.slice(0, 5).map((b) => `linha ${b.row}: “${b.value}”`).join('; ')}${p.invalidCount > 5 ? '…' : ''}.` });
+    if (p.missingMarkers) out.push({ level: 'info', text: `“${p.name}” tem ${p.missingMarkers} marcador(es) de ausência (como n/d ou -); foram tratados como sem dado, não como zero.` });
+  }
+  for (const g of similarGroups(t, prof)) out.push({ level: 'aviso', text: `Em “${g.col}”, ${g.values.map((v) => `“${v.value}” (${v.count})`).join(', ')} parecem a mesma categoria escrita de formas diferentes; os gráficos os contam separados.`, merge: { col: g.col, values: g.values.map((v) => v.value), to: g.suggested } });
+  if (loc?.dateAmbiguous) out.push({ level: 'aviso', text: `${loc.dateAmbiguousCount} data(s) com barra têm dia e mês ≤ 12 (ex.: 03/04/2024), então não dá para saber se é dia/mês ou mês/dia. Estou usando ${loc.dateOrder === 'dmy' ? 'dia/mês/ano' : 'mês/dia/ano'}; confirme na prévia.` });
+  if (loc?.numberAmbiguous) out.push({ level: 'aviso', text: `${loc.numberAmbiguousCount} número(s) como “1.234” podem ser milhar (1234) ou decimal (1,234). Estou usando ${loc.numbers === 'br' ? 'o padrão brasileiro (ponto = milhar)' : 'o padrão americano (ponto = decimal)'}; confirme na prévia.` });
   const dup = t.rows.length - new Set(t.rows.map((r) => JSON.stringify(t.columns.map((c) => r[c])))).size;
   if (dup > 0) out.push({ level: 'aviso', text: `${dup} linha(s) idêntica(s) a outra (possíveis duplicatas).` });
   for (const p of prof) {
@@ -187,8 +197,8 @@ export function chartData(t: Table, spec: ChartSpec): SeriesData {
   if (spec.kind === 'hist' && spec.x) {
     const v = t.rows.map((r) => toNumber(r[spec.x!] ?? null)).filter((x): x is number => x != null);
     if (!v.length) return { labels: [], values: [] };
-    const lo = Math.min(...v);
-    const hi = Math.max(...v);
+    const lo = minOf(v);
+    const hi = maxOf(v);
     const bins = Math.min(12, Math.max(4, Math.ceil(Math.sqrt(v.length))));
     const w = (hi - lo) / bins || 1;
     const counts = new Array<number>(bins).fill(0);
