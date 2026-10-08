@@ -7,6 +7,9 @@ export interface Table {
   rows: Row[];
   /** colunas de latitude/longitude vindas do próprio formato (KML/GeoJSON) */
   geo?: { lat: string; lon: string };
+  /** título do bloco (linha acima do cabeçalho) e texto de contexto da planilha (ex.: município, mês) */
+  title?: string;
+  context?: string;
 }
 
 export interface Dataset {
@@ -32,7 +35,7 @@ export interface ColProfile {
   top?: { value: string; count: number }[];
 }
 
-export type ChartKind = 'bar' | 'hbar' | 'donut' | 'line' | 'hist' | 'stacked' | 'map' | 'scatter';
+export type ChartKind = 'bar' | 'hbar' | 'donut' | 'line' | 'hist' | 'stacked' | 'map' | 'scatter' | 'multi';
 
 export interface ChartSpec {
   id: string;
@@ -45,6 +48,8 @@ export interface ChartSpec {
   stack?: string;
   /** mantém a ordem original das linhas (ex.: ciclos), em vez de ordenar por valor */
   keepOrder?: boolean;
+  /** colunas comparadas lado a lado (kind 'multi') */
+  series?: string[];
   /** relevância (maior = aparece primeiro) */
   score: number;
 }

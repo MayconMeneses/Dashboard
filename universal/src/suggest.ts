@@ -33,6 +33,18 @@ export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpe
       out.push({ id: id('lab'), kind: 'bar', x: labelCol.name, y: m.name, agg: 'sum', keepOrder: true, title: `${m.name} por ${labelCol.name}`, description: `Valor de “${m.name}” em cada linha de “${labelCol.name}”, na ordem do arquivo. Linha sem valor fica sem barra (não é zero).`, score: 88 - i });
     });
   }
+  if (labelCol) {
+    // agrupa colunas de mesma ordem de grandeza para compará-las lado a lado
+    const groups = new Map<number, ColProfile[]>();
+    for (const m of nums.filter((x) => x.filled >= 2 && (x.max ?? 0) > 0)) {
+      const k = Math.floor(Math.log10(m.max!) );
+      groups.set(k, [...(groups.get(k) ?? []), m]);
+    }
+    [...groups.values()].filter((g) => g.length >= 2).slice(0, level === 1 ? 1 : 3).forEach((g, i) => {
+      const cols = g.slice(0, 4);
+      out.push({ id: id('multi'), kind: 'multi', x: labelCol.name, series: cols.map((c) => c.name), keepOrder: true, title: `Comparativo: ${cols.map((c) => c.name).join(' × ')}`, description: `Colunas de ordem de grandeza parecida, lado a lado por “${labelCol.name}”. Linha sem valor fica sem barra (não é zero).`, score: 92 - i });
+    });
+  }
   if (t.rows.length >= 12) nums.slice(0, level === 1 ? 1 : level === 2 ? 3 : 5).forEach((m, i) => {
     out.push({ id: id('hist'), kind: 'hist', x: m.name, title: `Distribuição de ${m.name}`, description: `Quantos registros caem em cada faixa de “${m.name}”.`, score: 75 - i * 5 });
   });
@@ -46,7 +58,9 @@ export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpe
     if (pair) out.push({ id: id('sc'), kind: 'scatter', x: pair.a, y: pair.b, title: `${pair.a} × ${pair.b}`, description: `Cada ponto é um registro. Correlação de Pearson ${pair.r.toFixed(2).replace('.', ',')} (${Math.abs(pair.r) >= 0.7 ? 'forte' : 'moderada'}); correlação não prova causa.`, score: 65 });
   }
 
-  return out.sort((a, b) => b.score - a.score).slice(0, level === 1 ? 4 : level === 2 ? 9 : 15);
+  const inMulti = new Set(out.filter((c) => c.kind === 'multi').flatMap((c) => c.series ?? []));
+  const final = level >= 3 ? out : out.filter((c) => !(c.id.startsWith('lab') && c.y && inMulti.has(c.y)));
+  return final.sort((a, b) => b.score - a.score).slice(0, level === 1 ? 4 : level === 2 ? 9 : 15);
 }
 
 function pearson(xs: number[], ys: number[]): number {
@@ -146,6 +160,10 @@ export function chartData(t: Table, spec: ChartSpec): SeriesData {
   const get = (c: string) => (r: Row) => (r[c] == null ? null : String(r[c]));
   const num = (c?: string) => (r: Row) => (c ? toNumber(r[c] ?? null) : null);
 
+  if (spec.kind === 'multi' && spec.x && spec.series) {
+    const rows = t.rows.filter((r) => r[spec.x!] != null);
+    return { labels: rows.map((r) => String(r[spec.x!])), values: [], datasets: spec.series.map((c) => ({ label: c, values: rows.map((r) => toNumber(r[c] ?? null) ?? Number.NaN) })) };
+  }
   if (spec.kind === 'line' && spec.x) {
     const m = agg(t.rows, (r) => { const d = toDate(r[spec.x!] ?? null); return d == null ? null : monthKey(d); }, num(spec.y), how);
     const keys = [...m.keys()].sort();
