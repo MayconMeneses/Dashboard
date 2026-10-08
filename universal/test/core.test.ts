@@ -104,3 +104,17 @@ describe('tabela por rótulo (ex.: ciclos)', () => {
     expect(chartData(t, s.find((x) => x.y === 'pct')!).values).toEqual([87.19, 48.64, 66.36]);
   });
 });
+
+describe('comparativo e contexto', () => {
+  it('compara colunas de mesma grandeza e guarda título/contexto', async () => {
+    const csv = ['PLANILHA X,,,', 'MUNICÍPIO:,CROATÁ,,', '', 'VISITAS,,,', 'ciclo,a,b,total', 'c1,3,3,6000', 'c2,12,15,9000', 'c3,4,9,7000'].join('\n');
+    const d = await parseFile('p.csv', enc(csv));
+    const t = d.tables[0]!;
+    expect(t.title).toBe('VISITAS');
+    expect(t.context).toMatch(/CROATÁ/);
+    const m = suggestCharts(t, profileTable(t), 2).find((c) => c.kind === 'multi')!;
+    expect(m.series).toEqual(['a', 'b']);
+    const sd = chartData(t, m);
+    expect(sd.datasets!.map((x) => x.values)).toEqual([[3, 12, 4], [3, 15, 9]]);
+  });
+});

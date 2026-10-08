@@ -101,7 +101,7 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
   const horizontal = spec.kind === 'hbar';
   const type = spec.kind === 'line' ? 'line' : donut ? 'doughnut' : 'bar';
   const datasets = d.datasets
-    ? d.datasets.map((s, i) => ({ label: s.label, data: s.values, backgroundColor: PALETTE[i % PALETTE.length] }))
+    ? d.datasets.map((s, i) => ({ label: s.label, data: s.values.map((v) => (Number.isNaN(v) ? null : v)), backgroundColor: PALETTE[i % PALETTE.length] }))
     : [{ label: spec.y ?? 'Registros', data: d.values, backgroundColor: donut ? d.labels.map((_, i) => PALETTE[i % PALETTE.length]) : PALETTE[0], borderColor: PALETTE[0], tension: 0.25, barThickness: horizontal ? 14 : undefined }];
   charts.push(
     new Chart(canvas, {
@@ -133,6 +133,8 @@ function render() {
   const full = table;
   const t = view();
   const prof = profileTable(full, forced);
+  $('ttl').textContent = full.title ?? full.name;
+  $('ctx').textContent = full.context ?? '';
   const alerts = qualityAlerts(full, prof);
   $('chips').replaceChildren(
     ...Object.entries(filters).map(([k, v]) => {
@@ -187,7 +189,7 @@ function load(ds: Dataset) {
   filters = {};
   $('msg').textContent = '';
   const sel = $('tableSel') as HTMLSelectElement;
-  sel.replaceChildren(...ds.tables.map((t, i) => el('option', { value: String(i) }, `${t.name} (${t.rows.length})`)));
+  sel.replaceChildren(...ds.tables.map((t, i) => el('option', { value: String(i) }, `${t.title ?? t.name} (${t.rows.length})`)));
   sel.hidden = ds.tables.length < 2;
   table = ds.tables[0]!;
   document.title = `Dashboard – ${ds.fileName}`;
@@ -257,6 +259,11 @@ function init() {
     $('actions').hidden = true;
   };
   $('btnHtml').onclick = exportHtml;
+  $('btnPrint').onclick = () => window.print();
+  window.addEventListener('beforeprint', () => {
+    charts.forEach((c) => c.resize());
+    maps.forEach((mp) => mp.invalidateSize());
+  });
   $('btnCsv').onclick = () => table && download(`${table.name}.csv`, 'text/csv;charset=utf-8', '﻿' + [table.columns.map(csvCell).join(';'), ...table.rows.map((r) => table!.columns.map((c) => csvCell(r[c])).join(';'))].join('\n'));
 
   const snap = document.getElementById('snapshot');

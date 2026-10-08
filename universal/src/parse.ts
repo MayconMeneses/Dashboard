@@ -58,19 +58,33 @@ export function toTables(name: string, matrix: unknown[][]): Table[] {
   }
   if (cur.length) groups.push(cur);
   const blocks: Table[] = [];
+  const loose: string[] = [];
+  const texts = (rows: unknown[][]) => rows.flat().filter((c) => c != null && String(c).trim() !== '').map((c) => String(c).trim());
   for (const g of groups) {
     const maxFilled = Math.max(...g.map(filledCount));
-    if (g.length < 3 || maxFilled < 3) continue;
+    if (g.length < 3 || maxFilled < 3) {
+      loose.push(...texts(g));
+      continue;
+    }
     const start = g.findIndex((r) => filledCount(r) >= Math.ceil(maxFilled * 0.6));
     const body = g.slice(start);
-    if (body.length < 3) continue;
+    if (body.length < 3) {
+      loose.push(...texts(g));
+      continue;
+    }
     const used = new Set<number>();
     body.forEach((r) => r.forEach((c, i) => c != null && String(c).trim() !== '' && used.add(i)));
     const cols = [...used].sort((a, b) => a - b);
     const t = toTableSimple(`${name} · bloco ${blocks.length + 1}`, body.map((r) => cols.map((i) => r[i])));
-    if (t.columns.length >= 3 && t.rows.length >= 3) blocks.push(t);
+    if (t.columns.length >= 3 && t.rows.length >= 3) {
+      if (start > 0) t.title = texts(g.slice(0, start))[0];
+      blocks.push(t);
+    } else loose.push(...texts(g));
   }
-  if (blocks.length >= 2 || (blocks.length === 1 && groups.length > 1)) return blocks.length === 1 ? [{ ...blocks[0]!, name }] : blocks;
+  if (blocks.length >= 2 || (blocks.length === 1 && groups.length > 1)) {
+    const context = [...new Set(loose)].join(' · ').slice(0, 300) || undefined;
+    return blocks.map((b) => ({ ...b, ...(blocks.length === 1 ? { name } : {}), context }));
+  }
   return [toTableSimple(name, matrix)];
 }
 

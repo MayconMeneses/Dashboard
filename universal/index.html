@@ -13,6 +13,7 @@
     <label>Gráficos <select id="level"><option value="1">Menos</option><option value="2" selected>Padrão</option><option value="3">Mais</option></select></label>
     <select id="tableSel" aria-label="Aba ou tabela"></select>
     <button id="btnHtml" type="button">Baixar HTML compartilhável</button>
+    <button id="btnPrint" type="button">Imprimir / PDF</button>
     <button id="btnCsv" type="button">Baixar CSV</button>
     <button id="btnNew" type="button">Outro arquivo</button>
   </div>
@@ -25,6 +26,7 @@
   </section>
   <div id="msg" role="alert"></div>
   <section id="app" hidden>
+    <div class="titlebar"><h2 id="ttl"></h2><p id="ctx" class="muted"></p></div>
     <div id="chips" class="chips" hidden></div>
     <div id="kpis" class="kpis"></div>
     <section class="card" id="alertsBox" hidden><h2>Qualidade dos dados</h2><ul id="alerts"></ul></section>
