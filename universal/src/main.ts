@@ -1,12 +1,16 @@
 import { Chart, registerables } from 'chart.js';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
+import PdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&inline';
 import { parseFile } from './parse.js';
 import { profileTable, toNumber } from './profile.js';
-import { chartData, kpis, qualityAlerts, suggestCharts } from './suggest.js';
+import { chartData, HOW_TO, insightFor, kpis, qualityAlerts, suggestCharts } from './suggest.js';
 import type { ChartSpec, ColType, Dataset, Table } from './types.js';
 
 Chart.register(...registerables);
+pdfjs.GlobalWorkerOptions.workerPort = new PdfWorker();
+const PDF = { pdfjs: pdfjs as unknown as NonNullable<Parameters<typeof parseFile>[2]>['pdfjs'] };
 const PALETTE = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#65a30d', '#475569', '#ea580c'];
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -95,14 +99,20 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
     card.append(el('p', {}, 'Sem dados suficientes para este gráfico.'));
     return card;
   }
+  const insight = insightFor(spec, d);
+  card.append(el('p', { className: 'insight' }, el('b', {}, 'Destaque: '), insight));
+  card.append(el('details', { className: 'howto' }, el('summary', {}, 'Como ler este gráfico'), el('p', {}, spec.howTo ?? HOW_TO[spec.kind] ?? '')));
   const canvas = el('canvas');
   card.append(el('div', { className: 'box' }, canvas));
-  const donut = spec.kind === 'donut';
-  const horizontal = spec.kind === 'hbar';
-  const type = spec.kind === 'line' ? 'line' : donut ? 'doughnut' : 'bar';
+  const shape = spec.kind === 'pivot' ? spec.style : spec.kind;
+  const donut = shape === 'donut';
+  const horizontal = shape === 'hbar';
+  const stacked = shape === 'stacked';
+  const isLine = shape === 'line';
+  const type = isLine ? 'line' : donut ? 'doughnut' : 'bar';
   const datasets = d.datasets
-    ? d.datasets.map((s, i) => ({ label: s.label, data: s.values.map((v) => (Number.isNaN(v) ? null : v)), backgroundColor: PALETTE[i % PALETTE.length] }))
-    : [{ label: spec.y ?? 'Registros', data: d.values, backgroundColor: donut ? d.labels.map((_, i) => PALETTE[i % PALETTE.length]) : PALETTE[0], borderColor: PALETTE[0], tension: 0.25, barThickness: horizontal ? 14 : undefined }];
+    ? d.datasets.map((s, i) => ({ label: s.label, data: s.values.map((v) => (Number.isNaN(v) ? null : v)), backgroundColor: PALETTE[i % PALETTE.length], borderColor: PALETTE[i % PALETTE.length], tension: 0.25, pointRadius: isLine ? 3 : 0, borderWidth: isLine ? 2 : 0, spanGaps: false }))
+    : [{ label: spec.y ?? 'Registros', data: d.values.map((v) => (Number.isNaN(v) ? null : v)), backgroundColor: donut ? d.labels.map((_, i) => PALETTE[i % PALETTE.length]) : PALETTE[0], borderColor: PALETTE[0], tension: 0.25, barThickness: horizontal ? 14 : undefined, spanGaps: false }];
   charts.push(
     new Chart(canvas, {
       type,
@@ -119,8 +129,8 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
           const c = e.native?.target as HTMLElement | null;
           if (c) c.style.cursor = els.length ? 'pointer' : 'default';
         },
-        plugins: { legend: { display: donut || !!d.datasets, position: 'bottom' } },
-        scales: donut ? {} : { x: { stacked: spec.kind === 'stacked' }, y: { stacked: spec.kind === 'stacked', beginAtZero: true } },
+        plugins: { legend: { display: donut || !!d.datasets, position: 'bottom' }, tooltip: { callbacks: { label: (c) => `${c.dataset.label ?? ''}: ${c.parsed.y == null && c.parsed.x == null ? 'sem dado' : new Intl.NumberFormat('pt-BR').format((horizontal ? c.parsed.x : c.parsed.y) as number)}` } } },
+        scales: donut ? {} : { x: { stacked, ...(horizontal ? { beginAtZero: true } : {}) }, y: { stacked, beginAtZero: true } },
       },
     }),
   );
@@ -148,7 +158,7 @@ function render() {
   ($('alertsBox') as HTMLElement).hidden = !alerts.length;
   $('kpis').replaceChildren(...kpis(t, prof).map((k) => el('div', { className: 'kpi', title: k.hint ?? '' }, el('b', {}, k.value), el('span', {}, k.label))));
   const specs = suggestCharts(t, prof, Number(($('level') as HTMLSelectElement).value)).filter((s) => !removed.has(s.id));
-  $('charts').replaceChildren(...specs.map((s) => drawChart(s, t)));
+  $('charts').replaceChildren(...(full.noCharts ? [el('div', { className: 'card' }, el('p', {}, 'Sem gráficos: este documento não tem tabelas com colunas alinhadas, só texto. O texto extraído está na tabela abaixo; para gráficos, use o arquivo original em Excel ou CSV.'))] : specs.map((s) => drawChart(s, t))));
   renderTable(($('q') as HTMLInputElement).value);
   const th = ['Coluna', 'Tipo (pode corrigir)', 'Preenchidas', 'Vazias', 'Valores distintos'];
   $('cols').replaceChildren(
@@ -201,7 +211,7 @@ function load(ds: Dataset) {
 
 async function handle(f: File) {
   try {
-    load(await parseFile(f.name, new Uint8Array(await f.arrayBuffer())));
+    load(await parseFile(f.name, new Uint8Array(await f.arrayBuffer()), PDF));
   } catch (e) {
     fail(e instanceof Error ? e.message : 'Não foi possível ler o arquivo.');
   }
@@ -284,7 +294,7 @@ init();
   try {
     const bin = atob(b64);
     const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-    load(await parseFile(name, bytes));
+    load(await parseFile(name, bytes, PDF));
   } catch (e) {
     fail(e instanceof Error ? e.message : 'Não foi possível ler o arquivo.');
   }

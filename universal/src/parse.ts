@@ -2,6 +2,8 @@ import { XMLParser } from 'fast-xml-parser';
 import { unzipSync, strFromU8 } from 'fflate';
 import Papa from 'papaparse';
 import readXlsx from 'read-excel-file/browser';
+import { detectRepeatedBlocks } from './grid.js';
+import { pdfToMatrix } from './pdf.js';
 import type { Cell, Dataset, Row, Table } from './types.js';
 
 const MAX_BYTES = 50 * 1024 * 1024;
@@ -48,6 +50,8 @@ const filledCount = (r: unknown[]) => r.filter((c) => c != null && String(c).tri
  * e devolve uma tabela por bloco. Se houver um único bloco, cai no comportamento simples.
  */
 export function toTables(name: string, matrix: unknown[][]): Table[] {
+  const repeated = detectRepeatedBlocks(name, matrix);
+  if (repeated) return [repeated];
   const groups: unknown[][][] = [];
   let cur: unknown[][] = [];
   for (const r of matrix) {
@@ -184,7 +188,12 @@ async function parseKmz(name: string, bytes: Uint8Array): Promise<Table[]> {
 }
 
 /** Lê qualquer formato suportado e devolve as tabelas encontradas (uma por aba/lista). */
-export async function parseFile(fileName: string, bytes: Uint8Array): Promise<Dataset> {
+export interface ParseOptions {
+  /** biblioteca pdf.js já configurada (no navegador, com o worker embutido) */
+  pdfjs?: Parameters<typeof pdfToMatrix>[0];
+}
+
+export async function parseFile(fileName: string, bytes: Uint8Array, opts: ParseOptions = {}): Promise<Dataset> {
   if (bytes.byteLength > MAX_BYTES) throw new Error('Arquivo maior que 50 MB.');
   const base = fileName.replace(/\.[^.]+$/, '');
   const text = () => new TextDecoder('utf-8').decode(bytes);
@@ -205,6 +214,18 @@ export async function parseFile(fileName: string, bytes: Uint8Array): Promise<Da
     case 'kmz':
       tables = await parseKmz(base, bytes);
       break;
+    case 'pdf': {
+      if (!opts.pdfjs) throw new Error('Leitura de PDF indisponível neste ambiente.');
+      const r = await pdfToMatrix(opts.pdfjs, bytes);
+      if (!r.lines.length) throw new Error('Este PDF não tem texto selecionável (parece escaneado). Peça o arquivo original em Excel/CSV ou use um PDF gerado digitalmente.');
+      tables = toTables(base, r.matrix);
+      const hasStructure = tables.some((t) => t.tidy || (t.columns.length >= 3 && t.rows.length >= 3));
+      if (r.textOnly || !hasStructure) {
+        const t: Table = { name: base, noCharts: true, columns: ['Página', 'Linha', 'Texto'], rows: r.lines.map((l, i) => ({ 'Página': l.page, Linha: i + 1, Texto: l.text })), notes: ['Não encontrei uma tabela com colunas alinhadas neste PDF; mostrando o texto linha a linha. Para gráficos, use o arquivo original em Excel/CSV.'] };
+        tables = [t];
+      } else for (const t of tables) t.notes = [...(t.notes ?? []), `Tabela extraída de ${r.pages} página(s) de PDF pela posição do texto; confira os números com o documento original.`];
+      break;
+    }
     case 'xlsx': {
       const blob = new Blob([bytes as BlobPart]);
       const sheets = await readXlsx(blob);

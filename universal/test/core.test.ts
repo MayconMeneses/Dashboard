@@ -118,3 +118,52 @@ describe('comparativo e contexto', () => {
     expect(sd.datasets!.map((x) => x.values)).toEqual([[3, 12, 4], [3, 15, 9]]);
   });
 });
+
+import { readFileSync } from 'node:fs';
+describe('PDF', () => {
+  const load = async () => {
+    const lib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    return lib as unknown as NonNullable<Parameters<typeof parseFile>[2]>['pdfjs'];
+  };
+  it('extrai a tabela de blocos mensais de um PDF e a reorganiza', async () => {
+    const d = await parseFile('tabela-meses.pdf', new Uint8Array(readFileSync(new URL('./fixtures/tabela-meses.pdf', import.meta.url))), { pdfjs: await load() });
+    const t = d.tables[0]!;
+    expect(t.tidy).toBeDefined();
+    expect(t.rows.length).toBe(3 * 10 * 4);
+    expect([...new Set(t.rows.map((r) => r['Mês']))]).toEqual(['Janeiro', 'Fevereiro', 'Março']);
+    expect(new Set(t.rows.map((r) => r['Município'])).size).toBe(4);
+    expect(t.notes!.join(' ')).toMatch(/PDF/);
+  });
+  it('PDF só com texto vira tabela de linhas, com aviso', async () => {
+    const d = await parseFile('texto.pdf', new Uint8Array(readFileSync(new URL('./fixtures/texto.pdf', import.meta.url))), { pdfjs: await load() });
+    expect(d.tables[0]!.columns).toEqual(['Página', 'Linha', 'Texto']);
+    expect(d.tables[0]!.notes![0]).toMatch(/texto linha a linha/);
+  });
+});
+
+describe('blocos repetidos (um por mês)', () => {
+  const csv = [
+    'Controle 2026,,,,', 'Mês,Janeiro,,,', 'Municipio,A,B,C,Total', 'Notificados Dengue,10,20,,', 'Notificados Zica,1,0,0,', 'Confirmados Dengue,4,5,6,', 'Confirmados Zica,0,0,0,', 'Descartados Dengue,6,15,,', 'Descartados Zica,1,0,0,', 'Em Andamento,0,0,0,', '',
+    'Mês,FEVEREIRO,,,', 'Municipio,A,B,C,Total', 'Notificados Dengue,30,40,50,', 'Notificados Zica,0,0,0,', 'Confirmados Dengue,9,9,9,', 'Confirmados Zica,0,0,0,', 'Descartados Dengue,21,31,41,', 'Descartados Zica,0,0,0,', 'Em Andamento,1,1,1,',
+  ].join('\n');
+  it('reúne os blocos, ignora coluna vazia, mantém sem dado e separa situação/agravo', async () => {
+    const t = (await parseFile('c.csv', enc(csv))).tables[0]!;
+    expect(t.tidy).toBeDefined();
+    expect(t.columns).toEqual(['Mês', 'Município', 'Indicador', 'Situação', 'Agravo', 'Valor']);
+    expect([...new Set(t.rows.map((r) => r['Mês']))]).toEqual(['Janeiro', 'Fevereiro']);
+    expect(t.rows.filter((r) => r['Valor'] == null)).toHaveLength(2); // C em Notificados/Descartados Dengue de janeiro
+    expect(t.rows.find((r) => r['Indicador'] === 'Em Andamento')!['Agravo']).toBeNull();
+    expect(t.notes!.join(' ')).toMatch(/“Total”/);
+  });
+  it('gráficos somam certo, deixam lacuna (não zero) e o filtro ∅ aceita indicador sem agravo', async () => {
+    const t = (await parseFile('c.csv', enc(csv))).tables[0]!;
+    const specs = suggestCharts(t, profileTable(t), 2);
+    const rank = specs.find((s) => s.id === 'tid-rank')!;
+    const r = chartData(t, rank);
+    expect(Object.fromEntries(r.labels.map((l, i) => [l, r.values[i]]))).toEqual({ A: 40, B: 60, C: 50 });
+    const mes = chartData(t, specs.find((s) => s.id === 'tid-mes-ent')!);
+    expect(mes.datasets!.find((s) => s.label === 'C')!.values[0]).toBeNaN();
+    const evo = chartData(t, specs.find((s) => s.id === 'tid-evol')!);
+    expect(evo.datasets!.some((s) => s.label === 'Em Andamento')).toBe(true);
+  });
+});
