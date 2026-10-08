@@ -182,3 +182,35 @@ describe('positividade sobre as colunas', () => {
     expect(b.values[0]).toBeCloseTo((30 / 150) * 100);
   });
 });
+
+import { strToU8, zipSync } from 'fflate';
+describe('Word (.docx)', () => {
+  const p = (t: string) => `<w:p><w:r><w:t xml:space="preserve">${t}</w:t></w:r></w:p>`;
+  const cell = (t: string, span = 1) => `<w:tc>${span > 1 ? `<w:tcPr><w:gridSpan w:val="${span}"/></w:tcPr>` : ''}${p(t)}</w:tc>`;
+  const row = (c: string[]) => `<w:tr>${c.map((x) => cell(x)).join('')}</w:tr>`;
+  const table = (rows: string[][]) => `<w:tbl>${rows.map(row).join('')}</w:tbl>`;
+  const docx = (body: string) => zipSync({ 'word/document.xml': strToU8(`<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="x"><w:body>${body}</w:body></w:document>`) });
+  const hdr = ['Municipio', 'A', 'B', 'Total'];
+  const rows = (k: number) => [hdr, ['Notificados Dengue', `${k}0`, `${k}5`, ''], ['Notificados Zica', '1', '0', ''], ['Confirmados Dengue', '4', '2', ''], ['Confirmados Zica', '0', '0', ''], ['Descartados Dengue', '5', '3', ''], ['Descartados Zica', '0', '0', ''], ['Em Andamento', '1', '0', '']];
+  it('lê tabelas do Word, com o período em parágrafos acima de cada tabela, e as reorganiza', async () => {
+    const f = docx(p('Controle (fictício)') + '<w:p><w:r><w:t xml:space="preserve">Mês: </w:t></w:r><w:r><w:t>Janeiro</w:t></w:r></w:p>' + table(rows(1)) + p('Mês Fevereiro') + table(rows(2)));
+    const t = (await parseFile('c.docx', f)).tables[0]!;
+    expect(t.tidy).toBeDefined();
+    expect([...new Set(t.rows.map((r) => r['Mês']))]).toEqual(['Janeiro', 'Fevereiro']);
+    expect(t.rows.find((r) => r['Mês'] === 'Fevereiro' && r['Município'] === 'B' && r['Indicador'] === 'Notificados Dengue')!['Total']).toBe(25);
+    expect(t.notes!.join(' ')).toMatch(/Word/);
+  });
+  it('célula mesclada (gridSpan) mantém as colunas alinhadas', async () => {
+    const f = docx(`<w:tbl><w:tr>${cell('Título', 3)}</w:tr><w:tr>${['Nome', 'X', 'Y'].map((x) => cell(x)).join('')}</w:tr><w:tr>${['a', '1', '2'].map((x) => cell(x)).join('')}</w:tr><w:tr>${['b', '3', '4'].map((x) => cell(x)).join('')}</w:tr><w:tr>${['c', '5', '6'].map((x) => cell(x)).join('')}</w:tr></w:tbl>`);
+    const t = (await parseFile('m.docx', f)).tables[0]!;
+    expect(t.columns).toEqual(['Nome', 'X', 'Y']);
+    expect(t.rows).toHaveLength(3);
+  });
+  it('documento sem tabelas vira texto, e .doc / arquivo inválido dão mensagem clara', async () => {
+    const d = await parseFile('t.docx', docx(p('Primeiro parágrafo') + p('Segundo')));
+    expect(d.tables[0]!.columns).toEqual(['Parágrafo', 'Texto']);
+    expect(d.tables[0]!.noCharts).toBe(true);
+    await expect(parseFile('x.doc', enc('abc'))).rejects.toThrow(/\.docx/);
+    await expect(parseFile('x.docx', enc('não é zip'))).rejects.toThrow(/inválido|corrompido/);
+  });
+});
