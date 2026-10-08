@@ -146,7 +146,7 @@ function createWindow() {
   win.webContents.once('did-finish-load', () => {
     if (!global.__verificou) {
       global.__verificou = true;
-      setTimeout(() => buscarAtualizacao(false), 3000);
+      if (lerConfig().autoUpdate !== false) setTimeout(() => buscarAtualizacao(false), 3000);
     }
     if (pending) {
       const f = pending;
@@ -157,9 +157,27 @@ function createWindow() {
   win.on('closed', () => (win = null));
 }
 
-const menu = Menu.buildFromTemplate([
+// preferências simples do programa (ex.: verificar atualizações ao abrir)
+const arqConfig = () => path.join(app.getPath('userData'), 'config.json');
+function lerConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(arqConfig(), 'utf8'));
+  } catch {
+    return {};
+  }
+}
+function gravarConfig(c) {
+  try {
+    fs.mkdirSync(path.dirname(arqConfig()), { recursive: true });
+    fs.writeFileSync(arqConfig(), JSON.stringify(c));
+  } catch {
+    /* sem permissão: segue sem salvar */
+  }
+}
+
+const makeMenu = () => Menu.buildFromTemplate([
   { label: 'Arquivo', submenu: [{ label: 'Abrir arquivo…', accelerator: 'CmdOrCtrl+O', click: pick }, { label: 'Imprimir / PDF', accelerator: 'CmdOrCtrl+P', click: () => win && win.webContents.print() }, { type: 'separator' }, { role: 'quit', label: 'Sair' }] },
-  { label: 'Ajuda', submenu: [{ label: 'Verificar atualizações', click: () => buscarAtualizacao(true) }, { label: 'Baixar instaladores (GitHub)', click: () => shell.openExternal(PAGINA_INSTALADORES) }, { type: 'separator' }, { label: `Painel ${pkg.painelVersao} · programa ${pkg.version}`, enabled: false }] },
+  { label: 'Ajuda', submenu: [{ label: 'Verificar atualizações agora', click: () => buscarAtualizacao(true) }, { label: 'Verificar atualizações ao abrir (acessa o GitHub)', type: 'checkbox', checked: lerConfig().autoUpdate !== false, click: (item) => gravarConfig({ ...lerConfig(), autoUpdate: item.checked }) }, { label: 'Baixar instaladores (GitHub)', click: () => shell.openExternal(PAGINA_INSTALADORES) }, { type: 'separator' }, { label: `Painel ${pkg.painelVersao} · programa ${pkg.version}`, enabled: false }] },
   { label: 'Exibir', submenu: [{ role: 'reload', label: 'Recarregar' }, { role: 'togglefullscreen', label: 'Tela cheia' }, { role: 'zoomIn', label: 'Aumentar' }, { role: 'zoomOut', label: 'Diminuir' }, { role: 'resetZoom', label: 'Tamanho normal' }] },
 ]);
 
@@ -174,7 +192,7 @@ else {
   });
   app.on('open-file', (e, f) => (e.preventDefault(), openPath(f)));
   app.whenReady().then(() => {
-    Menu.setApplicationMenu(menu);
+    Menu.setApplicationMenu(makeMenu());
     pending = fileFromArgs(process.argv);
     createWindow();
   });

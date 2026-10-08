@@ -13,7 +13,8 @@
     <label>Gráficos <select id="level"><option value="1">Menos</option><option value="2" selected>Padrão</option><option value="3">Mais</option></select></label>
     <select id="tableSel" aria-label="Aba ou tabela"></select>
     <button id="btnHtml" type="button">Gerar HTML para compartilhar</button>
-    <button id="btnPrint" type="button">Imprimir / PDF</button>
+    <button id="btnReport" type="button">Relatório (PDF)</button>
+    <button id="btnPrint" type="button">Imprimir tela</button>
     <button id="btnCsv" type="button">Baixar CSV</button>
     <button id="btnNew" type="button">Outro arquivo</button>
   </div>
@@ -21,20 +22,24 @@
 <main>
   <section id="drop" class="drop" tabindex="0" role="button" aria-label="Escolher arquivo">
     <p><strong>Arraste um arquivo aqui</strong> ou clique para escolher</p>
-    <p class="muted">CSV, Excel (XLSX), Word (DOCX) e PDF com tabelas, JSON, GeoJSON, KML ou KMZ. Tudo é processado no seu navegador; nada é enviado.</p>
+    <p class="muted">CSV, Excel (XLSX), Word (DOCX) e PDF com tabelas, JSON, GeoJSON, KML ou KMZ. Os dados do arquivo são processados no seu computador e não são enviados a nenhum servidor.</p>
+    <p class="muted small">Acessos externos que existem: o <b>mapa de fundo</b> (Esri) baixa imagens de mapa e revela a região que você está vendo — dá para escolher “Sem mapa de fundo”; e o <b>programa instalado</b> consulta o GitHub para ver se há atualização do painel — dá para desligar em Ajuda.</p>
     <input id="file" type="file" accept=".csv,.tsv,.txt,.xlsx,.docx,.doc,.pdf,.json,.geojson,.kml,.kmz" hidden>
   </section>
+  <section id="preview" class="card" hidden aria-label="Prévia do arquivo"></section>
   <div id="msg" role="alert"></div>
   <section id="app" hidden>
     <div class="titlebar"><h2 id="ttl"></h2><p id="ctx" class="muted"></p></div>
     <div id="chips" class="chips" hidden></div>
+    <div id="dateBar" class="datebar" hidden></div>
     <div id="kpis" class="kpis"></div>
     <section class="card" id="alertsBox" hidden><h2>Qualidade dos dados e como li o arquivo</h2><ul id="alerts"></ul></section>
     <div id="charts" class="charts"></div>
-    <section class="card"><h2>Dados</h2><input id="q" type="search" placeholder="Filtrar linhas…" aria-label="Filtrar linhas"><div class="tablewrap"><table id="tbl"></table></div><p class="muted">Dica: clique numa barra ou fatia para filtrar todo o painel; clique de novo para remover.</p><p id="tinfo" class="muted"></p></section>
+    <section class="card"><h2>Dados</h2><input id="q" type="search" placeholder="Filtrar linhas…" aria-label="Filtrar linhas"><div class="tablewrap"><table id="tbl"></table></div><div id="pager" class="pager"></div><p class="muted">Dica: clique numa barra ou fatia para filtrar todo o painel; clique de novo para remover.</p><p id="tinfo" class="muted"></p></section>
     <section class="card"><h2>Colunas reconhecidas</h2><div class="tablewrap"><table id="cols"></table></div></section>
   </section>
 </main>
+<section id="report" hidden aria-label="Relatório"></section>
 <dialog id="shareDlg" aria-labelledby="shH"><form method="dialog" onsubmit="return false">
   <h2 id="shH">Gerar HTML para compartilhar</h2>
   <p class="muted">Cria um único arquivo .html que qualquer pessoa abre no navegador, sem instalar nada. Ele abre exatamente como você está vendo agora (filtros, tipos de gráfico e gráficos removidos).</p>

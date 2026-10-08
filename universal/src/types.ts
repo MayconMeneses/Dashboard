@@ -14,13 +14,34 @@ export interface Table {
   notes?: string[];
   /** tabela só de texto (ex.: PDF sem tabelas): não gera gráficos */
   noCharts?: boolean;
+  /** contagens da leitura (linhas ignoradas, linhas além do limite) */
+  stats?: { dropped: number; truncated: number };
   /** tabela "organizada" a partir de blocos repetidos (ex.: um bloco por mês) */
   tidy?: { period: string; entity: string; label: string; value: string; situation?: string; agravo?: string };
+}
+
+export interface ParseInfo {
+  format: string;
+  bytes: number;
+  sha256?: string;
+  /** data e hora da leitura (ISO) */
+  readAt?: string;
+  encoding?: string;
+  delimiter?: string;
+  delimiterGuessed?: boolean;
+  /** linhas de dados lidas em todas as tabelas */
+  rowsRead: number;
+  /** linhas em branco ou de título ignoradas */
+  rowsDropped: number;
+  /** linhas além do limite, não lidas */
+  truncated: number;
+  notes: string[];
 }
 
 export interface Dataset {
   fileName: string;
   tables: Table[];
+  info?: ParseInfo;
 }
 
 export type ColType = 'number' | 'integer' | 'date' | 'category' | 'boolean' | 'text' | 'id' | 'lat' | 'lon';
@@ -39,6 +60,11 @@ export interface ColProfile {
   minDate?: number;
   maxDate?: number;
   top?: { value: string; count: number }[];
+  /** valores que não são número numa coluna numérica (até 25, com a linha da tabela) */
+  invalid?: { row: number; value: string }[];
+  invalidCount?: number;
+  /** quantos valores eram marcadores de ausência (n/d, -, s/i…), tratados como vazio */
+  missingMarkers?: number;
 }
 
 export type ChartStyle = 'line' | 'bar' | 'stacked' | 'hbar' | 'donut' | 'area' | 'percent' | 'heatmap' | 'radar' | 'small' | 'pareto';
@@ -87,4 +113,6 @@ export interface Kpi {
 export interface Alert {
   level: 'info' | 'aviso';
   text: string;
+  /** ação sugerida: juntar grafias da mesma categoria */
+  merge?: { col: string; values: string[]; to: string };
 }

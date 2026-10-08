@@ -51,3 +51,41 @@ describe('transformações', () => {
     expect(p.cumulative[2]).toBeCloseTo(100);
   });
 });
+
+import { filterByDate, pageOf, sortRows } from '../src/tableview.js';
+
+describe('tabela: ordenar, paginar e filtrar por período', () => {
+  const rows = [{ n: 10, t: 'b', d: '2024-03-05' }, { n: 2, t: 'a', d: '2024-01-10' }, { n: null, t: 'c', d: '2024-02-01' }, { n: 33, t: 'B', d: null }];
+  it('ordena número (2 < 10 < 33), vazios por último, nas duas direções', () => {
+    expect(sortRows(rows, 'n', 'asc', 'integer').map((r) => r.n)).toEqual([2, 10, 33, null]);
+    expect(sortRows(rows, 'n', 'desc', 'integer').map((r) => r.n)).toEqual([33, 10, 2, null]);
+    expect(sortRows(rows, 't', 'asc', 'text').map((r) => r.t)).toEqual(['a', 'b', 'B', 'c']);
+    expect(sortRows(rows, 'd', 'asc', 'date').map((r) => r.d)).toEqual(['2024-01-10', '2024-02-01', '2024-03-05', null]);
+  });
+  it('pagina e limita a página fora do intervalo', () => {
+    const p = pageOf(Array.from({ length: 105 }, (_, i) => i), 3, 50);
+    expect([p.page, p.pages, p.from, p.to, p.items.length]).toEqual([3, 3, 101, 105, 5]);
+    expect(pageOf([1, 2], 9, 50).page).toBe(1);
+    expect(pageOf([], 1, 50)).toMatchObject({ from: 0, to: 0, pages: 1 });
+  });
+  it('filtra por período com limites inclusivos e exclui linhas sem data', () => {
+    expect(filterByDate(rows, 'd', '2024-02-01', '2024-03-05').map((r) => r.d)).toEqual(['2024-03-05', '2024-02-01']);
+    expect(filterByDate(rows, 'd', undefined, undefined)).toHaveLength(4);
+    expect(filterByDate(rows, 'd', '2024-03-01', undefined).map((r) => r.d)).toEqual(['2024-03-05']);
+  });
+});
+
+import { describeState, formatBytes } from '../src/report.js';
+
+describe('relatório: descrição do que o usuário ajustou', () => {
+  it('lista filtros, período, junções, tipos e gráficos removidos, sempre com a interpretação regional', () => {
+    const l = describeState({ filters: { Município: 'Croatá' }, dateRange: { col: 'data', from: '2024-01-01', to: '2024-03-31' }, merges: { cidade: { Croata: 'Croatá' } }, forced: { cod: 'text' }, removed: ['a', 'b'], locale: { dateOrder: 'dmy', numbers: 'br' } });
+    expect(l).toEqual(expect.arrayContaining(['Filtro por clique: Município = Croatá', 'Período em “data”: de 01/01/2024 até 31/03/2024 (linhas sem data ficam fora)', 'Grafias unificadas em “cidade”: “Croata” → “Croatá”', 'Tipo da coluna “cod” definido manualmente: texto', '2 gráfico(s) removido(s) do painel pelo usuário']));
+    expect(l[l.length - 1]).toMatch(/dia\/mês\/ano.*padrão brasileiro/);
+    expect(describeState({ filters: {}, dateRange: {}, merges: {}, forced: {}, removed: [], locale: { dateOrder: 'mdy', numbers: 'us' } })).toHaveLength(1);
+  });
+  it('formata tamanho de arquivo', () => {
+    expect(formatBytes(2 * 1048576)).toBe('2,0 MB');
+    expect(formatBytes(100)).toBe('1 KB');
+  });
+});

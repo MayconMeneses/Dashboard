@@ -1,6 +1,6 @@
 # Dashboard – vigilância entomológica (Chagas) e painéis automáticos
 
-Dois projetos em TypeScript que transformam arquivos de campo e planilhas em painéis interativos, mapas e relatórios, rodando no próprio computador (sem enviar dados para a internet):
+Dois projetos em TypeScript que transformam arquivos de campo e planilhas em painéis interativos, mapas e relatórios, rodando no próprio computador (os dados do arquivo não são enviados a nenhum servidor):
 
 | | Projeto | O que faz |
 |---|---|---|
