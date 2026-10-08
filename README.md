@@ -4,6 +4,8 @@ Painel web que lê arquivos **KML/KMZ** da campanha e mostra, por localidade, o 
 
 > Ferramenta de apoio à análise. Não substitui os formulários nem os procedimentos oficiais da vigilância. O repositório contém só **dados fictícios** de exemplo (`samples/exemplo-ficticio.kml`).
 
+> **Dashboard Universal:** além do painel de triatomíneos, a pasta [`universal/`](universal/) traz um painel genérico que gera gráficos automáticos a partir de CSV, Excel, JSON, GeoJSON, KML e KMZ, com instaladores para Windows em [`universal/instaladores/`](universal/instaladores/). Veja `universal/README.md`.
+
 ## Como executar
 
 Requisitos: Node.js 22+.
