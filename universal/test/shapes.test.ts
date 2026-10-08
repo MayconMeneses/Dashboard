@@ -127,3 +127,10 @@ describe('relatório em PDF (definição do documento)', () => {
     expect(footer.columns[0]!.text).toContain('Dashboard Universal 9.9.9');
   });
 });
+
+import { heatCell } from '../src/util.js';
+describe('contraste do mapa de calor', () => {
+  it('texto com contraste mínimo 4,5:1 em toda a escala', () => {
+    for (let i = 0; i <= 100; i++) expect(heatCell(i / 100).ratio).toBeGreaterThanOrEqual(4.5);
+  });
+});

@@ -335,3 +335,22 @@ describe('XLSX e KMZ', () => {
     await expect(parseFile('b.kmz', zipSync({ 'x.txt': strToU8('oi') }))).rejects.toThrow(/sem arquivo .kml/);
   });
 });
+
+import { buildXlsx } from '../src/xlsx.js';
+describe('exportar Excel', () => {
+  it('gera um .xlsx que o próprio leitor abre, com números, datas, texto, acentos e vazios', async () => {
+    const bytes = buildXlsx([
+      { name: 'Dados', columns: ['Município', 'Valor', 'Data', 'Obs'], rows: [['Croatá', 10.5, new Date(Date.UTC(2024, 2, 5)), null], ['São <&> "x"', 20, new Date(Date.UTC(2024, 3, 6)), 'ok'], ['C', 30, new Date(Date.UTC(2024, 4, 7)), 'ok'], ['D', 40, new Date(Date.UTC(2024, 5, 8)), 'ok']] },
+      { name: 'Origem: a/b?', columns: ['Campo', 'Valor'], rows: [['Arquivo', 'a.xlsx'], ['Filtro', 'x'], ['Z', '1']] },
+    ]);
+    const d = await parseFile('saida.xlsx', bytes);
+    expect(d.tables).toHaveLength(2);
+    const t = d.tables[0]!;
+    expect(t.columns).toEqual(['Município', 'Valor', 'Data', 'Obs']);
+    expect(t.rows[0]).toMatchObject({ 'Município': 'Croatá', Valor: 10.5, Obs: null });
+    expect(t.rows[1]!['Município']).toBe('São <&> "x"');
+    expect(t.rows[0]!['Data']).toBeInstanceOf(Date);
+    expect((t.rows[0]!['Data'] as Date).toISOString().slice(0, 10)).toBe('2024-03-05');
+    expect(d.tables[1]!.columns).toEqual(['Campo', 'Valor']);
+  });
+});

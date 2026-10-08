@@ -42,10 +42,16 @@ export function detectDelimiter(text: string): ',' | ';' | '\t' | '|' {
     for (const c of counts) freq.set(c, (freq.get(c) ?? 0) + 1);
     let mode = 0;
     let modeN = 0;
-    for (const [c, n] of freq) if (c > 0 && n > modeN) (mode = c), (modeN = n);
+    for (const [c, n] of freq) if (c > 0 && n > modeN) {
+        mode = c;
+        modeN = n;
+      }
     if (!mode || !lines.length) continue;
     const score = mode * (modeN / lines.length) * (modeN / lines.length);
-    if (modeN / lines.length >= 0.6 && score > bestScore) (best = sep), (bestScore = score);
+    if (modeN / lines.length >= 0.6 && score > bestScore) {
+      best = sep;
+      bestScore = score;
+    }
   }
   return best;
 }

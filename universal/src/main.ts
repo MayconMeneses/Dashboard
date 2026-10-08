@@ -10,6 +10,10 @@ import type { LocaleInfo } from './profile.js';
 import { delimiterName } from './csv.js';
 import type { DelimiterChoice, Encoding } from './csv.js';
 import { buildPdfDoc, describeState, formatBytes } from './report.js';
+import { compileFormula, evalAggregate, evalRow, FormulaError } from './formula.js';
+import { addMetricColumns, applyRenames, compareTables, migrateColumn, parseProject, reconcileState, serializeProject } from './project.js';
+import type { Metric, ProjectState, TableDiff } from './project.js';
+import { buildXlsx } from './xlsx.js';
 import type { ReportChart, ReportModel } from './report.js';
 import { applyMerges } from './similar.js';
 import { filterByDate, pageOf, sortRows } from './tableview.js';
@@ -18,12 +22,12 @@ import { bubbleData, compatibleStyles, funnelData, toHeatmap, toPercent, toParet
 import { chartData, HOW_TO, HOWTO_SHAPE, insightFor, kpis, qualityAlerts, rateData, rateInsight, suggestCharts } from './suggest.js';
 import type { SeriesData } from './suggest.js';
 import type { ChartSpec, ColProfile, ColType, Dataset, Table } from './types.js';
-import { maxOf } from './util.js';
+import { heatCell, maxOf } from './util.js';
 
 Chart.register(...registerables);
 pdfjs.GlobalWorkerOptions.workerPort = new PdfWorker();
 const PDF = { pdfjs: pdfjs as unknown as NonNullable<Parameters<typeof parseFile>[2]>['pdfjs'] };
-const PALETTE = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#65a30d', '#475569', '#ea580c'];
+const PALETTE = ['#0072B2', '#D55E00', '#009E73', '#E69F00', '#CC79A7', '#56B4E9', '#44AA99', '#882255', '#999933', '#332288'];
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 let dataset: Dataset | null = null;
@@ -44,17 +48,22 @@ let basemap: 'esri' | 'none' = 'esri';
 let locInfo: LocaleInfo | null = null;
 let lastProf: ColProfile[] = [];
 let lastSpecs: ChartSpec[] = [];
+let renames: Record<string, string> = {};
+let units: Record<string, string> = {};
+let metrics: Metric[] = [];
+/** configuração a reaplicar ao próximo arquivo (projeto aberto ou "Atualizar dados") */
+let carry: { state: ProjectState; oldTable?: Table; label: string } | null = null;
 
 let mergedFor: Table | null = null;
 let mergedKey = '';
 let mergedVal: Table | null = null;
-/** tabela com as grafias unificadas pelo usuário ("Juntar"); o original nunca é alterado */
+/** tabela com campos renomeados, grafias unificadas e métricas por linha; o original nunca é alterado */
 function mergedTable(): Table {
-  const key = JSON.stringify(merges);
+  const key = JSON.stringify([merges, renames, metrics]);
   if (mergedVal && mergedFor === table && key === mergedKey) return mergedVal;
   mergedFor = table;
   mergedKey = key;
-  mergedVal = applyMerges(table!, merges);
+  mergedVal = addMetricColumns(applyMerges(applyRenames(table!, renames), merges), metrics);
   return mergedVal;
 }
 
@@ -188,8 +197,9 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
   if (shape === 'heatmap') return drawHeatmap(card, spec, d);
   if (shape === 'small') return drawSmall(card, d);
 
-  const canvas = el('canvas');
+  const canvas = el('canvas', { role: 'img', ariaLabel: `${spec.title}. ${insight}` });
   card.append(el('div', { className: 'box' }, canvas));
+  card.append(dataAlt(d.labels, d.datasets ?? [{ label: spec.y ?? 'Valor', values: d.values }]));
   const donut = shape === 'donut';
   const horizontal = shape === 'hbar';
   const percent = shape === 'percent';
@@ -206,7 +216,7 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
     labels = p.labels;
     datasets = [
       { type: 'bar', label: spec.y ?? 'Valor', data: p.values, backgroundColor: PALETTE[0], order: 1 },
-      { type: 'line', label: '% acumulado', data: p.cumulative, yAxisID: 'y1', borderColor: '#ea580c', backgroundColor: '#ea580c', borderWidth: 3, pointRadius: 3, tension: 0.15, order: -1 },
+      { type: 'line', label: '% acumulado', data: p.cumulative, yAxisID: 'y1', borderColor: '#D55E00', backgroundColor: '#D55E00', borderWidth: 3, pointRadius: 3, tension: 0.15, order: -1 },
     ];
   } else if (base.datasets) {
     const sets = radar ? [...base.datasets].sort((x, y) => y.values.reduce((a, v) => a + (Number.isNaN(v) ? 0 : v), 0) - x.values.reduce((a, v) => a + (Number.isNaN(v) ? 0 : v), 0)).slice(0, 6) : base.datasets;
@@ -214,7 +224,7 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
   } else {
     datasets = [{ label: spec.y ?? 'Registros', data: base.values.map((v) => (Number.isNaN(v) ? null : v)), backgroundColor: donut ? labels.map((_, i) => colorOf(i)) : shape === 'area' ? PALETTE[0] + '55' : PALETTE[0], borderColor: PALETTE[0], tension: 0.25, fill: shape === 'area', barThickness: horizontal ? 14 : undefined, spanGaps: false }];
   }
-  if (rate) datasets.push({ type: 'line', label: rate.name, data: rate.values.map((v) => (Number.isNaN(v) ? null : v)), yAxisID: 'y1', borderColor: '#ea580c', backgroundColor: '#ea580c', borderWidth: 3, pointRadius: 4, tension: 0.2, spanGaps: false, order: -1 });
+  if (rate) datasets.push({ type: 'line', label: rate.name, data: rate.values.map((v) => (Number.isNaN(v) ? null : v)), yAxisID: 'y1', borderColor: '#D55E00', backgroundColor: '#D55E00', borderWidth: 3, pointRadius: 4, tension: 0.2, spanGaps: false, order: -1 });
   const type = radar ? 'radar' : isLine ? 'line' : donut ? 'doughnut' : 'bar';
   const fmt = (v: number, pct: boolean) => (pct ? `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(v)}%` : new Intl.NumberFormat('pt-BR').format(v));
   charts.push(
@@ -227,7 +237,17 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
         maintainAspectRatio: false,
         onClick: (_e, els) => {
           const i = els[0]?.index;
-          if (i != null && spec.x && labels[i] != null) toggleFilter(spec.x, labels[i]!);
+          if (i == null || !spec.x || labels[i] == null) return;
+          const mm = spec.kind === 'line' ? /^(\d{4})-(\d{2})$/.exec(labels[i]!) : null;
+          if (mm) {
+            // gráfico de linha por mês: o clique vira filtro de período daquele mês
+            const last = new Date(Date.UTC(Number(mm[1]), Number(mm[2]), 0)).getUTCDate();
+            dateRange = dateRange.from === `${mm[1]}-${mm[2]}-01` ? {} : { col: spec.x, from: `${mm[1]}-${mm[2]}-01`, to: `${mm[1]}-${mm[2]}-${String(last).padStart(2, '0')}` };
+            page = 1;
+            render();
+            return;
+          }
+          toggleFilter(spec.x, labels[i]!);
         },
         onHover: (e, els) => {
           const c = e.native?.target as HTMLElement | null;
@@ -257,9 +277,16 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
   return card;
 }
 
-function heat(v: number, min: number, max: number): string {
-  const f = max > min ? (v - min) / (max - min) : 1;
-  return `rgba(37, 99, 235, ${(0.08 + f * 0.82).toFixed(2)})`;
+/** Tabela com os mesmos números do gráfico, para leitor de tela e para conferir valores. */
+function dataAlt(labels: string[], series: { label: string; values: number[] }[]): HTMLElement {
+  const fmt = new Intl.NumberFormat('pt-BR');
+  const val = (v: number) => (Number.isNaN(v) ? 'sem dado' : fmt.format(v));
+  return el(
+    'details',
+    { className: 'data-alt' },
+    el('summary', {}, 'Ver os dados deste gráfico em tabela'),
+    el('div', { className: 'tablewrap' }, el('table', {}, el('thead', {}, el('tr', {}, el('th', {}, ''), ...series.map((s) => el('th', {}, s.label)))), el('tbody', {}, ...labels.map((l, i) => el('tr', {}, el('th', {}, l), ...series.map((s) => el('td', {}, val(s.values[i] ?? Number.NaN)))))))),
+  );
 }
 
 function drawHeatmap(card: HTMLElement, spec: ChartSpec, d: SeriesData): HTMLElement {
@@ -268,8 +295,11 @@ function drawHeatmap(card: HTMLElement, spec: ChartSpec, d: SeriesData): HTMLEle
     const c = el('th', {}, txt);
     if (onclick) {
       c.style.cursor = 'pointer';
-      c.title = 'Clique para filtrar';
+      c.title = 'Clique (ou Enter) para filtrar';
+      c.tabIndex = 0;
+      c.setAttribute('role', 'button');
       c.onclick = onclick;
+      c.onkeydown = (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onclick());
     }
     return c;
   };
@@ -284,15 +314,17 @@ function drawHeatmap(card: HTMLElement, spec: ChartSpec, d: SeriesData): HTMLEle
         td.className = 'nodata';
         td.title = `${r} · ${h.cols[ci]}: sem dado (não é zero)`;
       } else {
-        td.style.background = heat(v, h.min, h.max);
-        td.style.color = (v - h.min) / ((h.max - h.min) || 1) > 0.55 ? '#fff' : 'inherit';
+        const hc = heatCell(h.max > h.min ? (v - h.min) / (h.max - h.min) : 1);
+        td.style.background = hc.bg;
+        td.style.color = hc.fg;
         td.title = `${r} · ${h.cols[ci]}: ${fmt.format(v)}`;
       }
       return td;
     })))),
   );
   card.dataset.heat = JSON.stringify({ rows: h.rows, cols: h.cols, cells: h.cells.map((r) => r.map((v) => (Number.isNaN(v) ? null : v))), min: h.min, max: h.max });
-  card.append(el('div', { className: 'heatwrap' }, table));
+  const fmtN = new Intl.NumberFormat('pt-BR');
+  card.append(el('div', { className: 'heatwrap' }, table), el('div', { className: 'heat-legend' }, el('span', {}, fmtN.format(h.min)), el('span', { className: 'grad', ariaHidden: 'true' }), el('span', {}, fmtN.format(h.max)), el('span', { className: 'muted' }, ' · listrado = sem dado (não é zero)')));
   return card;
 }
 
@@ -324,8 +356,9 @@ function drawFunnel(card: HTMLElement, spec: ChartSpec, t: Table): HTMLElement {
   }
   card.append(el('p', { className: 'insight' }, el('b', {}, 'Destaque: '), `${f.labels[f.labels.length - 1]}.`));
   card.append(el('details', { className: 'howto' }, el('summary', {}, 'Por que este gráfico e como ler'), el('p', {}, el('b', {}, 'Por que: '), spec.why ?? ''), el('p', {}, el('b', {}, 'Como ler: '), spec.howTo ?? '')));
-  const canvas = el('canvas');
+  const canvas = el('canvas', { role: 'img', ariaLabel: `${spec.title}. ${f.labels.join('; ')}` });
   card.append(el('div', { className: 'box short' }, canvas));
+  card.append(dataAlt(f.labels, [{ label: 'Casos', values: f.values }]));
   const max = maxOf(f.values, 1);
   charts.push(
     new Chart(canvas, {
@@ -347,8 +380,9 @@ function drawBubble(card: HTMLElement, spec: ChartSpec, t: Table): HTMLElement {
   const top = [...pts].sort((a, b) => b.y - a.y)[0]!;
   card.append(el('p', { className: 'insight' }, el('b', {}, 'Destaque: '), `maior positividade em ${top.entity} (${top.y.toFixed(1).replace('.', ',')}%, ${new Intl.NumberFormat('pt-BR').format(top.x)} ${spec.bubble!.xLabel.toLowerCase()}).`));
   card.append(el('details', { className: 'howto' }, el('summary', {}, 'Por que este gráfico e como ler'), el('p', {}, el('b', {}, 'Por que: '), spec.why ?? ''), el('p', {}, el('b', {}, 'Como ler: '), spec.howTo ?? '')));
-  const canvas = el('canvas');
+  const canvas = el('canvas', { role: 'img', ariaLabel: `${spec.title}. ${pts.map((p) => `${p.entity}: ${p.y.toFixed(1)}%`).join('; ')}` });
   card.append(el('div', { className: 'box' }, canvas));
+  card.append(dataAlt(pts.map((p) => p.entity), [{ label: spec.bubble!.xLabel, values: pts.map((p) => p.x) }, { label: 'Positividade (%)', values: pts.map((p) => p.y) }, { label: spec.bubble!.sizeLabel, values: pts.map((p) => p.size) }]));
   charts.push(
     new Chart(canvas, {
       type: 'bubble',
@@ -416,12 +450,22 @@ function render() {
   );
   ($('alertsBox') as HTMLElement).hidden = !alerts.length && !mergeNotes.length;
   renderDateBar(prof);
-  $('kpis').replaceChildren(...kpis(t, prof).map((k) => el('div', { className: 'kpi', title: k.hint ?? '' }, el('b', {}, k.value), el('span', {}, k.label))));
+  const metricKpis = metrics.flatMap((mt) => {
+    try {
+      const c = compileFormula(mt.formula, full.columns);
+      return c.aggregate ? [{ label: mt.name, value: fmtMetric(evalAggregate(c, t.rows), mt.unit), hint: `Fórmula: ${mt.formula}` }] : [];
+    } catch {
+      return [];
+    }
+  });
+  $('kpis').replaceChildren(...[...kpis(t, prof), ...metricKpis].map((k) => el('div', { className: 'kpi', title: k.hint ?? '' }, el('b', {}, k.value), el('span', {}, k.label))));
+  renderMetrics(full, t);
+  renderTools();
   const specs = suggestCharts(full, prof, Number(($('level') as HTMLSelectElement).value)).filter((s) => !removed.has(s.id));
   lastSpecs = specs;
   $('charts').replaceChildren(...(full.noCharts ? [el('div', { className: 'card' }, el('p', {}, 'Sem gráficos: este documento não tem tabelas com colunas alinhadas, só texto. O texto extraído está na tabela abaixo; para gráficos, use o arquivo original em Excel ou CSV.'))] : specs.map((s) => drawChart(s, t))));
   renderTable();
-  const th = ['Coluna', 'Tipo (pode corrigir)', 'Preenchidas', 'Vazias', 'Valores distintos', 'Valores inválidos'];
+  const th = ['Coluna (pode renomear)', 'Unidade', 'Tipo (pode corrigir)', 'Preenchidas', 'Vazias', 'Valores distintos', 'Valores inválidos'];
   $('cols').replaceChildren(
     el('thead', {}, el('tr', {}, ...th.map((h) => el('th', {}, h)))),
     el(
@@ -434,10 +478,178 @@ function render() {
           removed = new Set();
           render();
         };
-        return el('tr', {}, el('td', {}, p.name), el('td', {}, sel), el('td', {}, String(p.filled)), el('td', {}, String(p.missing)), el('td', {}, String(p.unique)), el('td', {}, p.invalidCount ? `${p.invalidCount} (ex.: linha ${p.invalid![0]!.row}: “${p.invalid![0]!.value}”)` : '—'));
+        const isMetric = metrics.some((mt) => mt.name === p.name || `${mt.name} (métrica)` === p.name);
+        const nameIn = el('input', { type: 'text', value: p.name, ariaLabel: `Nome da coluna ${p.name}`, disabled: isMetric, className: 'cell-in' });
+        // re-renderiza depois do evento: trocar o campo com foco dentro do próprio handler dispara blur no nó removido
+        nameIn.onchange = () => setTimeout(() => renameColumn(p.name, nameIn.value), 0);
+        const unitIn = el('input', { type: 'text', value: units[p.name] ?? '', placeholder: '—', ariaLabel: `Unidade da coluna ${p.name}`, className: 'cell-in short' });
+        unitIn.onchange = () => {
+          units = unitIn.value.trim() ? { ...units, [p.name]: unitIn.value.trim() } : Object.fromEntries(Object.entries(units).filter(([k]) => k !== p.name));
+          setTimeout(render, 0);
+        };
+        return el('tr', {}, el('td', {}, nameIn), el('td', {}, unitIn), el('td', {}, sel), el('td', {}, String(p.filled)), el('td', {}, String(p.missing)), el('td', {}, String(p.unique)), el('td', {}, p.invalidCount ? `${p.invalidCount} (ex.: linha ${p.invalid![0]!.row}: “${p.invalid![0]!.value}”)` : '—'));
       }),
     ),
   );
+}
+
+const withUnit = (c: string) => (units[c] ? `${c} (${units[c]})` : c);
+const fmtMetric = (v: number | null, unit?: string) => (v == null ? 'sem dado' : `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(v)}${unit ? ' ' + unit : ''}`);
+
+/** Renomeia um campo e leva junto filtros, tipos, junções, período e fórmulas que o citam. */
+function renameColumn(cur: string, next: string) {
+  const name = next.trim();
+  if (!name || name === cur) return;
+  const exists = mergedTable().columns.includes(name);
+  if (exists) {
+    fail(`Já existe uma coluna chamada “${name}”. Escolha outro nome.`);
+    render();
+    return;
+  }
+  const orig = Object.keys(renames).find((k) => renames[k] === cur) ?? cur;
+  if (name === orig) delete renames[orig];
+  else renames = { ...renames, [orig]: name };
+  const s = migrateColumn({ forced, filters, merges, units, dateRange, metrics }, cur, name);
+  forced = (s.forced ?? {}) as Record<string, ColType>;
+  filters = s.filters ?? {};
+  merges = s.merges ?? {};
+  units = s.units ?? {};
+  dateRange = s.dateRange ?? {};
+  metrics = s.metrics ?? [];
+  if (sortState?.col === cur) sortState = { ...sortState, col: name };
+  $('msg').textContent = '';
+  render();
+}
+
+function renderMetrics(full: Table, t: Table) {
+  const box = $('metricsBox');
+  const cols = full.columns;
+  const list = el('div', {});
+  for (const mt of metrics) {
+    let res = '';
+    try {
+      const c = compileFormula(mt.formula, cols.filter((x) => !metrics.some((o) => o.name === x) || true));
+      res = c.aggregate ? `Indicador: ${fmtMetric(evalAggregate(c, t.rows), mt.unit)}` : `Coluna criada em todas as linhas (ex.: ${fmtMetric(t.rows[0] ? evalRow(c, t.rows[0]) : null, mt.unit)})`;
+    } catch (e) {
+      res = `Fórmula com problema: ${e instanceof Error ? e.message : ''}`;
+    }
+    const rm = el('button', { type: 'button', className: 'mini' }, 'Remover');
+    rm.onclick = () => ((metrics = metrics.filter((o) => o.id !== mt.id)), render());
+    list.append(el('div', { className: 'metric-row' }, el('b', {}, mt.name + (mt.unit ? ` (${mt.unit})` : '')), el('code', {}, mt.formula), el('span', { className: 'muted' }, ' → ' + res), rm));
+  }
+  const name = el('input', { type: 'text', placeholder: 'Ex.: Taxa por 100 mil', ariaLabel: 'Nome da métrica', maxLength: 60 });
+  const unit = el('input', { type: 'text', placeholder: 'unidade (opcional)', ariaLabel: 'Unidade da métrica', maxLength: 20, className: 'short' });
+  const formula = el('input', { type: 'text', placeholder: 'Ex.: [Notificados] / [População] * 100000', ariaLabel: 'Fórmula da métrica', className: 'wide' });
+  const msg = el('p', { className: 'muted', role: 'status' });
+  const chips = el('div', { className: 'chips-cols' }, ...cols.slice(0, 24).map((c) => {
+    const b = el('button', { type: 'button', className: 'mini' }, `[${c}]`);
+    b.onclick = () => ((formula.value += `[${c}]`), formula.focus());
+    return b;
+  }));
+  const test = el('button', { type: 'button' }, 'Testar');
+  const add = el('button', { type: 'button', className: 'primary' }, 'Adicionar métrica');
+  const check = (): { ok: boolean; text: string } => {
+    try {
+      const c = compileFormula(formula.value, cols);
+      return { ok: true, text: c.aggregate ? `Vale ${fmtMetric(evalAggregate(c, t.rows), unit.value.trim())} com os filtros atuais (um indicador).` : `Vale ${fmtMetric(t.rows[0] ? evalRow(c, t.rows[0]) : null, unit.value.trim())} na primeira linha (cria uma coluna nova).` };
+    } catch (e) {
+      return { ok: false, text: e instanceof FormulaError ? e.message : 'Fórmula inválida.' };
+    }
+  };
+  test.onclick = () => (msg.textContent = check().text);
+  add.onclick = () => {
+    if (!name.value.trim()) {
+      msg.textContent = 'Dê um nome à métrica.';
+      return;
+    }
+    const r = check();
+    msg.textContent = r.text;
+    if (!r.ok) return;
+    metrics = [...metrics, { id: `m${Date.now().toString(36)}`, name: name.value.trim(), unit: unit.value.trim() || undefined, formula: formula.value.trim() }];
+    render();
+  };
+  box.replaceChildren(
+    el('h2', {}, 'Métricas próprias'),
+    el('p', { className: 'muted' }, 'Crie contas com as colunas: números, [Coluna], + − × ÷, ( ), ABS, ROUND. Com SUM, AVG, MIN, MAX, COUNT, SUMIF([soma],[coluna],"valor") e COUNTIF([coluna],"valor") vira um indicador único (respeita os filtros); sem elas vira uma coluna nova. Vazio ou divisão por zero dá “sem dado”, nunca zero.'),
+    list,
+    el('div', { className: 'metric-form' }, name, unit, formula, test, add),
+    el('p', { className: 'muted small' }, 'Clique para inserir uma coluna: '),
+    chips,
+    msg,
+  );
+}
+
+function renderTools() {
+  const restore = $('btnRestore') as HTMLButtonElement;
+  restore.hidden = removed.size === 0;
+  restore.textContent = `Restaurar ${removed.size} gráfico(s) removido(s)`;
+}
+
+function baseName() {
+  return (dataset?.fileName ?? 'painel').replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]+/g, '-');
+}
+
+function saveProject() {
+  if (!dataset || !table) return;
+  const info = dataset.info;
+  const txt = serializeProject({
+    salvoEm: new Date().toISOString(),
+    painel: __APP_VERSION__,
+    origem: { arquivo: dataset.fileName, sha256: info?.sha256, formato: info?.format, tabela: table.title ?? table.name },
+    leitura: { encoding: info?.encoding, delimiter: info?.delimiter },
+    estado: captureState(),
+  });
+  download(`${baseName()}.projeto.json`, 'application/json', txt);
+}
+
+async function openProject(f: File) {
+  try {
+    const p = parseProject(await f.text());
+    carry = { state: p.estado, label: `Projeto “${p.origem.arquivo || f.name}” (salvo em ${p.salvoEm ? new Date(p.salvoEm).toLocaleString('pt-BR') : 'data desconhecida'}, painel ${p.painel || '?'})` };
+    reset();
+    pending = null;
+    $('preview').hidden = true;
+    $('app').hidden = true;
+    $('actions').hidden = true;
+    $('drop').hidden = false;
+    $('note').textContent = `Projeto aberto: ${carry.label}. Agora escolha o arquivo de dados — pode ser o mesmo ou uma versão atualizada; os filtros e ajustes serão reaplicados.`;
+    $('msg').textContent = '';
+  } catch (e) {
+    fail(e instanceof Error ? e.message : 'Não foi possível abrir o projeto.');
+  }
+}
+
+function updateData() {
+  if (!dataset || !table) return;
+  carry = { state: captureState(), oldTable: table, label: `Arquivo anterior “${dataset.fileName}”` };
+  ($('file') as HTMLInputElement).value = '';
+  ($('file') as HTMLInputElement).click();
+}
+
+function downloadExcel() {
+  if (!dataset || !table) return;
+  const t = view();
+  const types = Object.fromEntries(lastProf.map((p) => [p.name, p.type]));
+  const isNum = (c: string) => types[c] === 'number' || types[c] === 'integer';
+  const rows = t.rows.map((r) => t.columns.map((c) => (isNum(c) && r[c] != null ? (toNumber(r[c]) ?? String(r[c])) : r[c] instanceof Date ? r[c] : (r[c] as string | number | null))));
+  const model = buildReportModel();
+  const info: [string, string][] = [...model.origin, ...model.records, ...model.adjustments.map((a, i) => [`Ajuste ${i + 1}`, a] as [string, string]), ...model.kpis.map(([k, v]) => [`Indicador: ${k}`, v] as [string, string]), ['Gerado em', model.generatedAt]];
+  const bytes = buildXlsx([
+    { name: 'Dados', columns: t.columns.map(withUnit), rows },
+    { name: 'Origem e ajustes', columns: ['Campo', 'Valor'], rows: info },
+  ]);
+  download(`${baseName()}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', bytes);
+}
+
+function diffBox(d: TableDiff): HTMLElement {
+  const n = (x: number) => new Intl.NumberFormat('pt-BR').format(x);
+  const items: string[] = [`Linhas: ${n(d.rows.before)} → ${n(d.rows.after)} (${d.rows.after >= d.rows.before ? '+' : ''}${n(d.rows.after - d.rows.before)})`];
+  if (d.columnsAdded.length) items.push(`Colunas novas: ${d.columnsAdded.join(', ')}`);
+  if (d.columnsRemoved.length) items.push(`Colunas que sumiram: ${d.columnsRemoved.join(', ')}`);
+  for (const s of d.sums) items.push(`Soma de “${s.col}”: ${n(s.before)} → ${n(s.after)}${s.before ? ` (${s.after >= s.before ? '+' : ''}${(((s.after - s.before) / Math.abs(s.before)) * 100).toFixed(1).replace('.', ',')}%)` : ''}`);
+  for (const v of d.newValues) items.push(`Valores novos em “${v.col}”: ${v.values.join(', ')}`);
+  for (const v of d.goneValues) items.push(`Valores que sumiram de “${v.col}”: ${v.values.join(', ')}`);
+  return el('ul', {}, ...items.map((x) => el('li', {}, x)));
 }
 
 function renderDateBar(prof: ColProfile[]) {
@@ -454,7 +666,7 @@ function renderDateBar(prof: ColProfile[]) {
   const apply = () => {
     dateRange = { col: sel.value, from: from.value || undefined, to: to.value || undefined };
     page = 1;
-    render();
+    setTimeout(render, 0);
   };
   sel.onchange = apply;
   from.onchange = apply;
@@ -484,7 +696,7 @@ function renderTable() {
     const th = el('th', {});
     const active = sortState?.col === c;
     th.setAttribute('aria-sort', active ? (sortState!.dir === 'asc' ? 'ascending' : 'descending') : 'none');
-    const b = el('button', { type: 'button', className: 'sortbtn', title: 'Clique para ordenar' }, c + (active ? (sortState!.dir === 'asc' ? ' ▲' : ' ▼') : ''));
+    const b = el('button', { type: 'button', className: 'sortbtn', title: 'Clique para ordenar' }, withUnit(c) + (active ? (sortState!.dir === 'asc' ? ' ▲' : ' ▼') : ''));
     b.onclick = () => {
       sortState = !active ? { col: c, dir: 'asc' } : sortState!.dir === 'asc' ? { col: c, dir: 'desc' } : null;
       renderTable();
@@ -503,20 +715,7 @@ function renderTable() {
   $('pager').replaceChildren(prev, el('span', {}, ` Página ${pg.page} de ${pg.pages} `), next, ' ', sz);
 }
 
-interface SharedState {
-  level?: string;
-  tableIndex?: number;
-  forced?: Record<string, ColType>;
-  filters?: Record<string, string>;
-  removed?: string[];
-  styleChoice?: Record<string, string>;
-  rateChoice?: Record<string, number>;
-  merges?: Record<string, Record<string, string>>;
-  locale?: { dateOrder: 'dmy' | 'mdy'; numbers: 'br' | 'us' };
-  dateRange?: { col?: string; from?: string; to?: string };
-  basemap?: 'esri' | 'none';
-  pageSize?: number;
-}
+type SharedState = ProjectState;
 
 function load(ds: Dataset, st: SharedState = {}) {
   dataset = ds;
@@ -529,6 +728,9 @@ function load(ds: Dataset, st: SharedState = {}) {
   dateRange = st.dateRange ?? {};
   basemap = st.basemap ?? 'esri';
   pageSize = st.pageSize ?? 50;
+  renames = st.renames ?? {};
+  units = st.units ?? {};
+  metrics = st.metrics ?? [];
   sortState = null;
   page = 1;
   locInfo = inferLocale(ds.tables);
@@ -561,6 +763,7 @@ interface Pending {
   tableIndex: number;
   forcedTmp: Record<string, ColType>;
   sha?: string;
+  carry?: { state: ProjectState; oldTable?: Table; label: string } | null;
 }
 let pending: Pending | null = null;
 
@@ -584,7 +787,15 @@ async function startFile(fileName: string, bytes: Uint8Array, opts: ParseOptions
       locale.dateOrder = li.dateOrder;
       locale.numbers = li.numbers;
     }
-    pending = { fileName, bytes, opts, ds, tableIndex: 0, forcedTmp: keep?.forcedTmp ?? {}, sha };
+    const cr = keep ? keep.carry : carry;
+    carry = null;
+    let tableIndex = keep?.tableIndex ?? 0;
+    if (!keep && cr) {
+      const want = cr.oldTable?.title ?? cr.oldTable?.name;
+      const byName = want ? ds.tables.findIndex((x) => (x.title ?? x.name) === want) : -1;
+      tableIndex = byName >= 0 ? byName : cr.state.tableIndex != null && cr.state.tableIndex < ds.tables.length ? cr.state.tableIndex : 0;
+    }
+    pending = { fileName, bytes, opts, ds, tableIndex, forcedTmp: keep?.forcedTmp ?? {}, sha, carry: cr };
     $('msg').textContent = '';
     renderPreview();
   } catch (e) {
@@ -643,7 +854,17 @@ function renderPreview() {
   });
   const sample = t.rows.slice(0, 8);
   const go = el('button', { type: 'button', className: 'primary' }, 'Gerar painel');
-  go.onclick = () => load(p.ds, { tableIndex: p.tableIndex, forced: p.forcedTmp, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers } });
+  let carryBox: HTMLElement | null = null;
+  let reconciled: ProjectState | null = null;
+  if (p.carry) {
+    const names = applyRenames(t, p.carry.state.renames ?? {}).columns;
+    const rc = reconcileState(p.carry.state, [...names, ...t.columns]);
+    reconciled = rc.state;
+    carryBox = el('div', { className: 'notice' }, el('b', {}, 'Configuração reaplicada'), el('p', {}, `${p.carry.label}. Filtros, período, ajustes, nomes, unidades e métricas compatíveis serão reaplicados a esta tabela.`));
+    if (rc.dropped.length) carryBox.append(el('p', {}, 'Descartado por não existir mais neste arquivo:'), el('ul', {}, ...rc.dropped.map((x) => el('li', { className: 'warn' }, x))));
+    if (p.carry.oldTable) carryBox.append(el('p', {}, 'O que mudou em relação ao arquivo anterior:'), diffBox(compareTables(p.carry.oldTable, t)));
+  }
+  go.onclick = () => load(p.ds, { ...(reconciled ?? {}), tableIndex: p.tableIndex, forced: { ...(reconciled?.forced ?? {}), ...p.forcedTmp }, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers } });
   const cancel = el('button', { type: 'button' }, 'Escolher outro arquivo');
   cancel.onclick = () => {
     pending = null;
@@ -654,6 +875,7 @@ function renderPreview() {
   box.replaceChildren(
     el('h2', {}, 'Prévia: confira como li o arquivo'),
     el('p', { className: 'muted' }, 'Nada foi aplicado ainda. Confira o que foi lido, corrija se preciso e só então gere o painel.'),
+    ...(carryBox ? [carryBox] : []),
     dl(rows),
     controls,
     el('h3', {}, 'Avisos e decisões da leitura'),
@@ -670,8 +892,8 @@ async function handle(f: File) {
   await startFile(f.name, new Uint8Array(await f.arrayBuffer()));
 }
 
-function download(name: string, mime: string, content: string) {
-  const a = el('a', { href: URL.createObjectURL(new Blob([content], { type: mime })), download: name });
+function download(name: string, mime: string, content: string | Uint8Array) {
+  const a = el('a', { href: URL.createObjectURL(new Blob([content as BlobPart], { type: mime })), download: name });
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -682,7 +904,7 @@ const csvCell = (v: unknown) => {
 };
 
 function captureState(): SharedState {
-  return { level: ($('level') as HTMLSelectElement).value, tableIndex: dataset && table ? dataset.tables.indexOf(table) : 0, forced, filters, removed: [...removed], styleChoice: { ...styleChoice }, rateChoice: { ...rateChoice }, merges, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers }, dateRange, basemap, pageSize };
+  return { level: ($('level') as HTMLSelectElement).value, tableIndex: dataset && table ? dataset.tables.indexOf(table) : 0, forced, filters, removed: [...removed], styleChoice: { ...styleChoice }, rateChoice: { ...rateChoice }, merges, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers }, dateRange, basemap, pageSize, renames, units, metrics };
 }
 
 /** Gera um único .html com o painel e os dados embutidos, abrindo igual ao que está na tela. */
@@ -692,7 +914,7 @@ function exportHtml(opts: { title: string; fileName: string; readonly: boolean }
   const clone = document.documentElement.cloneNode(true) as HTMLElement;
   clone.querySelector('#snapshot')?.remove();
   // volta ao estado inicial: o painel recompõe tudo a partir dos dados embutidos
-  for (const id of ['kpis', 'charts', 'chips', 'alerts', 'tbl', 'cols', 'ttl', 'ctx', 'tinfo', 'msg']) clone.querySelector('#' + id)?.replaceChildren();
+  for (const id of ['kpis', 'charts', 'chips', 'alerts', 'tbl', 'cols', 'ttl', 'ctx', 'tinfo', 'msg', 'metricsBox', 'note']) clone.querySelector('#' + id)?.replaceChildren();
   clone.querySelector('#app')?.setAttribute('hidden', '');
   clone.querySelector('#actions')?.setAttribute('hidden', '');
   clone.querySelector('#drop')?.removeAttribute('hidden');
@@ -769,7 +991,7 @@ function openPrintReport() {
     el('h2', {}, '2. Registros analisados'),
     dl(records),
     el('h2', {}, '3. Filtros, período e ajustes aplicados'),
-    list(describeState({ filters, dateRange, merges, forced, removed: [...removed], locale: { dateOrder: locale.dateOrder, numbers: locale.numbers } })),
+    list(describeState({ filters, dateRange, merges, forced, removed: [...removed], renames, units, metrics, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers } })),
     el('h2', {}, '4. Indicadores'),
     dl(kpis(t, lastProf).map((k) => [k.label, k.hint ? `${k.value} (${k.hint})` : k.value] as [string, string])),
     el('h2', {}, '5. Gráficos'),
@@ -869,7 +1091,7 @@ function buildReportModel(): ReportModel {
     version: __APP_VERSION__,
     origin,
     records,
-    adjustments: describeState({ filters, dateRange, merges, forced, removed: [...removed], locale: { dateOrder: locale.dateOrder, numbers: locale.numbers } }),
+    adjustments: describeState({ filters, dateRange, merges, forced, removed: [...removed], renames, units, metrics, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers } }),
     kpis: kpis(t, lastProf).map((k) => [k.label, k.hint ? `${k.value} (${k.hint})` : k.value] as [string, string]),
     charts: ([...document.querySelectorAll('#charts .chart')] as HTMLElement[]).map(collectChart),
     criteria,
@@ -932,6 +1154,9 @@ function init() {
     forced = {};
     filters = {};
     merges = {};
+    renames = {};
+    units = {};
+    metrics = [];
     dateRange = {};
     sortState = null;
     page = 1;
@@ -954,6 +1179,16 @@ function init() {
     ($('shareDlg') as HTMLDialogElement).close();
   };
   $('btnPrint').onclick = () => window.print();
+  $('btnRestore').onclick = () => ((removed = new Set()), render());
+  $('btnSaveProj').onclick = saveProject;
+  const pf = $<HTMLInputElement>('projFile');
+  const askProj = () => ((pf.value = ''), pf.click());
+  $('btnOpenProj').onclick = askProj;
+  $('btnOpenProj2').onclick = (e) => (e.stopPropagation(), askProj());
+  pf.onclick = (e) => e.stopPropagation();
+  pf.onchange = () => pf.files?.[0] && void openProject(pf.files[0]);
+  $('btnUpdate').onclick = updateData;
+  $('btnXlsx').onclick = downloadExcel;
   $('btnReport').onclick = openReport;
   window.addEventListener('beforeprint', () => {
     charts.forEach((c) => c.resize());

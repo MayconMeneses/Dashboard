@@ -98,7 +98,10 @@ export function bestCorrelation(t: Table, nums: ColProfile[]): { a: string; b: s
       for (const r of t.rows) {
         const a = toNumber(r[cols[i]!.name] ?? null);
         const b = toNumber(r[cols[j]!.name] ?? null);
-        if (a != null && b != null) (xs.push(a), ys.push(b));
+        if (a != null && b != null) {
+          xs.push(a);
+          ys.push(b);
+        }
       }
       if (xs.length < 8) continue;
       const r = pearson(xs, ys);
@@ -305,7 +308,7 @@ function suggestTidy(t: Table, level: number): ChartSpec[] {
   const sitNames = f.situ.map(([n]) => n);
   const rest = sitNames.filter((n) => n !== f.mainSit);
   const partWhere = (names: string[]) => ({ ...(td.situation ? { [td.situation]: names } : {}) });
-  const mp = (n: number) => (f.periods.length > 1 ? `Soma dos ${f.entities.length} ${td.entity.toLowerCase()}s` : '');
+  const mp = () => (f.periods.length > 1 ? `Soma dos ${f.entities.length} ${td.entity.toLowerCase()}s` : '');
   void mp;
 
   if (td.situation && rest.length >= 2) {

@@ -37,6 +37,8 @@ jobs:
         working-directory: universal
       - run: npx tsc --noEmit
         working-directory: universal
+      - run: npm run lint
+        working-directory: universal
       - run: npm test
         working-directory: universal
       - run: npm run build

@@ -16,6 +16,10 @@
     <button id="btnReport" type="button">Relatório (PDF)</button>
     <button id="btnPrint" type="button">Imprimir tela</button>
     <button id="btnCsv" type="button">Baixar CSV</button>
+    <button id="btnXlsx" type="button">Baixar Excel</button>
+    <button id="btnSaveProj" type="button">Salvar projeto</button>
+    <button id="btnOpenProj" type="button">Abrir projeto</button>
+    <button id="btnUpdate" type="button">Atualizar dados</button>
     <button id="btnNew" type="button">Outro arquivo</button>
   </div>
 </header>
@@ -24,6 +28,9 @@
     <p><strong>Arraste um arquivo aqui</strong> ou clique para escolher</p>
     <p class="muted">CSV, Excel (XLSX), Word (DOCX) e PDF com tabelas, JSON, GeoJSON, KML ou KMZ. Os dados do arquivo são processados no seu computador e não são enviados a nenhum servidor.</p>
     <p class="muted small">Acessos externos que existem: o <b>mapa de fundo</b> (Esri) baixa imagens de mapa e revela a região que você está vendo — dá para escolher “Sem mapa de fundo”; e o <b>programa instalado</b> consulta o GitHub para ver se há atualização do painel — dá para desligar em Ajuda.</p>
+    <p id="note" class="notice" role="status"></p>
+    <p><button id="btnOpenProj2" type="button">Abrir um projeto salvo (.json)</button></p>
+    <input id="projFile" type="file" accept=".json,application/json" hidden>
     <input id="file" type="file" accept=".csv,.tsv,.txt,.xlsx,.docx,.doc,.pdf,.json,.geojson,.kml,.kmz" hidden>
   </section>
   <section id="preview" class="card" hidden aria-label="Prévia do arquivo"></section>
@@ -34,7 +41,9 @@
     <div id="dateBar" class="datebar" hidden></div>
     <div id="kpis" class="kpis"></div>
     <section class="card" id="alertsBox" hidden><h2>Qualidade dos dados e como li o arquivo</h2><ul id="alerts"></ul></section>
+    <p><button id="btnRestore" type="button" hidden></button></p>
     <div id="charts" class="charts"></div>
+    <section class="card" id="metricsBox"></section>
     <section class="card"><h2>Dados</h2><input id="q" type="search" placeholder="Filtrar linhas…" aria-label="Filtrar linhas"><div class="tablewrap"><table id="tbl"></table></div><div id="pager" class="pager"></div><p class="muted">Dica: clique numa barra ou fatia para filtrar todo o painel; clique de novo para remover.</p><p id="tinfo" class="muted"></p></section>
     <section class="card"><h2>Colunas reconhecidas</h2><div class="tablewrap"><table id="cols"></table></div></section>
   </section>
