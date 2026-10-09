@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Dashboard Universal">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b3a63"/>
+      <stop offset="1" stop-color="#0072B2"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- barras -->
+  <rect x="104" y="284" width="68" height="124" rx="14" fill="#ffffff"/>
+  <rect x="222" y="212" width="68" height="196" rx="14" fill="#ffffff"/>
+  <rect x="340" y="140" width="68" height="268" rx="14" fill="#ffffff"/>
+  <!-- linha de tendência -->
+  <polyline points="110,244 230,176 346,214 424,96" fill="none" stroke="#E69F00" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="424" cy="96" r="26" fill="#E69F00" stroke="#0b3a63" stroke-width="10"/>
+  <!-- linha de base -->
+  <rect x="88" y="424" width="336" height="14" rx="7" fill="#9fd0ee"/>
+</svg>
