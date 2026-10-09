@@ -175,8 +175,8 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
   // escolha do desenho: o sistema recomenda (regras em shapes.ts) e o usuário pode trocar por alternativas compatíveis
   let shape: string = spec.kind === 'pivot' ? (spec.style ?? 'bar') : spec.kind;
   let why = spec.why ?? '';
-  if (spec.kind === 'pivot' && !spec.rate) {
-    const opts = compatibleStyles({ ordered: !!spec.keepOrder, series: d.datasets?.length ?? 0, labels: d.labels.length, positive: [...d.values, ...(d.datasets ?? []).flatMap((s) => s.values)].every((v) => Number.isNaN(v) || v >= 0) });
+  if ((spec.kind === 'pivot' || spec.period) && !spec.rate) {
+    const opts = compatibleStyles({ ordered: !!spec.keepOrder || !!spec.period, series: d.datasets?.length ?? 0, labels: d.labels.length, positive: [...d.values, ...(d.datasets ?? []).flatMap((s) => s.values)].every((v) => Number.isNaN(v) || v >= 0) });
     const rec = opts.find((o) => o.recommended) ?? opts[0]!;
     const chosen = opts.find((o) => o.style === styleChoice[spec.id]) ?? (spec.style && spec.style !== rec.style && spec.lockStyle ? opts.find((o) => o.style === spec.style) : undefined) ?? rec;
     shape = chosen.style;
@@ -220,7 +220,7 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
     ];
   } else if (base.datasets) {
     const sets = radar ? [...base.datasets].sort((x, y) => y.values.reduce((a, v) => a + (Number.isNaN(v) ? 0 : v), 0) - x.values.reduce((a, v) => a + (Number.isNaN(v) ? 0 : v), 0)).slice(0, 6) : base.datasets;
-    datasets = sets.map((s, i) => ({ label: s.label, data: s.values.map((v) => (Number.isNaN(v) ? null : v)), backgroundColor: radar || shape === 'area' ? colorOf(i) + '55' : colorOf(i), borderColor: colorOf(i), tension: 0.25, pointRadius: isLine || radar ? 3 : 0, borderWidth: isLine || radar ? 2 : 0, fill: shape === 'area' || radar, spanGaps: false }));
+    datasets = sets.map((s, i) => ({ label: s.label, data: s.values.map((v) => (Number.isNaN(v) ? null : v)), backgroundColor: radar || shape === 'area' ? colorOf(i) + '55' : colorOf(i), borderColor: colorOf(i), tension: labels.length <= 24 ? 0 : 0.25, pointRadius: isLine || radar ? 4 : 0, borderWidth: isLine || radar ? 2 : 0, fill: shape === 'area' || radar, spanGaps: false }));
   } else {
     datasets = [{ label: spec.y ?? 'Registros', data: base.values.map((v) => (Number.isNaN(v) ? null : v)), backgroundColor: donut ? labels.map((_, i) => colorOf(i)) : shape === 'area' ? PALETTE[0] + '55' : PALETTE[0], borderColor: PALETTE[0], tension: 0.25, fill: shape === 'area', barThickness: horizontal ? 14 : undefined, spanGaps: false }];
   }
@@ -493,7 +493,8 @@ function render() {
   );
 }
 
-const withUnit = (c: string) => (units[c] ? `${c} (${units[c]})` : c);
+const unitOf = (c: string) => units[c] ?? (lastProf.find((p) => p.name === c)?.percent ? '%' : undefined);
+const withUnit = (c: string) => (unitOf(c) ? `${c} (${unitOf(c)})` : c);
 const fmtMetric = (v: number | null, unit?: string) => (v == null ? 'sem dado' : `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(v)}${unit ? ' ' + unit : ''}`);
 
 /** Renomeia um campo e leva junto filtros, tipos, junções, período e fórmulas que o citam. */

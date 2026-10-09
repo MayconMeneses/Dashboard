@@ -100,6 +100,8 @@ export function inferLocale(tables: Table[]): LocaleInfo {
   };
 }
 
+const MONTH_NAMES = new Set(['janeiro', 'fevereiro', 'março', 'marco', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro', 'jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']);
+
 function median(sorted: number[]): number {
   const m = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[m]! : (sorted[m - 1]! + sorted[m]!) / 2;
@@ -121,7 +123,7 @@ export function profileColumn(name: string, rows: Row[], geo?: Table['geo'], for
 
   let type: ColType;
   if (vals.every((v) => typeof v === 'boolean') || (base.unique <= 2 && vals.every((v) => BOOL.has(String(v).toLowerCase())))) type = 'boolean';
-  else if (frac(nums) >= 0.8 && vals.some((v) => typeof v === 'number' || /^-?[\d.,]+$/.test(String(v)))) {
+  else if (frac(nums) >= 0.8 && vals.some((v) => typeof v === 'number' || /^(R\$\s*|US\$\s*)?-?[\d.,]+\s*%?$/.test(String(v)))) {
     type = nums.every((n) => n == null || Number.isInteger(n)) ? 'integer' : 'number';
   } else if (frac(dates) >= 0.9) type = 'date';
   else if (base.unique <= Math.max(20, filled * 0.05) && base.unique < filled) type = 'category';
@@ -135,8 +137,16 @@ export function profileColumn(name: string, rows: Row[], geo?: Table['geo'], for
   else if ((type === 'number' || type === 'integer') && /^(lon|lng|long|longitude)$/.test(lname)) type = 'lon';
   // código/identificador numérico: inteiros quase todos distintos
   if (type === 'integer' && base.unique >= filled * 0.95 && filled > 5 && /(^id$|^id[_ ]|código|codigo|cod\b|\bid$)/.test(lname)) type = 'id';
+  // ano (2024) ou mês por extenso, todos distintos: é eixo de período, não medida
+  const isYear = (type === 'integer' || type === 'category' || type === 'text') && /^(ano|anos|year|exerc[ií]cio)$/i.test(lname.trim()) && vals.every((v) => /^(19|20)\d{2}$/.test(String(v).trim()));
+  const isMonth = (type === 'category' || type === 'text') && base.unique >= 3 && vals.every((v) => MONTH_NAMES.has(String(v).trim().toLowerCase().replace(/\.$/, '')));
+  if (isYear || isMonth) {
+    type = 'category';
+    base.period = true;
+  }
   if (forced) type = forced;
   base.type = type;
+  if (vals.filter((v) => typeof v === 'string' && v.trim().endsWith('%')).length >= filled * 0.8 && (type === 'number' || type === 'integer')) base.percent = true;
   if (missingTokens) base.missingMarkers = missingTokens;
   if (type === 'number' || type === 'integer' || type === 'lat' || type === 'lon') {
     const bad: { row: number; value: string }[] = [];

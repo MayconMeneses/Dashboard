@@ -7,8 +7,10 @@ import type { DelimiterChoice, Encoding } from './csv.js';
 import { docxToMatrix } from './docx.js';
 import { detectRepeatedBlocks } from './grid.js';
 import { pdfToMatrix } from './pdf.js';
+import { inferYearColumn, joinByYear } from './quadros.js';
+import { toNumber } from './profile.js';
 import type { Cell, Dataset, ParseInfo, Row, Table } from './types.js';
-import { maxOf } from './util.js';
+import { maxOf, sentenceCase } from './util.js';
 
 const MAX_BYTES = 50 * 1024 * 1024;
 const MAX_ROWS = 200_000;
@@ -51,8 +53,14 @@ function toTableSimple(name: string, matrix: unknown[][]): Table {
     rows2 = rows2.slice(start);
   }
   const renamed: string[] = [];
-  const columns = uniqueNames((rows2[0] as unknown[]).map((c) => String(c ?? '')), renamed);
-  const dataRows = rows2.slice(1);
+  let headerCells = (rows2[0] as unknown[]).map((c) => String(c ?? ''));
+  let dataRows = rows2.slice(1);
+  const sub = twoRowHeader(rows2);
+  if (sub) {
+    headerCells = sub;
+    dataRows = rows2.slice(2);
+  }
+  const columns = uniqueNames(headerCells, renamed);
   const truncated = Math.max(0, dataRows.length - MAX_ROWS);
   const rows: Row[] = dataRows.slice(0, MAX_ROWS).map((r) => {
     const o: Row = {};
@@ -65,6 +73,40 @@ function toTableSimple(name: string, matrix: unknown[][]): Table {
   if (title && start > 0) notes.push(`${start} linha(s) de título acima do cabeçalho foram usadas como título do painel e não entram nos dados.`);
   if (renamed.length) notes.push(`Colunas com nome repetido ou vazio foram renomeadas: ${renamed.join('; ')}.`);
   return { name, columns, rows, ...(title ? { title } : {}), ...(notes.length ? { notes } : {}), stats: { dropped: blank + (title ? start : 0), truncated } };
+}
+
+const looksNumeric = (c: unknown) => c != null && String(c).trim() !== '' && toNumber(c as Cell) != null;
+
+/**
+ * Cabeçalho em dois níveis (faixa de grupo + nome da coluna): se a 2ª linha só tem texto onde as linhas
+ * abaixo têm números, ela também é cabeçalho. Devolve os nomes combinados (“Grupo — Coluna”) ou undefined.
+ */
+function twoRowHeader(rows: unknown[][]): string[] | undefined {
+  if (rows.length < 4) return undefined;
+  const h = rows[0]!;
+  const s = rows[1]!;
+  const width = Math.max(h.length, s.length);
+  const text = (c: unknown) => (c == null ? '' : String(c).trim());
+  if (s.some((c) => looksNumeric(c))) return undefined;
+  let numericBelow = 0;
+  let textBelow = 0;
+  for (let i = 0; i < width; i++) {
+    if (!text(s[i])) continue;
+    textBelow++;
+    const below = rows.slice(2).map((r) => r[i]).filter((c) => text(c) !== '');
+    if (below.length && below.filter(looksNumeric).length >= below.length * 0.6) numericBelow++;
+  }
+  if (textBelow < 2 || numericBelow < Math.ceil(textBelow * 0.6)) return undefined;
+  let carry = '';
+  const out: string[] = [];
+  for (let i = 0; i < width; i++) {
+    const g = text(h[i]);
+    if (g) carry = g;
+    const sub = text(s[i]);
+    const grp = g || (sub ? carry : '');
+    out.push(grp && sub && grp.toLowerCase() !== sub.toLowerCase() ? `${sentenceCase(grp)} — ${sub}` : sub || g);
+  }
+  return out;
 }
 
 const filledCount = (r: unknown[]) => r.filter((c) => c != null && String(c).trim() !== '').length;
@@ -106,7 +148,18 @@ export function toTables(name: string, matrix: unknown[][]): Table[] {
     const cols = [...used].sort((a, b) => a - b);
     const t = toTableSimple(`${name} · bloco ${blocks.length + 1}`, body.map((r) => cols.map((i) => r[i])));
     if (t.columns.length >= 3 && t.rows.length >= 3) {
-      if (start > 0) t.title = texts(g.slice(0, start))[0];
+      if (start > 0) {
+        const above = texts(g.slice(0, start));
+        const last = above[above.length - 1]!;
+        // faixa em caixa alta logo acima do cabeçalho (ex.: “UNIDADES DOMICILIARES”) agrupa as colunas; o texto anterior é a legenda do quadro
+        const letters = last.replace(/[^\p{L}]/gu, '');
+        const upper = letters.replace(/[^\p{Lu}]/gu, '');
+        const isGroup = above.length > 1 && last.length <= 80 && letters.length > 3 && upper.length >= letters.length * 0.8;
+        if (isGroup) t.group = last;
+        t.title = isGroup ? above[above.length - 2] : last;
+        // cabeçalho institucional comprido (brasão, órgão…) não serve de título do quadro
+        if (t.title && t.group && (t.title.length > 140 || /PREFEITURA|SECRETARIA/.test(t.title))) t.title = t.group;
+      }
       blocks.push(t);
     } else for (const x of texts(g)) loose.push(x);
   }
@@ -279,6 +332,9 @@ export async function parseFile(fileName: string, bytes: Uint8Array, opts: Parse
         tables = [{ name: base, noCharts: true, columns: ['Parágrafo', 'Texto'], rows: r.paragraphs.map((x, i) => ({ 'Parágrafo': i + 1, Texto: x })), notes: [r.tables ? 'As tabelas do documento são pequenas demais para gráficos; mostrando o texto do documento.' : 'Este documento do Word não tem tabelas; mostrando o texto, parágrafo a parágrafo. Para gráficos, use tabelas no Word ou o arquivo em Excel/CSV.'] }];
       } else for (const t of ok) t.notes = [...(t.notes ?? []), `Tabela(s) lida(s) de um documento Word (${r.tables} tabela(s)); confira os números com o documento original.`];
       if (ok.length) tables = ok;
+      tables = tables.map(inferYearColumn);
+      const joined = joinByYear(tables, base);
+      if (joined) tables = [joined, ...tables];
       break;
     }
     case 'doc':
