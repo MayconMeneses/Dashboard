@@ -67,18 +67,18 @@ export interface StyleOption {
  * Regras de escolha do desenho. Recebe o formato dos dados (eixo ordenado? quantas séries/rótulos?)
  * e devolve os desenhos compatíveis, com o recomendado primeiro e o motivo de cada um.
  */
-export function compatibleStyles(opts: { ordered: boolean; series: number; labels: number; positive: boolean }): StyleOption[] {
-  const { ordered, series, labels, positive } = opts;
+export function compatibleStyles(opts: { ordered: boolean; series: number; labels: number; positive: boolean; preferBars?: boolean }): StyleOption[] {
+  const { ordered, series, labels, positive, preferBars } = opts;
   const o: StyleOption[] = [];
   const add = (style: ChartStyle, label: string, why: string, recommended = false) => o.push({ style, label, why, recommended });
   if (ordered) {
     if (series === 0) {
-      if (labels >= 3) add('line', 'Linha', 'O eixo é uma sequência (tempo) e há vários pontos: a linha mostra a tendência.', true);
-      add('bar', 'Colunas', 'Compara o valor de cada período isoladamente.', labels < 3);
+      if (labels >= 3) add('line', 'Linha', 'O eixo é uma sequência (tempo) e há vários pontos: a linha mostra a tendência.', !preferBars);
+      add('bar', 'Colunas', 'Compara o valor de cada período isoladamente.', labels < 3 || !!preferBars);
       if (labels >= 4) add('area', 'Área', 'Linha com o volume preenchido; destaca a magnitude acumulada ao longo do tempo.');
     } else if (series <= 5) {
-      add('line', 'Linhas', `O eixo é uma sequência (tempo) com ${series} séries: linhas deixam comparar a forma de cada uma.`, true);
-      add('bar', 'Colunas agrupadas', 'Uma coluna por série em cada período, para comparar valores exatos lado a lado.');
+      add('line', 'Linhas', `O eixo é uma sequência (tempo) com ${series} séries: linhas deixam comparar a forma de cada uma.`, !preferBars);
+      add('bar', 'Colunas agrupadas', 'Uma coluna por série em cada período, para comparar valores exatos lado a lado.', !!preferBars);
       add('stacked', 'Colunas empilhadas', 'Mostra o total do período e quanto cada série contribui (só faz sentido se as séries somam um todo).');
       if (positive) add('area', 'Áreas empilhadas', 'Como as colunas empilhadas, mas ligando os períodos.');
       if (positive) add('percent', '100% empilhado', 'Mostra a proporção de cada série em cada período, sem o efeito do volume total.');
