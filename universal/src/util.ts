@@ -33,3 +33,16 @@ export function heatCell(f: number): { bg: string; fg: '#000' | '#fff'; ratio: n
   const black = contrastRatio(l, 0);
   return { bg: `rgb(${rgb.join(',')})`, fg: white >= black ? '#fff' : '#000', ratio: Math.max(white, black) };
 }
+
+const SMALL_WORDS = new Set(['de', 'da', 'do', 'dos', 'das', 'e', 'com', 'em', 'para', 'no', 'na', 'nos', 'nas', 'a', 'o', 'por', 'ao']);
+
+/** “PESQUISA COM PARTICIPAÇÃO POPULAR (PIT's)” → “Pesquisa com participação popular (PIT's)”: baixa conectivos e palavras longas em caixa alta. */
+export function sentenceCase(s: string): string {
+  const words = s.trim().split(/\s+/).map((w) => {
+    const letters = w.replace(/[^\p{L}]/gu, '');
+    if (w !== w.toUpperCase()) return w;
+    return SMALL_WORDS.has(letters.toLowerCase()) || letters.length > 4 ? w.toLowerCase() : w;
+  });
+  const out = words.join(' ');
+  return out.charAt(0).toUpperCase() + out.slice(1);
+}

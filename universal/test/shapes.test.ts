@@ -8,7 +8,7 @@ describe('escolha do tipo de gráfico', () => {
     expect(rec({ ordered: true, series: 3, labels: 8, positive: true })).toBe('line');
     expect(rec({ ordered: true, series: 8, labels: 8, positive: true })).toBe('small');
     expect(rec({ ordered: true, series: 0, labels: 12, positive: true })).toBe('line');
-    expect(rec({ ordered: true, series: 0, labels: 3, positive: true })).toBe('bar');
+    expect(rec({ ordered: true, series: 0, labels: 2, positive: true })).toBe('bar');
   });
   it('categorias: ranking = barras; muitos itens = pareto; poucas partes = rosca; composição = empilhado', () => {
     expect(rec({ ordered: false, series: 0, labels: 8, positive: true })).toBe('hbar');

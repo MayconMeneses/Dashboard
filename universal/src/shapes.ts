@@ -73,12 +73,13 @@ export function compatibleStyles(opts: { ordered: boolean; series: number; label
   const add = (style: ChartStyle, label: string, why: string, recommended = false) => o.push({ style, label, why, recommended });
   if (ordered) {
     if (series === 0) {
-      if (labels >= 4) add('line', 'Linha', 'O eixo é uma sequência (tempo) e há vários pontos: a linha mostra a tendência.', true);
-      add('bar', 'Colunas', 'Compara o valor de cada período isoladamente.', labels < 4);
+      if (labels >= 3) add('line', 'Linha', 'O eixo é uma sequência (tempo) e há vários pontos: a linha mostra a tendência.', true);
+      add('bar', 'Colunas', 'Compara o valor de cada período isoladamente.', labels < 3);
       if (labels >= 4) add('area', 'Área', 'Linha com o volume preenchido; destaca a magnitude acumulada ao longo do tempo.');
     } else if (series <= 5) {
       add('line', 'Linhas', `O eixo é uma sequência (tempo) com ${series} séries: linhas deixam comparar a forma de cada uma.`, true);
-      add('stacked', 'Colunas empilhadas', 'Mostra o total do período e quanto cada série contribui.');
+      add('bar', 'Colunas agrupadas', 'Uma coluna por série em cada período, para comparar valores exatos lado a lado.');
+      add('stacked', 'Colunas empilhadas', 'Mostra o total do período e quanto cada série contribui (só faz sentido se as séries somam um todo).');
       if (positive) add('area', 'Áreas empilhadas', 'Como as colunas empilhadas, mas ligando os períodos.');
       if (positive) add('percent', '100% empilhado', 'Mostra a proporção de cada série em cada período, sem o efeito do volume total.');
       add('heatmap', 'Mapa de calor', 'Cores no lugar de alturas; útil para ver períodos mais “quentes”.');

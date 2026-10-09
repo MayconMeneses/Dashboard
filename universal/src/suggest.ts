@@ -13,7 +13,9 @@ export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpe
   if (t.noCharts) return [];
   if (t.tidy) return suggestTidy(t, level);
   const out: ChartSpec[] = [];
-  const labelCol = t.rows.length >= 3 && t.rows.length <= 40 ? prof.find((p) => (p.type === 'category' || p.type === 'text' || p.type === 'id') && p.filled === t.rows.length && p.unique === t.rows.length) : undefined;
+  const labelOk = (p: ColProfile) => (p.type === 'category' || p.type === 'text' || p.type === 'id') && p.filled === t.rows.length && p.unique === t.rows.length;
+  const labelCol = t.rows.length >= 2 && t.rows.length <= 40 ? (prof.find((p) => p.period && labelOk(p)) ?? (t.rows.length >= 3 ? prof.find(labelOk) : undefined)) : undefined;
+  const period = !!labelCol?.period;
   const cats = prof.filter((p) => p.type === 'category' && p.unique >= 2 && p.unique < p.filled).sort((a, b) => a.unique - b.unique);
   const nums = prof.filter((p) => (p.type === 'number' || p.type === 'integer') && p.unique > 1);
   const dates = prof.filter((p) => p.type === 'date');
@@ -36,19 +38,27 @@ export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpe
   for (const b of bools.slice(0, 2)) out.push({ id: id('bool'), kind: 'pivot', style: 'donut', x: b.name, agg: 'count', title: `${b.name}`, description: 'Distribuição Sim/Não.', score: 70 });
   if (labelCol) {
     nums.filter((m) => m.filled >= 2).slice(0, level === 1 ? 3 : level === 2 ? 6 : 10).forEach((m, i) => {
-      out.push({ id: id('lab'), kind: 'bar', x: labelCol.name, y: m.name, agg: 'sum', keepOrder: true, title: `${m.name} por ${labelCol.name}`, description: `Valor de “${m.name}” em cada linha de “${labelCol.name}”, na ordem do arquivo. Linha sem valor fica sem barra (não é zero).`, score: 88 - i });
+      out.push({ id: id('lab'), kind: 'bar', x: labelCol.name, y: m.name, agg: 'sum', keepOrder: true, ...(period ? { period } : {}), title: `${m.name} por ${labelCol.name}`, description: `Valor de “${m.name}” em cada linha de “${labelCol.name}”, na ordem do arquivo. Linha sem valor fica sem barra (não é zero).`, score: 88 - i });
     });
   }
   if (labelCol) {
-    // agrupa colunas de mesma ordem de grandeza para compará-las lado a lado
-    const groups = new Map<number, ColProfile[]>();
+    // agrupa colunas de mesma natureza (percentuais à parte) e ordem de grandeza para compará-las lado a lado
+    const groups = new Map<string, ColProfile[]>();
     for (const m of nums.filter((x) => x.filled >= 2 && (x.max ?? 0) > 0)) {
-      const k = Math.floor(Math.log10(m.max!) );
+      const k = m.percent ? 'pct' : String(Math.floor(Math.log10(m.max!)));
       groups.set(k, [...(groups.get(k) ?? []), m]);
     }
-    [...groups.values()].filter((g) => g.length >= 2).slice(0, level === 1 ? 1 : 3).forEach((g, i) => {
-      const cols = g.slice(0, 4);
-      out.push({ id: id('multi'), kind: 'multi', x: labelCol.name, series: cols.map((c) => c.name), keepOrder: true, title: `Comparativo: ${cols.map((c) => c.name).join(' × ')}`, description: `Colunas de ordem de grandeza parecida, lado a lado por “${labelCol.name}”. Linha sem valor fica sem barra (não é zero).`, score: 92 - i });
+    const size = period ? 4 : 4;
+    const chunks = [...groups.entries()].flatMap(([k, g]) => (period ? g.reduce<ColProfile[][]>((acc, c, i) => (i % size ? acc[acc.length - 1]!.push(c) : acc.push([c]), acc), []) : [g.slice(0, size)]).map((cols) => ({ k, cols })));
+    const cap = period ? (level === 1 ? 2 : level === 2 ? 8 : 12) : level === 1 ? 1 : 3;
+    chunks.filter((c) => (period ? c.cols.length >= 1 : c.cols.length >= 2)).slice(0, cap).forEach(({ k, cols }, i) => {
+      const unit = k === 'pct' ? ' (%)' : '';
+      out.push({
+        id: id('multi'), kind: 'multi', x: labelCol.name, series: cols.map((c) => c.name), keepOrder: true, ...(period ? { period } : {}),
+        title: period ? `${cols.length > 1 ? 'Evolução' : 'Evolução de'} ${cols.map((c) => c.name).join(' × ')}${unit}` : `Comparativo: ${cols.map((c) => c.name).join(' × ')}`,
+        description: period ? `Cada série é um indicador ao longo de “${labelCol.name}”${k === 'pct' ? ', todos em percentual' : ', de ordem de grandeza parecida para dividir o mesmo eixo'}. Ponto sem valor fica sem marca (não é zero).` : `Colunas de ordem de grandeza parecida, lado a lado por “${labelCol.name}”. Linha sem valor fica sem barra (não é zero).`,
+        score: 92 - i,
+      });
     });
   }
   if (t.rows.length >= 12) nums.slice(0, level === 1 ? 1 : level === 2 ? 3 : 5).forEach((m, i) => {
@@ -69,7 +79,8 @@ export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpe
 
   const inMulti = new Set(out.filter((c) => c.kind === 'multi').flatMap((c) => c.series ?? []));
   const final = level >= 3 ? out : out.filter((c) => !(c.id.startsWith('lab') && c.y && inMulti.has(c.y)));
-  return final.sort((a, b) => b.score - a.score).slice(0, level === 1 ? 4 : level === 2 ? 9 : 15);
+  const limit = period ? (level === 1 ? 5 : level === 2 ? 12 : 18) : level === 1 ? 4 : level === 2 ? 9 : 15;
+  return final.sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
 function pearson(xs: number[], ys: number[]): number {
@@ -136,12 +147,15 @@ export function qualityAlerts(t: Table, prof: ColProfile[], loc?: LocaleInfo): A
       if (out_) out.push({ level: 'info', text: `“${p.name}” tem ${out_} valor(es) muito distante(s) dos demais (confira se são erros de digitação).` });
     }
   }
+  out.push(...relationAlerts(t, prof));
   for (const n of t.notes ?? []) out.push({ level: 'info', text: n });
   return out;
 }
 
 export function kpis(t: Table, prof: ColProfile[]): Kpi[] {
   if (t.tidy) return tidyKpis(t);
+  const per = prof.find((p) => p.period && p.filled === t.rows.length && p.unique === t.rows.length);
+  if (per && t.rows.length >= 2 && t.rows.length <= 40) return periodKpis(t, prof, per);
   const out: Kpi[] = [{ label: 'Registros', value: fmtNum(t.rows.length) }, { label: 'Colunas', value: String(t.columns.length) }];
   const m = prof.find((p) => p.type === 'number' || p.type === 'integer');
   if (m?.sum != null) out.push({ label: `Total de ${m.name}`, value: fmtNum(m.sum), hint: `média ${fmtNum(m.mean!)} · mediana ${fmtNum(m.median!)}` });
@@ -452,6 +466,17 @@ export function insightFor(spec: ChartSpec, d: SeriesData): string {
   const valid = (a: number[]) => a.map((v, i) => [v, i] as const).filter(([v]) => !Number.isNaN(v));
   const nanCount = d.datasets ? d.datasets.reduce((a, s) => a + s.values.filter((v) => Number.isNaN(v)).length, 0) : d.values.filter((v) => Number.isNaN(v)).length;
   const gap = nanCount ? ` Há ${nanCount} ponto(s) sem dado, que não foram tratados como zero.` : '';
+  if (d.datasets && spec.period && d.labels.length >= 2) {
+    const ch = d.datasets.map((s) => {
+      const pts = valid(s.values);
+      const f = pts[0];
+      const l = pts[pts.length - 1];
+      return f && l && f[1] !== l[1] ? { l: s.label, f: f[0], v: l[0], pct: f[0] ? ((l[0] - f[0]) / Math.abs(f[0])) * 100 : Number.NaN } : null;
+    }).filter((x): x is NonNullable<typeof x> => x != null);
+    const a = d.labels[0]!;
+    const z = d.labels[d.labels.length - 1]!;
+    if (ch.length) return `De ${a} a ${z}: ${ch.map((c) => `${c.l} ${br(c.f)} → ${br(c.v)}${Number.isNaN(c.pct) ? '' : ` (${c.pct >= 0 ? '+' : ''}${br(c.pct)}%)`}`).join('; ')}.${gap}`;
+  }
   if (d.datasets) {
     const tot = d.datasets.map((s) => ({ l: s.label, v: s.values.filter((x) => !Number.isNaN(x)).reduce((a, b) => a + b, 0), peak: valid(s.values).sort((a, b) => b[0] - a[0])[0] }));
     tot.sort((a, b) => b.v - a.v);
@@ -582,4 +607,76 @@ export function rateInsight(r: { labels: string[]; values: number[]; name: strin
   const s = [...v].sort((a, b) => b[0] - a[0]);
   const f = (n: number) => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(n);
   return `${r.name}: maior em ${r.labels[s[0]![1]]} (${f(s[0]![0])}%), menor em ${r.labels[s[s.length - 1]![1]]} (${f(s[s.length - 1]![0])}%).`;
+}
+
+
+/** Indicadores de um quadro por período: primeiro e último período dos indicadores que mais mudaram. */
+function periodKpis(t: Table, prof: ColProfile[], per: ColProfile): Kpi[] {
+  const first = t.rows[0]!;
+  const last = t.rows[t.rows.length - 1]!;
+  const a = String(first[per.name]);
+  const z = String(last[per.name]);
+  const out: Kpi[] = [{ label: 'Períodos', value: fmtNum(t.rows.length), hint: `${a} a ${z}` }];
+  const cand = prof
+    .filter((c) => (c.type === 'number' || c.type === 'integer') && c.unique > 1)
+    .map((c) => ({ c, f: toNumber(first[c.name] ?? null), l: toNumber(last[c.name] ?? null) }))
+    .filter((x): x is { c: ColProfile; f: number; l: number } => x.f != null && x.l != null && x.f !== 0)
+    .map((x) => ({ ...x, pct: ((x.l - x.f) / Math.abs(x.f)) * 100 }))
+    .sort((p, q) => Math.abs(q.pct) - Math.abs(p.pct))
+    .slice(0, 4);
+  for (const x of cand) out.push({ label: `${x.c.name} (${z})`, value: `${fmtNum(x.l)}${x.c.percent ? '%' : ''}`, hint: `${fmtNum(x.f)}${x.c.percent ? '%' : ''} em ${a} → ${fmtNum(x.l)}${x.c.percent ? '%' : ''} em ${z}: ${x.pct >= 0 ? '+' : ''}${fmtNum(x.pct)}%` });
+  return out;
+}
+
+
+/**
+ * Confere taxas e índices contra as colunas de que provavelmente saem: se, em todas as linhas, A ÷ B (× 100) bate com a
+ * coluna P, avisa que P confere (ou aponta as linhas que não batem quando só algumas falham).
+ */
+export function relationAlerts(t: Table, prof: ColProfile[]): Alert[] {
+  const nums = prof.filter((p) => (p.type === 'number' || p.type === 'integer') && p.unique > 1).slice(0, 14);
+  if (nums.length < 3 || t.rows.length < 3 || t.rows.length > 5000) return [];
+  const vals = new Map(nums.map((c) => [c.name, t.rows.map((r) => toNumber(r[c.name] ?? null))]));
+  const found: { key: string; rate: boolean; alert: Alert }[] = [];
+  for (const P of nums) {
+    const pv = vals.get(P.name)!;
+    let best: { a: string; b: string; f: number; bad: number[]; n: number } | null = null;
+    for (const A of nums) {
+      for (const B of nums) {
+        if (A.name === B.name || A.name === P.name || B.name === P.name) continue;
+        const av = vals.get(A.name)!;
+        const bv = vals.get(B.name)!;
+        for (const f of [100]) {
+          let n = 0;
+          const bad: number[] = [];
+          for (let i = 0; i < pv.length; i++) {
+            const a = av[i];
+            const b = bv[i];
+            const pp = pv[i];
+            if (a == null || b == null || pp == null || b === 0) continue;
+            n++;
+            if (a > b) {
+              bad.push(i + 1);
+              continue;
+            }
+            const calc = (a / b) * f;
+            if (Math.abs(calc - pp) > Math.max(0.1, Math.abs(pp) * 0.005)) bad.push(i + 1);
+          }
+          if (n >= 3 && bad.length <= Math.floor(n / 3) && (!best || bad.length < best.bad.length)) best = { a: A.name, b: B.name, f, bad, n };
+        }
+      }
+    }
+    if (best) {
+      const calc = `“${best.a}” ÷ “${best.b}”${best.f === 100 ? ' × 100' : ''}`;
+      found.push({ key: [P.name, best.a, best.b].sort().join('|'), rate: /índice|indice|taxa|cobertura|propor[cç][ãa]o|percentual|%/i.test(P.name) || !!P.percent, alert: { level: best.bad.length ? 'aviso' : 'info', text: best.bad.length ? `“${P.name}” bate com ${calc} em ${best.n - best.bad.length} de ${best.n} linhas; confira a(s) linha(s) ${best.bad.join(', ')}, que não bate(m).` : `“${P.name}” confere com ${calc} em todas as ${best.n} linhas (diferença dentro de arredondamento).` } });
+    }
+  }
+  // a mesma relação aparece em várias formas (A = B÷C×100, C = B÷A×100…): fica a forma em que o resultado é a taxa
+  const byKey = new Map<string, (typeof found)[number]>();
+  for (const f of found) {
+    const cur = byKey.get(f.key);
+    if (!cur || (f.rate && !cur.rate)) byKey.set(f.key, f);
+  }
+  const out = [...byKey.values()].map((f) => f.alert);
+  return out.slice(0, 6);
 }

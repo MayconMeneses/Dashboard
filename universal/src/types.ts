@@ -9,6 +9,8 @@ export interface Table {
   geo?: { lat: string; lon: string };
   /** título do bloco (linha acima do cabeçalho) e texto de contexto da planilha (ex.: município, mês) */
   title?: string;
+  /** faixa de título que agrupa as colunas (ex.: “UNIDADES DOMICILIARES”) */
+  group?: string;
   context?: string;
   /** notas sobre como o arquivo foi lido (mostradas ao usuário) */
   notes?: string[];
@@ -65,6 +67,10 @@ export interface ColProfile {
   invalidCount?: number;
   /** quantos valores eram marcadores de ausência (n/d, -, s/i…), tratados como vazio */
   missingMarkers?: number;
+  /** coluna que é um período em sequência (ano, mês por extenso): serve de eixo de tempo */
+  period?: boolean;
+  /** a maioria dos valores termina em % */
+  percent?: boolean;
 }
 
 export type ChartStyle = 'line' | 'bar' | 'stacked' | 'hbar' | 'donut' | 'area' | 'percent' | 'heatmap' | 'radar' | 'small' | 'pareto';
@@ -82,6 +88,8 @@ export interface ChartSpec {
   stack?: string;
   /** mantém a ordem original das linhas (ex.: ciclos), em vez de ordenar por valor */
   keepOrder?: boolean;
+  /** o eixo x é um período (ano, mês): linhas e variação fazem sentido */
+  period?: boolean;
   /** colunas comparadas lado a lado (kind 'multi') */
   series?: string[];
   /** kind 'pivot': soma de y por x, uma série por valor de seriesBy; where filtra linhas; style define o desenho */
