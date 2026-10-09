@@ -950,24 +950,9 @@ function openPrintReport() {
   const full = mergedTable();
   const t = view();
   const info = dataset.info;
-  const n = (x: number) => new Intl.NumberFormat('pt-BR').format(x);
   const root = $('report');
   const dl = (rows: [string, string][]) => el('dl', {}, ...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)]));
   const list = (items: string[]) => (items.length ? el('ul', {}, ...items.map((x) => el('li', {}, x))) : el('p', { className: 'muted' }, 'Nenhum.'));
-
-  const origin: [string, string][] = [['Arquivo', dataset.fileName]];
-  if (info) {
-    origin.push(['Formato', `.${info.format}`], ['Tamanho', formatBytes(info.bytes)]);
-    if (info.sha256) origin.push(['SHA-256 do arquivo original', info.sha256]);
-    if (info.readAt) origin.push(['Lido em', new Date(info.readAt).toLocaleString('pt-BR')]);
-    if (info.encoding) origin.push(['Codificação do texto', info.encoding]);
-    if (info.delimiter) origin.push(['Separador de colunas', delimiterName(info.delimiter)]);
-  }
-  origin.push(['Tabela analisada', `${table.title ?? table.name} (${n(table.rows.length)} linhas, ${table.columns.length} colunas)`], ['Versão do painel', __APP_VERSION__]);
-
-  const records: [string, string][] = [];
-  if (info) records.push(['Linhas lidas (todas as tabelas)', n(info.rowsRead)], ['Linhas ignoradas (em branco ou título)', n(info.rowsDropped)], ['Linhas não lidas (acima do limite)', n(info.truncated)]);
-  records.push(['Linhas da tabela analisada', n(table.rows.length)], ['Linhas após filtros e período', n(t.rows.length)]);
 
   const live = [...document.querySelectorAll('#charts .chart')] as HTMLElement[];
   const gallery = el('div', { className: 'charts' });
@@ -1002,23 +987,19 @@ function openPrintReport() {
 
   root.replaceChildren(
     el('h1', {}, table.title ?? table.name),
-    el('p', { className: 'muted' }, `Relatório gerado em ${new Date().toLocaleString('pt-BR')} · Dashboard Universal ${__APP_VERSION__}`),
-    el('h2', {}, '1. Origem dos dados'),
-    dl(origin),
-    el('h2', {}, '2. Registros analisados'),
-    dl(records),
-    el('h2', {}, '3. Filtros, período e ajustes aplicados'),
+    el('p', { className: 'muted' }, `Arquivo: ${dataset.fileName} · Relatório gerado em ${new Date().toLocaleString('pt-BR')} · Dashboard Universal ${__APP_VERSION__}`),
+    el('h2', {}, '1. Filtros, período e ajustes aplicados'),
     list(describeState({ filters, dateRange, merges, forced, removed: [...removed], renames, units, metrics, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers } })),
-    el('h2', {}, '4. Indicadores'),
+    el('h2', {}, '2. Indicadores'),
     dl(kpis(t, lastProf).map((k) => [k.label, k.hint ? `${k.value} (${k.hint})` : k.value] as [string, string])),
-    el('h2', {}, '5. Gráficos'),
+    el('h2', {}, '3. Gráficos'),
     gallery,
-    el('h2', {}, '6. Critérios de cálculo'),
+    el('h2', {}, '4. Critérios de cálculo'),
     list(criteria),
-    el('h2', {}, '7. Limitações e avisos'),
+    el('h2', {}, '5. Limitações e avisos'),
     list(limits),
-    el('h2', {}, '8. Como reproduzir'),
-    el('p', {}, `Abra o mesmo arquivo${info?.sha256 ? ` (confira o SHA-256 acima)` : ''} no Dashboard Universal ${__APP_VERSION__} com as mesmas opções de leitura e os mesmos ajustes listados na seção 3, ou use o HTML compartilhado gerado a partir desta análise. Este relatório descreve o estado do painel no momento da geração.`),
+    el('h2', {}, '6. Como reproduzir'),
+    el('p', {}, `Abra o mesmo arquivo no Dashboard Universal ${__APP_VERSION__} com as mesmas opções de leitura e os mesmos ajustes listados na seção 1, ou use o HTML compartilhado gerado a partir desta análise. Este relatório descreve o estado do painel no momento da geração.`),
   );
   document.body.classList.add('report-mode');
   root.hidden = false;
@@ -1113,7 +1094,7 @@ function buildReportModel(): ReportModel {
     charts: ([...document.querySelectorAll('#charts .chart')] as HTMLElement[]).map(collectChart),
     criteria,
     limits,
-    reproduce: `Abra o mesmo arquivo${info?.sha256 ? ' (confira o SHA-256 acima)' : ''} no Dashboard Universal ${__APP_VERSION__} com as mesmas opções de leitura e os mesmos ajustes listados na seção 3, ou use o HTML compartilhado gerado a partir desta análise. Este relatório descreve o estado do painel no momento da geração.`,
+    reproduce: `Abra o mesmo arquivo no Dashboard Universal ${__APP_VERSION__} com as mesmas opções de leitura e os mesmos ajustes listados na seção 1, ou use o HTML compartilhado gerado a partir desta análise. Este relatório descreve o estado do painel no momento da geração.`,
     sample: { columns: cols, rows: t.rows.slice(0, 40).map((r) => cols.map((c) => cellText(r[c]))) },
   };
 }
