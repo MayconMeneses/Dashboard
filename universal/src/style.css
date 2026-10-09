@@ -57,3 +57,9 @@ button.mini{padding:2px 8px;font-size:.8rem;margin-left:4px}button.sortbtn{borde
 .heat-legend{display:flex;gap:8px;align-items:center;font-size:.8rem;margin-top:6px}.heat-legend .grad{display:inline-block;width:120px;height:10px;border-radius:5px;background:linear-gradient(90deg,rgb(235,244,250),rgb(23,125,184));border:1px solid var(--border)}
 :focus-visible{outline:3px solid #1d4ed8;outline-offset:2px}
 @media (prefers-color-scheme:dark){:focus-visible{outline-color:#93c5fd}}
+
+.top h1{display:flex;align-items:center;gap:10px}.top .logo{width:36px;height:36px;object-fit:contain}
+.drop{position:relative;isolation:isolate;min-height:640px;display:flex;flex-direction:column;justify-content:center;align-items:center;overflow:hidden}
+.drop::before{content:"";position:absolute;inset:6px;z-index:-1;background:url(./assets/marca.webp) center/contain no-repeat;opacity:.12;pointer-events:none}
+@media (prefers-color-scheme:dark){.drop::before{opacity:.26;filter:brightness(1.6) saturate(1.1)}.top .logo{background:#fff;border-radius:8px;padding:2px}}
+@media (max-width:600px){.drop{min-height:420px}}
