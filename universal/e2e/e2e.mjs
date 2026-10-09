@@ -146,7 +146,8 @@ for (let i = 1; i <= doc.numPages; i++) {
   const ops = await pg.getOperatorList();
   images += ops.fnArray.filter((f) => f === pdfjs.OPS.paintImageXObject || f === pdfjs.OPS.paintInlineImageXObject).length;
 }
-for (const s of ['1. Origem dos dados', 'SHA-256 do arquivo original', '2. Registros analisados', '3. Filtros, período e ajustes aplicados', 'Período em', 'Grafias unificadas', '5. Gráficos', '6. Critérios de cálculo', '7. Limitações e avisos', '8. Como reproduzir', 'Anexo A', 'Página 1 de']) assert.ok(pdfText.includes(s), 'PDF contém: ' + s);
+for (const s of ['1. Filtros, período e ajustes aplicados', 'Período em', 'Grafias unificadas', '3. Gráficos', '4. Critérios de cálculo', '5. Limitações e avisos', '6. Como reproduzir', 'Anexo A', 'Página 1 de']) assert.ok(pdfText.includes(s), 'PDF contém: ' + s);
+for (const s of ['SHA-256', 'Origem dos dados', 'Registros analisados', 'Tamanho', 'Versão do painel']) assert.ok(!pdfText.includes(s), 'PDF não traz: ' + s);
 assert.ok(images >= 1, 'PDF contém imagens dos gráficos');
 ok(`relatório em PDF real: ${doc.numPages} páginas, texto selecionável, ${images} imagem(ns) de gráfico, numeração de páginas`);
 

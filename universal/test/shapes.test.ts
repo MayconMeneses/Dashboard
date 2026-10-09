@@ -110,7 +110,8 @@ describe('relatório em PDF (definição do documento)', () => {
   const doc = buildPdfDoc(model);
   const flat = JSON.stringify(doc.content);
   it('tem todas as seções, anexo e metadados', () => {
-    for (const s of ['1. Origem dos dados', '2. Registros analisados', '3. Filtros, período e ajustes aplicados', '4. Indicadores', '5. Gráficos', '6. Critérios de cálculo', '7. Limitações e avisos', '8. Como reproduzir', 'Anexo A. Amostra dos dados analisados']) expect(flat).toContain(s);
+    for (const s of ['1. Filtros, período e ajustes aplicados', '2. Indicadores', '3. Gráficos', '4. Critérios de cálculo', '5. Limitações e avisos', '6. Como reproduzir', 'Anexo A. Amostra dos dados analisados']) expect(flat).toContain(s);
+    for (const s of ['Origem dos dados', 'Registros analisados']) expect(flat).not.toContain(s);
     expect(doc.pageSize).toBe('A4');
     expect(doc.info).toMatchObject({ title: 'Controle', author: 'Dashboard Universal' });
   });
