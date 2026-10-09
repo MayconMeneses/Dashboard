@@ -36,8 +36,9 @@
           ]
         }
       ],
-      "signAndEditExecutable": false,
-      "icon": "build/icon.png"
+      "signAndEditExecutable": true,
+      "signExecutable": false,
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,
@@ -46,6 +47,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "language": "1046",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
       "artifactName": "Instalador-Dashboard-Universal-${version}.${ext}"
     },
     "fileAssociations": [
@@ -69,6 +73,6 @@
     "electron": "44.7.0",
     "electron-builder": "26.15.3"
   },
-  "painelVersao": "0.6.0",
+  "painelVersao": "0.7.1",
   "programaMinimo": "0.2.0"
 }
