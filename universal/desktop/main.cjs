@@ -133,7 +133,7 @@ async function buscarAtualizacao(manual) {
 }
 
 function createWindow() {
-  win = new BrowserWindow({ width: 1280, height: 860, title: 'Dashboard Universal', backgroundColor: '#f5f6f8', webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } });
+  win = new BrowserWindow({ width: 1280, height: 860, title: 'Dashboard Universal', icon: path.join(__dirname, 'build', 'icon.png'), backgroundColor: '#f5f6f8', webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } });
   win.loadFile(painelEmUso().arquivo);
   // links externos abrem no navegador; a janela nunca navega para fora
   win.webContents.setWindowOpenHandler(({ url }) => {
