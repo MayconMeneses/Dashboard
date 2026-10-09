@@ -2,7 +2,7 @@ import { strToU8, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { parseFile } from '../src/parse.js';
 import { profileTable } from '../src/profile.js';
-import { kpis, qualityAlerts, suggestCharts } from '../src/suggest.js';
+import { chartData, kpis, qualityAlerts, suggestCharts } from '../src/suggest.js';
 import { compatibleStyles } from '../src/shapes.js';
 
 const p = (t: string) => `<w:p><w:r><w:t xml:space="preserve">${t}</w:t></w:r></w:p>`;
@@ -58,11 +58,23 @@ describe('quadros de relatório em Word', () => {
     const prof = profileTable(j);
     const specs = suggestCharts(j, prof);
     const multi = specs.filter((s) => s.kind === 'multi');
-    expect(multi.length).toBeGreaterThanOrEqual(2);
+    expect(multi.length).toBeGreaterThanOrEqual(1);
     expect(multi.every((s) => s.period)).toBe(true);
-    const cols = multi.flatMap((s) => s.series!);
-    expect(cols).toEqual(expect.arrayContaining(['Trabalhadas', 'Positivas', 'Pesquisadas', 'Cobertura']));
+    // colunas com a taxa em linha por cima (Cobertura = Pesquisadas ÷ Meta × 100)
+    const combo = multi.find((s) => s.lineSeries?.includes('Cobertura'))!;
+    expect(combo.series).toEqual(['Meta', 'Pesquisadas']);
+    const cols = multi.flatMap((s) => [...(s.series ?? []), ...(s.lineSeries ?? [])]);
+    expect(cols).toEqual(expect.arrayContaining(['Trabalhadas', 'Pesquisadas', 'Cobertura']));
+    // variedade: rosca, colunas empilhadas, variação e radar
+    expect(specs.some((s) => s.kind === 'part' && !s.part!.all)).toBe(true);
+    expect(specs.some((s) => s.kind === 'part' && s.part!.all && s.style === 'stacked')).toBe(true);
+    expect(specs.some((s) => s.kind === 'change')).toBe(true);
+    const d = chartData(j, combo);
+    expect(d.datasets!.map((x) => !!x.line)).toEqual([false, false, true]);
+    const rosca = chartData(j, specs.find((s) => s.kind === 'part' && !s.part!.all)!);
+    expect(rosca.values.reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
     expect(compatibleStyles({ ordered: true, series: 3, labels: 3, positive: true })[0]!.style).toBe('line');
+    expect(compatibleStyles({ ordered: true, series: 3, labels: 3, positive: true, preferBars: true })[0]!.style).toBe('bar');
     const k = kpis(j, prof);
     expect(k[0]!.label).toBe('Períodos');
     expect(k.some((x) => /Pesquisadas|Trabalhadas|Positivas/.test(x.label) && /→/.test(x.hint ?? ''))).toBe(true);

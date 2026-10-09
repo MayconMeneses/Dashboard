@@ -109,7 +109,8 @@ function reset() {
   maps = [];
 }
 
-function drawChart(spec: ChartSpec, t: Table): HTMLElement {
+function drawChart(spec0: ChartSpec, t: Table): HTMLElement {
+  let spec = spec0;
   const card = el('div', { className: 'chart' });
   const x = el('button', { className: 'x', type: 'button', title: 'Remover este gráfico', ariaLabel: 'Remover este gráfico' }, '✕');
   x.onclick = () => {
@@ -158,6 +159,19 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
   }
   if (spec.kind === 'funnel') return drawFunnel(card, spec, t);
   if (spec.kind === 'bubble') return drawBubble(card, spec, t);
+  let periodPick: HTMLElement | null = null;
+  if (spec.kind === 'part' && spec.part && !spec.part.all && spec.x) {
+    // rosca de um período: o usuário escolhe qual
+    const labs = t.rows.filter((r) => r[spec.x!] != null).map((r) => String(r[spec.x!]));
+    const cur = Math.min(labs.length - 1, rateChoice[spec.id] ?? labs.length - 1);
+    spec = { ...spec, row: cur };
+    const sel = el('select', { ariaLabel: `Escolher ${spec.x}` }, ...labs.map((l, i) => el('option', { value: String(i), selected: i === cur }, l)));
+    sel.onchange = () => {
+      rateChoice[spec0.id] = Number(sel.value);
+      render();
+    };
+    periodPick = el('p', { className: 'rate-pick' }, `${spec.x}: `, sel);
+  }
   const d = chartData(t, spec);
   if (!d.labels.length) {
     card.append(el('p', {}, 'Sem dados suficientes para este gráfico.'));
@@ -173,10 +187,10 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
     card.append(el('p', { className: 'rate-pick' }, 'Positividade: ', sel, el('span', { className: 'muted' }, ' ' + rate.explain)));
   }
   // escolha do desenho: o sistema recomenda (regras em shapes.ts) e o usuário pode trocar por alternativas compatíveis
-  let shape: string = spec.kind === 'pivot' ? (spec.style ?? 'bar') : spec.kind;
+  let shape: string = spec.kind === 'pivot' ? (spec.style ?? 'bar') : spec.kind === 'part' && !spec.part?.all ? 'donut' : spec.kind === 'profile' ? 'radar' : spec.kind === 'change' ? 'hbar' : spec.kind;
   let why = spec.why ?? '';
   if ((spec.kind === 'pivot' || spec.period) && !spec.rate) {
-    const opts = compatibleStyles({ ordered: !!spec.keepOrder || !!spec.period, series: d.datasets?.length ?? 0, labels: d.labels.length, positive: [...d.values, ...(d.datasets ?? []).flatMap((s) => s.values)].every((v) => Number.isNaN(v) || v >= 0) });
+    const opts = compatibleStyles({ ordered: !!spec.keepOrder || !!spec.period, preferBars: !!spec.period, series: d.datasets?.length ?? 0, labels: d.labels.length, positive: [...d.values, ...(d.datasets ?? []).flatMap((s) => s.values)].every((v) => Number.isNaN(v) || v >= 0) });
     const rec = opts.find((o) => o.recommended) ?? opts[0]!;
     const chosen = opts.find((o) => o.style === styleChoice[spec.id]) ?? (spec.style && spec.style !== rec.style && spec.lockStyle ? opts.find((o) => o.style === spec.style) : undefined) ?? rec;
     shape = chosen.style;
@@ -190,6 +204,7 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
       card.append(el('p', { className: 'rate-pick' }, 'Tipo de gráfico: ', sel));
     }
   }
+  if (periodPick) card.append(periodPick);
   const insight = insightFor(spec, d) + (rate ? ' ' + rateInsight(rate) : '');
   card.append(el('p', { className: 'insight' }, el('b', {}, 'Destaque: '), insight));
   card.append(el('details', { className: 'howto' }, el('summary', {}, 'Por que este gráfico e como ler'), el('p', {}, el('b', {}, 'Por que: '), why || 'Escolhido pelo tipo dos dados.'), el('p', {}, el('b', {}, 'Como ler: '), HOWTO_SHAPE[shape] ?? spec.howTo ?? HOW_TO[spec.kind] ?? '')));
@@ -208,6 +223,7 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
   const radar = shape === 'radar';
   const pareto = shape === 'pareto';
   const base = percent ? toPercent(d) : d;
+  const overlay = d.datasets?.find((s) => s.line);
   let labels = base.labels;
   let datasets: object[];
   const colorOf = (i: number) => PALETTE[i % PALETTE.length]!;
@@ -220,9 +236,9 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
     ];
   } else if (base.datasets) {
     const sets = radar ? [...base.datasets].sort((x, y) => y.values.reduce((a, v) => a + (Number.isNaN(v) ? 0 : v), 0) - x.values.reduce((a, v) => a + (Number.isNaN(v) ? 0 : v), 0)).slice(0, 6) : base.datasets;
-    datasets = sets.map((s, i) => ({ label: s.label, data: s.values.map((v) => (Number.isNaN(v) ? null : v)), backgroundColor: radar || shape === 'area' ? colorOf(i) + '55' : colorOf(i), borderColor: colorOf(i), tension: labels.length <= 24 ? 0 : 0.25, pointRadius: isLine || radar ? 4 : 0, borderWidth: isLine || radar ? 2 : 0, fill: shape === 'area' || radar, spanGaps: false }));
+    datasets = sets.map((s, i) => (s.line ? { type: 'line', label: s.label, data: s.values.map((v) => (Number.isNaN(v) ? null : v)), yAxisID: 'y1', borderColor: '#882255', backgroundColor: '#882255', borderWidth: 3, pointRadius: 5, tension: 0, spanGaps: false, order: -1 } : { label: s.label, data: s.values.map((v) => (Number.isNaN(v) ? null : v)), backgroundColor: radar || shape === 'area' ? colorOf(i) + '55' : colorOf(i), borderColor: colorOf(i), tension: labels.length <= 24 ? 0 : 0.25, pointRadius: isLine || radar ? 4 : 0, borderWidth: isLine || radar ? 2 : 0, fill: shape === 'area' || radar, spanGaps: false }));
   } else {
-    datasets = [{ label: spec.y ?? 'Registros', data: base.values.map((v) => (Number.isNaN(v) ? null : v)), backgroundColor: donut ? labels.map((_, i) => colorOf(i)) : shape === 'area' ? PALETTE[0] + '55' : PALETTE[0], borderColor: PALETTE[0], tension: 0.25, fill: shape === 'area', barThickness: horizontal ? 14 : undefined, spanGaps: false }];
+    datasets = [{ label: spec.y ?? 'Registros', data: base.values.map((v) => (Number.isNaN(v) ? null : v)), backgroundColor: donut ? labels.map((_, i) => colorOf(i)) : shape === 'area' ? PALETTE[0] + '55' : PALETTE[0], borderColor: donut ? '#ffffff' : PALETTE[0], tension: 0.25, fill: shape === 'area', barThickness: horizontal ? 14 : undefined, spanGaps: false }];
   }
   if (rate) datasets.push({ type: 'line', label: rate.name, data: rate.values.map((v) => (Number.isNaN(v) ? null : v)), yAxisID: 'y1', borderColor: '#D55E00', backgroundColor: '#D55E00', borderWidth: 3, pointRadius: 4, tension: 0.2, spanGaps: false, order: -1 });
   const type = radar ? 'radar' : isLine ? 'line' : donut ? 'doughnut' : 'bar';
@@ -237,7 +253,7 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
         maintainAspectRatio: false,
         onClick: (_e, els) => {
           const i = els[0]?.index;
-          if (i == null || !spec.x || labels[i] == null) return;
+          if (i == null || !spec.x || labels[i] == null || spec.kind === 'part' || spec.kind === 'profile' || spec.kind === 'change') return;
           const mm = spec.kind === 'line' ? /^(\d{4})-(\d{2})$/.exec(labels[i]!) : null;
           if (mm) {
             // gráfico de linha por mês: o clique vira filtro de período daquele mês
@@ -259,7 +275,7 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
             callbacks: {
               label: (c) => {
                 const v = (horizontal ? c.parsed.x : radar ? (c.parsed as { r: number }).r : c.parsed.y) as number | null;
-                const pct = (c.dataset as { yAxisID?: string }).yAxisID === 'y1' || percent;
+                const pct = (c.dataset as { yAxisID?: string }).yAxisID === 'y1' || percent || spec.kind === 'change' || spec.kind === 'profile';
                 return `${c.dataset.label ?? ''}: ${v == null ? 'sem dado' : fmt(v, pct)}`;
               },
               afterLabel: (c) => {
@@ -270,7 +286,7 @@ function drawChart(spec: ChartSpec, t: Table): HTMLElement {
             },
           },
         },
-        scales: donut || radar ? (radar ? { r: { beginAtZero: true } } : {}) : { x: { stacked, ...(horizontal ? { beginAtZero: true } : {}) }, y: { stacked, beginAtZero: true, ...(percent ? { max: 100, ticks: { callback: (v: string | number) => `${v}%` } } : {}) }, ...(rate || pareto ? { y1: { position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false }, ticks: { callback: (v: string | number) => `${v}%` }, title: { display: true, text: pareto ? '% acumulado' : 'Positividade (%)' } } } : {}) },
+        scales: donut || radar ? (radar ? { r: { beginAtZero: true } } : {}) : { x: { stacked, ...(horizontal ? { beginAtZero: true } : {}) }, y: { stacked, beginAtZero: true, ...(percent ? { max: 100, ticks: { callback: (v: string | number) => `${v}%` } } : {}) }, ...(rate || pareto || overlay ? { y1: { position: 'right', min: 0, ...(overlay ? {} : { max: 100 }), grid: { drawOnChartArea: false }, ticks: { callback: (v: string | number) => `${v}%` }, title: { display: true, text: pareto ? '% acumulado' : overlay ? overlay.label : 'Positividade (%)' } } } : {}) },
       },
     }),
   );

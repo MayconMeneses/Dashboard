@@ -75,7 +75,7 @@ export interface ColProfile {
 
 export type ChartStyle = 'line' | 'bar' | 'stacked' | 'hbar' | 'donut' | 'area' | 'percent' | 'heatmap' | 'radar' | 'small' | 'pareto';
 
-export type ChartKind = 'bar' | 'hbar' | 'donut' | 'line' | 'hist' | 'stacked' | 'map' | 'scatter' | 'multi' | 'pivot' | 'funnel' | 'bubble';
+export type ChartKind = 'bar' | 'hbar' | 'donut' | 'line' | 'hist' | 'stacked' | 'map' | 'scatter' | 'multi' | 'pivot' | 'funnel' | 'bubble' | 'part' | 'profile' | 'change';
 
 export interface ChartSpec {
   id: string;
@@ -90,6 +90,13 @@ export interface ChartSpec {
   keepOrder?: boolean;
   /** o eixo x é um período (ano, mês): linhas e variação fazem sentido */
   period?: boolean;
+  /** kind 'multi': colunas por série e, por cima, linha(s) de percentual no eixo da direita */
+  lineSeries?: string[];
+  /** kind 'part': quanto de “whole” é “part” (rosca de um período, escolhido por row) */
+  part?: { whole: string; part: string; all?: boolean };
+  /** kind 'profile': colunas que viram eixos do radar (cada período é uma série, 100% = maior valor entre os períodos); kind 'change': colunas comparadas primeiro × último período */
+  indicators?: string[];
+  row?: number;
   /** colunas comparadas lado a lado (kind 'multi') */
   series?: string[];
   /** kind 'pivot': soma de y por x, uma série por valor de seriesBy; where filtra linhas; style define o desenho */
