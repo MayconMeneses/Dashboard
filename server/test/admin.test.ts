@@ -88,6 +88,7 @@ describe('backup e restauração', () => {
     const db2 = openDb(cfg.dbFile);
     expect((db2.prepare("SELECT COUNT(*) AS n FROM imports WHERE status = 'active'").get() as { n: number }).n).toBe(1);
     expect((db2.prepare('SELECT COUNT(*) AS n FROM features').get() as { n: number }).n).toBeGreaterThan(20);
+    db2.close(); // a restauração real roda com o servidor parado; no Windows não dá para renomear o arquivo enquanto ele está aberto
     // restaurar de novo guarda o banco anterior
     const again = restoreBackup(new Uint8Array(r.rawPayload), cfg);
     expect(again.previousDb && existsSync(again.previousDb)).toBeTruthy();
