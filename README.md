@@ -1,15 +1,23 @@
-# Dashboard – vigilância entomológica (Chagas) e painéis automáticos
+# Dashboard Universal
 
-Dois projetos em TypeScript que transformam arquivos de campo e planilhas em painéis interativos, mapas e relatórios, rodando no próprio computador (os dados do arquivo não são enviados a nenhum servidor):
+**Arraste uma planilha ou um arquivo e receba um painel pronto:** indicadores, gráficos explicados, mapa (quando há coordenadas) e alertas de qualidade dos dados. Tudo roda no próprio computador, e os dados do arquivo não são enviados a nenhum servidor.
+
+Formatos: CSV, Excel, Word (.docx), PDF com tabelas, JSON, GeoJSON, KML e KMZ. Tem instalador para Windows com atualização automática. A documentação completa está em [`universal/`](universal/).
+
+Este repositório também guarda o **Painel de triatomíneos – Croatá/CE**, projeto inicial de testes: lê KML/KMZ de campanhas de captura de barbeiros (doença de Chagas) e mostra resultados por localidade, mapas, filtros e relatório em PDF.
 
 | | Projeto | O que faz |
 |---|---|---|
-| 🪲 | **Painel de triatomíneos – Croatá/CE** | Lê KML/KMZ de campanhas de captura de barbeiros (doença de Chagas) e mostra resultados por localidade, mapas, filtros e relatório em PDF. |
-| 📊 | **[Dashboard Universal](universal/)** | Recebe CSV, Excel, JSON, GeoJSON, KML ou KMZ e gera sozinho indicadores, gráficos, mapa e alertas de qualidade dos dados. Tem instalador para Windows com atualização automática. |
+| 📊 | **[Dashboard Universal](universal/)** | Recebe CSV, Excel, Word, PDF, JSON, GeoJSON, KML ou KMZ e gera sozinho indicadores, gráficos, mapa e alertas de qualidade dos dados. Tem instalador para Windows com atualização automática. |
+| 🪲 | **Painel de triatomíneos – Croatá/CE** | Projeto inicial de testes: lê KML/KMZ de campanhas de captura e mostra resultados por localidade, mapas, filtros e relatório em PDF. |
 
 > Todos os prints abaixo usam **dados fictícios**. O repositório não contém dados reais de campanha.
 
 ## Prints
+
+**Dashboard Universal** – painel gerado automaticamente a partir de um CSV:
+
+<img src="docs/img/universal.png" alt="Dashboard Universal gerado a partir de um CSV" width="90%">
 
 **Painel de triatomíneos** – resultado da busca por localidade e mapa do município com áreas, capturas e PITs:
 
@@ -17,10 +25,6 @@ Dois projetos em TypeScript que transformam arquivos de campo e planilhas em pai
   <img src="docs/img/grafico-localidades.png" alt="Gráfico de resultados por localidade" width="45%">
   <img src="docs/img/mapa.png" alt="Mapa de Croatá com localidades e capturas" width="45%">
 </p>
-
-**Dashboard Universal** – painel gerado automaticamente a partir de um CSV:
-
-<img src="docs/img/universal.png" alt="Dashboard Universal gerado a partir de um CSV" width="90%">
 
 ## Destaques técnicos
 
