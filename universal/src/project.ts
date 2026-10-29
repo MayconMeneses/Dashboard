@@ -1,6 +1,6 @@
 import { evalRow } from './formula.js';
 import { compileFormula } from './formula.js';
-import { profileTable } from './profile.js';
+import { profileTable, toNumber } from './profile.js';
 import type { ColType, Row, Table } from './types.js';
 
 export interface Metric {
@@ -126,7 +126,8 @@ export function compareTables(a: Table, b: Table): TableDiff {
   const pa = profileTable(a);
   const pb = profileTable(b);
   const typeOf = (c: string) => pb.find((p) => p.name === c)?.type;
-  const sum = (t: Table, c: string) => t.rows.reduce((s, r) => s + (typeof r[c] === 'number' ? (r[c] as number) : Number(String(r[c] ?? '').replace(/\./g, '').replace(',', '.')) || 0), 0);
+  // mesma leitura numérica do restante do painel; vazio e texto não numérico ficam fora da soma
+  const sum = (t: Table, c: string) => t.rows.reduce((s, r) => s + (toNumber(r[c] ?? null) ?? 0), 0);
   const sums = common
     .filter((c) => ['number', 'integer'].includes(typeOf(c) ?? '') && ['number', 'integer'].includes(pa.find((p) => p.name === c)?.type ?? ''))
     .map((c) => ({ col: c, before: sum(a, c), after: sum(b, c) }))

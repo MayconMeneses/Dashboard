@@ -56,4 +56,11 @@ export function detectDelimiter(text: string): ',' | ';' | '\t' | '|' {
   return best;
 }
 
+/** Campo CSV de saída: aspas quando preciso e neutralização de fórmula (=, +, -, @) para planilhas que o reabram. */
+export function csvField(v: unknown, sep = ';'): string {
+  let s = v == null ? '' : v instanceof Date ? v.toISOString().slice(0, 10) : String(v);
+  if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s) && !/^[+-]?\d+([.,]\d+)?$/.test(s)) s = `'${s}`;
+  return s.includes('"') || s.includes('\n') || s.includes('\r') || s.includes(sep) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
 export const delimiterName = (d: string) => ({ ',': 'vírgula', ';': 'ponto e vírgula', '\t': 'tabulação', '|': 'barra vertical' })[d] ?? d;

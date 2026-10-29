@@ -7,7 +7,7 @@ import { parseFile } from './parse.js';
 import type { ParseOptions } from './parse.js';
 import { inferLocale, locale, profileTable, toNumber } from './profile.js';
 import type { LocaleInfo } from './profile.js';
-import { delimiterName } from './csv.js';
+import { csvField, delimiterName } from './csv.js';
 import type { DelimiterChoice, Encoding } from './csv.js';
 import { buildPdfDoc, describeState, formatBytes } from './report.js';
 import { compileFormula, evalAggregate, evalRow, FormulaError } from './formula.js';
@@ -918,10 +918,7 @@ function download(name: string, mime: string, content: string | Uint8Array) {
   URL.revokeObjectURL(a.href);
 }
 
-const csvCell = (v: unknown) => {
-  const s = v == null ? '' : v instanceof Date ? v.toISOString().slice(0, 10) : String(v);
-  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
+const csvCell = (v: unknown) => csvField(v);
 
 function captureState(): SharedState {
   return { level: ($('level') as HTMLSelectElement).value, tableIndex: dataset && table ? dataset.tables.indexOf(table) : 0, forced, filters, removed: [...removed], styleChoice: { ...styleChoice }, rateChoice: { ...rateChoice }, merges, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers }, dateRange, basemap, pageSize, renames, units, metrics };

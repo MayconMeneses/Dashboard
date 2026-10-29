@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 
 const pw = await import(process.env.PLAYWRIGHT_MODULE ?? new URL('../../node_modules/playwright-core/index.mjs', import.meta.url).href);
 const dir = mkdtempSync(join(tmpdir(), 'universal-e2e-'));
-const app = pathToFileURL(new URL('../dist/index.html', import.meta.url).pathname).href;
+const app = new URL('../dist/index.html', import.meta.url).href;
 const latin1 = (s) => Buffer.from([...s].map((c) => c.charCodeAt(0)));
 
 // --- arquivos de teste (dados fictícios)

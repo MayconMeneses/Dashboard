@@ -208,7 +208,11 @@ function centroid(g: { type: string; coordinates: unknown }): [number, number] |
   const pts: [number, number][] = [];
   const walk = (c: unknown): void => {
     if (Array.isArray(c) && typeof c[0] === 'number') pts.push([c[0] as number, c[1] as number]);
-    else if (Array.isArray(c)) c.forEach(walk);
+    else if (Array.isArray(c)) {
+      // anel de polígono: o último vértice repete o primeiro e não deve pesar duas vezes na média
+      const ring = c.length > 3 && Array.isArray(c[0]) && JSON.stringify(c[0]) === JSON.stringify(c[c.length - 1]);
+      (ring ? c.slice(0, -1) : c).forEach(walk);
+    }
   };
   walk(g.coordinates);
   if (!pts.length) return null;
