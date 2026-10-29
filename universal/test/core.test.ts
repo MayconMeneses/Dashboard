@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseFile } from '../src/parse.js';
 import { profileTable, toDate, toNumber } from '../src/profile.js';
-import { chartData, kpis, suggestCharts } from '../src/suggest.js';
+import { chartData, clickFilters, kpis, suggestCharts } from '../src/suggest.js';
 
 const enc = (s: string) => new TextEncoder().encode(s);
 
@@ -352,5 +352,25 @@ describe('exportar Excel', () => {
     expect(t.rows[0]!['Data']).toBeInstanceOf(Date);
     expect((t.rows[0]!['Data'] as Date).toISOString().slice(0, 10)).toBe('2024-03-05');
     expect(d.tables[1]!.columns).toEqual(['Campo', 'Valor']);
+  });
+});
+
+describe('filtro por clique no gráfico', () => {
+  it('histograma não filtra (as faixas não existem nas linhas); gráfico por categoria filtra', async () => {
+    const lines = ['bairro,valor'];
+    for (let i = 0; i < 30; i++) lines.push(`B${i % 3},${i}`);
+    const t = (await parseFile('h.csv', enc(lines.join('\n')))).tables[0]!;
+    const specs = suggestCharts(t, profileTable(t), 3);
+    const hist = specs.find((c) => c.kind === 'hist')!;
+    expect(clickFilters(hist)).toBe(false);
+    expect(chartData(t, hist).labels.some((l) => t.rows.some((r) => String(r.valor) === l))).toBe(false);
+    expect(clickFilters(specs.find((c) => c.kind === 'hbar' || c.kind === 'donut')!)).toBe(true);
+  });
+  it('KPIs recalculados nas linhas filtradas usam os tipos da tabela inteira', async () => {
+    const t = (await parseFile('k.csv', enc('ciclo,trab\nA,10\nB,20\nC,30\n'))).tables[0]!;
+    const types = Object.fromEntries(profileTable(t).map((p) => [p.name, p.type]));
+    const f = { ...t, rows: t.rows.slice(0, 2) };
+    const total = kpis(f, profileTable(f, types)).find((x) => x.label.startsWith('Total de'))!;
+    expect(total.value).toBe('30');
   });
 });

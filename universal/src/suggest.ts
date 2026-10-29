@@ -145,6 +145,9 @@ export function qualityAlerts(t: Table, prof: ColProfile[], loc?: LocaleInfo): A
   return out;
 }
 
+/** O clique vira filtro só quando o rótulo é valor real da coluna; as faixas do histograma são calculadas e não existem nas linhas. */
+export const clickFilters = (s: ChartSpec) => !!s.x && s.kind !== 'part' && s.kind !== 'profile' && s.kind !== 'change' && s.kind !== 'hist';
+
 export function kpis(t: Table, prof: ColProfile[]): Kpi[] {
   if (t.tidy) return tidyKpis(t);
   const per = prof.find((p) => p.period && p.filled === t.rows.length && p.unique === t.rows.length);

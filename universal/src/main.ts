@@ -19,7 +19,7 @@ import { applyMerges } from './similar.js';
 import { filterByDate, pageOf, sortRows } from './tableview.js';
 import type { SortDir } from './tableview.js';
 import { bubbleData, compatibleStyles, funnelData, toHeatmap, toPercent, toPareto } from './shapes.js';
-import { chartData, HOW_TO, HOWTO_SHAPE, insightFor, kpis, qualityAlerts, rateData, rateInsight, suggestCharts } from './suggest.js';
+import { chartData, clickFilters, HOW_TO, HOWTO_SHAPE, insightFor, kpis, qualityAlerts, rateData, rateInsight, suggestCharts } from './suggest.js';
 import type { SeriesData } from './suggest.js';
 import type { ChartSpec, ColProfile, ColType, Dataset, Table } from './types.js';
 import { heatCell, maxOf } from './util.js';
@@ -47,6 +47,7 @@ let pageSize = 50;
 let basemap: 'esri' | 'none' = 'esri';
 let locInfo: LocaleInfo | null = null;
 let lastProf: ColProfile[] = [];
+let lastKpiProf: ColProfile[] = [];
 let lastSpecs: ChartSpec[] = [];
 let renames: Record<string, string> = {};
 let units: Record<string, string> = {};
@@ -253,7 +254,7 @@ function drawChart(spec0: ChartSpec, t: Table): HTMLElement {
         maintainAspectRatio: false,
         onClick: (_e, els) => {
           const i = els[0]?.index;
-          if (i == null || !spec.x || labels[i] == null || spec.kind === 'part' || spec.kind === 'profile' || spec.kind === 'change') return;
+          if (i == null || !spec.x || labels[i] == null || !clickFilters(spec)) return;
           const mm = spec.kind === 'line' ? /^(\d{4})-(\d{2})$/.exec(labels[i]!) : null;
           if (mm) {
             // gráfico de linha por mês: o clique vira filtro de período daquele mês
@@ -267,7 +268,7 @@ function drawChart(spec0: ChartSpec, t: Table): HTMLElement {
         },
         onHover: (e, els) => {
           const c = e.native?.target as HTMLElement | null;
-          if (c) c.style.cursor = els.length ? 'pointer' : 'default';
+          if (c) c.style.cursor = els.length && clickFilters(spec) ? 'pointer' : 'default';
         },
         plugins: {
           legend: { display: donut || radar || !!d.datasets || pareto, position: 'bottom' },
@@ -474,7 +475,9 @@ function render() {
       return [];
     }
   });
-  $('kpis').replaceChildren(...[...kpis(t, prof), ...metricKpis].map((k) => el('div', { className: 'kpi', title: k.hint ?? '' }, el('b', {}, k.value), el('span', {}, k.label))));
+  // tipos vêm da tabela inteira; soma, média e período acompanham as linhas filtradas
+  lastKpiProf = t.rows.length === full.rows.length ? prof : profileTable(t, Object.fromEntries(prof.map((p) => [p.name, p.type])));
+  $('kpis').replaceChildren(...[...kpis(t, lastKpiProf), ...metricKpis].map((k) => el('div', { className: 'kpi', title: k.hint ?? '' }, el('b', {}, k.value), el('span', {}, k.label))));
   renderMetrics(full, t);
   renderTools();
   const specs = suggestCharts(full, prof, Number(($('level') as HTMLSelectElement).value)).filter((s) => !removed.has(s.id));
@@ -991,7 +994,7 @@ function openPrintReport() {
     el('h2', {}, '1. Filtros, período e ajustes aplicados'),
     list(describeState({ filters, dateRange, merges, forced, removed: [...removed], renames, units, metrics, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers } })),
     el('h2', {}, '2. Indicadores'),
-    dl(kpis(t, lastProf).map((k) => [k.label, k.hint ? `${k.value} (${k.hint})` : k.value] as [string, string])),
+    dl(kpis(t, lastKpiProf).map((k) => [k.label, k.hint ? `${k.value} (${k.hint})` : k.value] as [string, string])),
     el('h2', {}, '3. Gráficos'),
     gallery,
     el('h2', {}, '4. Critérios de cálculo'),
@@ -1090,7 +1093,7 @@ function buildReportModel(): ReportModel {
     origin,
     records,
     adjustments: describeState({ filters, dateRange, merges, forced, removed: [...removed], renames, units, metrics, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers } }),
-    kpis: kpis(t, lastProf).map((k) => [k.label, k.hint ? `${k.value} (${k.hint})` : k.value] as [string, string]),
+    kpis: kpis(t, lastKpiProf).map((k) => [k.label, k.hint ? `${k.value} (${k.hint})` : k.value] as [string, string]),
     charts: ([...document.querySelectorAll('#charts .chart')] as HTMLElement[]).map(collectChart),
     criteria,
     limits,
