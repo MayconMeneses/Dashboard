@@ -28,4 +28,4 @@ Pedido do dono: “Instalar o `.exe` de verdade”, “Distribuir o instalador 0
 Painel 0.9.0 e programa de desktop 0.5.0 (Parquet no “Abrir arquivo” e nas associações). **Nada disto foi publicado**: `universal/atualizacao/versao.json` continua em 0.8.0.
 
 ## Limites
-GeoParquet não desenha a geometria (WKB); a linha do fluxo é reta; a taxa geral só aparece quando a relação entre colunas é detectada; o instalador 0.5.0 ainda não foi gerado; a pergunta de atualização com versão nova real só será vista na próxima publicação.
+GeoParquet não desenha a geometria (WKB); a linha do fluxo é reta; a taxa geral só aparece quando a relação entre colunas é detectada; o instalador 0.5.0 foi gerado e testado (`Instalador-Dashboard-Universal-0.5.0.exe`, SHA-256 `ed2439df…ffb22`, 108,1 MB, sem assinatura de código), mas não foi distribuído nem instalado nesta máquina; a pergunta de atualização com versão nova real só será vista na próxima publicação.

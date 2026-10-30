@@ -82,11 +82,11 @@ async function abrir({ dados = mkdtempSync(join(tmpdir(), 'universal-desktop-'))
   return { dados, page, fechar };
 }
 // painel “novo” de mentira: o compilado com uma marca no <head> (o título continua começando com “Dashboard”)
-const marca = '<meta name="teste-atualizacao" content="0.9.0">';
+const marca = '<meta name="teste-atualizacao" content="0.9.1">';
 const htmlTexto = dist.toString('utf8');
 assert.equal(htmlTexto.split('</head>').length, 2, 'o painel tem um único </head>');
 const htmlNovo = Buffer.from(htmlTexto.replace('</head>', marca + '</head>'), 'utf8');
-const manifestoBom = { versao: '0.9.0', sha256: sha(htmlNovo), programaMinimo: '0.2.0' };
+const manifestoBom = { versao: '0.9.1', sha256: sha(htmlNovo), programaMinimo: '0.2.0' };
 const csv = ['uf;valor', ...Array.from({ length: 12 }, (_, i) => `${['SP', 'RJ', 'MG'][i % 3]};${10 + i}`)].join(NL);
 const arquivoCsv = join(mkdtempSync(join(tmpdir(), 'universal-desktop-dados-')), 'desktop.csv');
 writeFileSync(arquivoCsv, csv);
@@ -144,7 +144,7 @@ let dadosAtualizados;
     await app.page.waitForSelector('#preview:not([hidden]) h2', { timeout: 20000 });
     assert.ok((await app.page.locator('#preview').innerText()).includes('desktop.csv'), 'o arquivo aberto foi entregue de novo ao painel novo');
     assert.deepEqual([...new Set(srv.pedidos)].sort(), ['/index.html', '/versao.json']);
-    assert.equal(readFileSync(join(app.dados, 'painel', 'versao.txt'), 'utf8'), '0.9.0');
+    assert.equal(readFileSync(join(app.dados, 'painel', 'versao.txt'), 'utf8'), '0.9.1');
     assert.equal(sha(readFileSync(join(app.dados, 'painel', 'index.html'))), manifestoBom.sha256, 'o painel gravado é o servido');
     dadosAtualizados = app.dados;
     ok('atualização ao abrir: pergunta, baixa, confere o SHA-256, grava, recarrega e reabre o arquivo que estava aberto');
