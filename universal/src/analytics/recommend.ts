@@ -1,6 +1,7 @@
 import { toNumber } from '../profile.js';
 import type { ChartSpec, ColProfile, Table } from '../types.js';
 import { findRelations } from './quality.js';
+import { aggFor, explainColumns, semanticProfile } from './semantic.js';
 import { suggestTidy } from './tidy.js';
 
 /** Sugere gráficos conforme os tipos de coluna; `level` 1 = enxuto … 3 = completo. */
@@ -8,15 +9,19 @@ export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpe
   if (t.noCharts) return [];
   if (t.tidy) return suggestTidy(t, level);
   const out: ChartSpec[] = [];
+  const sem = semanticProfile(t, prof);
+  const semOf = (name: string) => sem.find((s) => s.name === name);
   const labelOk = (p: ColProfile) => (p.type === 'category' || p.type === 'text' || p.type === 'id') && p.filled === t.rows.length && p.unique === t.rows.length;
   const labelCol = t.rows.length >= 2 && t.rows.length <= 40 ? (prof.find((p) => p.period && labelOk(p)) ?? (t.rows.length >= 3 ? prof.find(labelOk) : undefined)) : undefined;
   const period = !!labelCol?.period;
   const cats = prof.filter((p) => p.type === 'category' && p.unique >= 2 && p.unique < p.filled).sort((a, b) => a.unique - b.unique);
-  const nums = prof.filter((p) => (p.type === 'number' || p.type === 'integer') && p.unique > 1);
+  // código numérico (CEP, CPF, IBGE…) não é medida: somar, tirar média ou fazer histograma dele não tem significado
+  const nums = prof.filter((p) => (p.type === 'number' || p.type === 'integer') && p.unique > 1 && semOf(p.name)?.role !== 'identifier');
   const dates = prof.filter((p) => p.type === 'date');
   const bools = prof.filter((p) => p.type === 'boolean');
   const lat = prof.find((p) => p.type === 'lat');
   const lon = prof.find((p) => p.type === 'lon');
+  const how = (name: string) => (aggFor(semOf(name)) === 'mean' ? { agg: 'mean' as const, word: 'Média' } : { agg: 'sum' as const, word: 'Soma' });
   let n = 0;
   const id = (k: string) => `${k}-${n++}`;
 
@@ -25,7 +30,7 @@ export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpe
   for (const d of dates.slice(0, 2)) {
     out.push({ id: id('line'), kind: 'line', x: d.name, agg: 'count', title: `Registros por mês – ${d.name}`, description: 'Quantidade de registros em cada mês; meses sem registro aparecem como zero.', score: 90 });
     const m = nums[0];
-    if (m && level >= 3) out.push({ id: id('line'), kind: 'line', x: d.name, y: m.name, agg: 'sum', title: `${m.name} por mês`, description: `Soma de “${m.name}” em cada mês.`, score: 60 });
+    if (m && level >= 3) out.push({ id: id('line'), kind: 'line', x: d.name, y: m.name, agg: how(m.name).agg, title: `${m.name} por mês`, description: `${how(m.name).word} de “${m.name}” em cada mês.`, score: 60 });
   }
   cats.slice(0, level === 1 ? 2 : level === 2 ? 4 : 6).forEach((c, i) => {
     out.push({ id: id('cat'), kind: 'pivot', style: 'hbar', x: c.name, agg: 'count', title: `Registros por ${c.name}`, description: `Quantos registros há para cada valor de “${c.name}” (até 25 valores mais frequentes).`, score: 85 - i * 5 });
@@ -53,7 +58,7 @@ export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpe
     out.push({ id: id('hist'), kind: 'hist', x: m.name, title: `Distribuição de ${m.name}`, description: `Quantos registros caem em cada faixa de “${m.name}”.`, score: 75 - i * 5 });
   });
   const c0 = cats.find((c) => c.unique <= 25);
-  if (c0 && nums[0] && level >= 2) out.push({ id: id('catnum'), kind: 'hbar', x: c0.name, y: nums[0].name, agg: 'sum', title: `${nums[0].name} por ${c0.name}`, description: `Soma de “${nums[0].name}” para cada valor de “${c0.name}”.`, score: 80 });
+  if (c0 && nums[0] && level >= 2) out.push({ id: id('catnum'), kind: 'hbar', x: c0.name, y: nums[0].name, agg: how(nums[0].name).agg, title: `${nums[0].name} por ${c0.name}`, description: `${how(nums[0].name).word} de “${nums[0].name}” para cada valor de “${c0.name}”.`, score: 80 });
   const c1 = cats.find((c) => c.name !== c0?.name && c.unique <= 8);
   if (c0 && c1 && c0.unique <= 15 && level >= 3) {
     out.push({ id: id('stack'), kind: 'pivot', style: 'stacked', x: c0.name, seriesBy: c1.name, agg: 'count', title: `${c0.name} × ${c1.name}`, description: `Quantos registros há em cada combinação de “${c0.name}” e “${c1.name}”.`, score: 55 });
@@ -68,7 +73,7 @@ export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpe
   const inMulti = new Set(out.filter((c) => c.kind === 'multi').flatMap((c) => [...(c.series ?? []), ...(c.lineSeries ?? [])]));
   const final = level >= 3 ? out : out.filter((c) => !(c.id.startsWith('lab') && c.y && inMulti.has(c.y)));
   const limit = period ? (level === 1 ? 6 : level === 2 ? 18 : 26) : level === 1 ? 4 : level === 2 ? 9 : 15;
-  return final.sort((a, b) => b.score - a.score).slice(0, limit);
+  return final.sort((a, b) => b.score - a.score).slice(0, limit).map((c) => ({ ...c, reasons: explainColumns([c.x, c.y, c.seriesBy, ...(c.series ?? [])], sem) }));
 }
 
 export function pearson(xs: number[], ys: number[]): number {

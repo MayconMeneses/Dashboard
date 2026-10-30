@@ -103,6 +103,8 @@ export interface ChartSpec {
   seriesBy?: string;
   where?: Record<string, string[]>;
   style?: ChartStyle;
+  /** o que cada coluna usada é para o painel (papel e regra que decidiu), para conferência */
+  reasons?: string[];
   /** por que o sistema escolheu este desenho (mostrado ao usuário) */
   why?: string;
   /** mantém o desenho definido em style (não é trocado pela recomendação automática) */

@@ -187,7 +187,7 @@ function drawChart(spec0: ChartSpec, t: Table): HTMLElement {
   if (periodPick) card.append(periodPick);
   const insight = insightFor(spec, d) + (rate ? ' ' + rateInsight(rate) : '');
   card.append(el('p', { className: 'insight' }, el('b', {}, 'Destaque: '), insight));
-  card.append(el('details', { className: 'howto' }, el('summary', {}, 'Por que este gráfico e como ler'), el('p', {}, el('b', {}, 'Por que: '), why || 'Escolhido pelo tipo dos dados.'), el('p', {}, el('b', {}, 'Como ler: '), HOWTO_SHAPE[shape] ?? spec.howTo ?? HOW_TO[spec.kind] ?? '')));
+  card.append(el('details', { className: 'howto' }, el('summary', {}, 'Por que este gráfico e como ler'), el('p', {}, el('b', {}, 'Por que: '), why || 'Escolhido pelo tipo dos dados.'), ...(spec.reasons?.length ? [el('ul', {}, ...spec.reasons.map((r) => el('li', {}, r)))] : []), el('p', {}, el('b', {}, 'Como ler: '), HOWTO_SHAPE[shape] ?? spec.howTo ?? HOW_TO[spec.kind] ?? '')));
 
   if (shape === 'heatmap') return drawHeatmap(card, spec, d, host);
   if (shape === 'small') return drawSmall(card, d, host);
