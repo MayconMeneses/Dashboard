@@ -8,30 +8,39 @@ import type { ParseOptions } from './parse.js';
 import { inferLocale, locale, profileTable, toNumber } from './profile.js';
 import type { LocaleInfo } from './profile.js';
 import { csvField, delimiterName } from './csv.js';
-import { printCharts, setChartMode, snapshotPng } from './design/chartTheme.js';
+import { printCharts, setChartMode } from './design/chartTheme.js';
 import { PALETTE } from './design/palette.js';
+import { $, download, el } from './app/dom.js';
+import { cellText } from './app/format.js';
 import { initShell } from './app/shell.js';
+import { diffBox } from './app/diffBox.js';
+import { drawBubble } from './charts/bubble.js';
+import { dataAlt } from './charts/dataAlt.js';
+import { drawFunnel } from './charts/funnel.js';
+import { drawHeatmap } from './charts/heatmap.js';
+import { drawMap } from './charts/map.js';
+import { drawScatter } from './charts/scatter.js';
+import type { ChartHost } from './charts/host.js';
+import { drawSmall } from './charts/small.js';
+import { buildReportModel, openReport } from './reports/screen.js';
+import type { ReportContext } from './reports/screen.js';
 import { currentMode, initTheme, setPrinting } from './design/theme.js';
 import type { DelimiterChoice, Encoding } from './csv.js';
-import { buildPdfDoc, describeState, formatBytes } from './report.js';
+import { formatBytes } from './report.js';
 import { compileFormula, evalAggregate, evalRow, FormulaError } from './formula.js';
 import { addMetricColumns, applyRenames, compareTables, migrateColumn, parseProject, reconcileState, serializeProject } from './project.js';
-import type { Metric, ProjectState, TableDiff } from './project.js';
+import type { Metric, ProjectState } from './project.js';
 import { buildXlsx } from './xlsx.js';
-import type { ReportChart, ReportModel } from './report.js';
 import { applyMerges } from './similar.js';
 import { filterByDate, pageOf, sortRows } from './tableview.js';
 import type { SortDir } from './tableview.js';
-import { bubbleData, compatibleStyles, funnelData, toHeatmap, toPercent, toPareto } from './shapes.js';
+import { compatibleStyles, toPercent, toPareto } from './shapes.js';
 import { chartData, clickFilters, HOW_TO, HOWTO_SHAPE, insightFor, kpis, qualityAlerts, rateData, rateInsight, suggestCharts } from './suggest.js';
-import type { SeriesData } from './suggest.js';
 import type { ChartSpec, ColProfile, ColType, Dataset, Table } from './types.js';
-import { heatCell, maxOf } from './util.js';
 
 Chart.register(...registerables);
 pdfjs.GlobalWorkerOptions.workerPort = new PdfWorker();
 const PDF = { pdfjs: pdfjs as unknown as NonNullable<Parameters<typeof parseFile>[2]>['pdfjs'] };
-const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 let dataset: Dataset | null = null;
 let table: Table | null = null;
@@ -96,12 +105,6 @@ function toggleFilter(col: string, value: string) {
 }
 const TYPE_NAMES: Record<string, string> = { number: 'número', integer: 'inteiro', date: 'data', category: 'categoria', boolean: 'sim/não', text: 'texto', id: 'identificador', lat: 'latitude', lon: 'longitude' };
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] {
-  const e = Object.assign(document.createElement(tag), props);
-  e.append(...kids);
-  return e;
-}
-
 function fail(m: string) {
   $('msg').textContent = m;
 }
@@ -113,6 +116,13 @@ function reset() {
   maps = [];
 }
 
+/** O que os desenhos de gráfico extraídos (src/charts/) usam da tela. */
+const host: ChartHost = {
+  addChart: (c) => charts.push(c),
+  addMap: (m) => maps.push(m),
+  toggleFilter: (col, value) => toggleFilter(col, value),
+};
+
 function drawChart(spec0: ChartSpec, t: Table): HTMLElement {
   let spec = spec0;
   const card = el('div', { className: 'chart' });
@@ -123,46 +133,12 @@ function drawChart(spec0: ChartSpec, t: Table): HTMLElement {
   };
   card.append(el('header', {}, el('h3', {}, spec.title), x), el('p', {}, spec.description));
 
-  if (spec.kind === 'map') {
-    const prof = profileTable(t, forced);
-    const lat = prof.find((p) => p.type === 'lat')!.name;
-    const lon = prof.find((p) => p.type === 'lon')!.name;
-    const bsel = el('select', { ariaLabel: 'Mapa de fundo' }, el('option', { value: 'esri', selected: basemap === 'esri' }, 'Mapa de fundo: Esri (acessa a internet)'), el('option', { value: 'none', selected: basemap === 'none' }, 'Sem mapa de fundo (não acessa a internet)'));
-    bsel.onchange = () => {
-      basemap = bsel.value as 'esri' | 'none';
-      render();
-    };
-    card.append(el('p', { className: 'rate-pick' }, bsel));
-    const div = el('div', { className: 'map' });
-    card.append(div);
-    queueMicrotask(() => {
-      const map = L.map(div);
-      if (basemap === 'esri') L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Tiles © Esri' }).addTo(map);
-      const pts: L.LatLngTuple[] = [];
-      for (const r of t.rows.slice(0, 5000)) {
-        const a = toNumber(r[lat] ?? null);
-        const b = toNumber(r[lon] ?? null);
-        if (a == null || b == null || Math.abs(a) > 90 || Math.abs(b) > 180) continue;
-        pts.push([a, b]);
-        const first = t.columns.find((c) => c !== lat && c !== lon && r[c] != null);
-        L.circleMarker([a, b], { radius: 5, color: '#fff', weight: 1, fillColor: PALETTE[0], fillOpacity: 0.85 }).bindTooltip(first ? String(r[first]) : '').addTo(map);
-      }
-      if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.1));
-      else map.setView([-14, -52], 4);
-      maps.push(map);
-    });
-    return card;
-  }
+  if (spec.kind === 'map') return drawMap(card, t, { forced, basemap, onBasemap: (b) => ((basemap = b), render()) }, host);
+  if (spec.kind === 'scatter' && spec.x && spec.y) return drawScatter(card, spec, t, host);
 
-  if (spec.kind === 'scatter' && spec.x && spec.y) {
-    const pts = t.rows.map((r) => ({ x: toNumber(r[spec.x!] ?? null), y: toNumber(r[spec.y!] ?? null) })).filter((p): p is { x: number; y: number } => p.x != null && p.y != null);
-    const canvas = el('canvas');
-    card.append(el('div', { className: 'box' }, canvas));
-    charts.push(new Chart(canvas, { type: 'scatter', data: { datasets: [{ label: `${spec.x} × ${spec.y}`, data: pts, backgroundColor: PALETTE[0] + 'aa' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: spec.x } }, y: { title: { display: true, text: spec.y } } } } }));
-    return card;
-  }
-  if (spec.kind === 'funnel') return drawFunnel(card, spec, t);
-  if (spec.kind === 'bubble') return drawBubble(card, spec, t);
+
+  if (spec.kind === 'funnel') return drawFunnel(card, spec, t, host);
+  if (spec.kind === 'bubble') return drawBubble(card, spec, t, host);
   let periodPick: HTMLElement | null = null;
   if (spec.kind === 'part' && spec.part && !spec.part.all && spec.x) {
     // rosca de um período: o usuário escolhe qual
@@ -213,8 +189,8 @@ function drawChart(spec0: ChartSpec, t: Table): HTMLElement {
   card.append(el('p', { className: 'insight' }, el('b', {}, 'Destaque: '), insight));
   card.append(el('details', { className: 'howto' }, el('summary', {}, 'Por que este gráfico e como ler'), el('p', {}, el('b', {}, 'Por que: '), why || 'Escolhido pelo tipo dos dados.'), el('p', {}, el('b', {}, 'Como ler: '), HOWTO_SHAPE[shape] ?? spec.howTo ?? HOW_TO[spec.kind] ?? '')));
 
-  if (shape === 'heatmap') return drawHeatmap(card, spec, d);
-  if (shape === 'small') return drawSmall(card, d);
+  if (shape === 'heatmap') return drawHeatmap(card, spec, d, host);
+  if (shape === 'small') return drawSmall(card, d, host);
 
   const canvas = el('canvas', { role: 'img', ariaLabel: `${spec.title}. ${insight}` });
   card.append(el('div', { className: 'box' }, canvas));
@@ -291,131 +267,6 @@ function drawChart(spec0: ChartSpec, t: Table): HTMLElement {
           },
         },
         scales: donut || radar ? (radar ? { r: { beginAtZero: true } } : {}) : { x: { stacked, ...(horizontal ? { beginAtZero: true } : {}) }, y: { stacked, beginAtZero: true, ...(percent ? { max: 100, ticks: { callback: (v: string | number) => `${v}%` } } : {}) }, ...(rate || pareto || overlay ? { y1: { position: 'right', min: 0, ...(overlay ? {} : { max: 100 }), grid: { drawOnChartArea: false }, ticks: { callback: (v: string | number) => `${v}%` }, title: { display: true, text: pareto ? '% acumulado' : overlay ? overlay.label : 'Positividade (%)' } } } : {}) },
-      },
-    }),
-  );
-  return card;
-}
-
-/** Tabela com os mesmos números do gráfico, para leitor de tela e para conferir valores. */
-function dataAlt(labels: string[], series: { label: string; values: number[] }[]): HTMLElement {
-  const fmt = new Intl.NumberFormat('pt-BR');
-  const val = (v: number) => (Number.isNaN(v) ? 'sem dado' : fmt.format(v));
-  return el(
-    'details',
-    { className: 'data-alt' },
-    el('summary', {}, 'Ver os dados deste gráfico em tabela'),
-    el('div', { className: 'tablewrap' }, el('table', {}, el('thead', {}, el('tr', {}, el('th', {}, ''), ...series.map((s) => el('th', {}, s.label)))), el('tbody', {}, ...labels.map((l, i) => el('tr', {}, el('th', {}, l), ...series.map((s) => el('td', {}, val(s.values[i] ?? Number.NaN)))))))),
-  );
-}
-
-function drawHeatmap(card: HTMLElement, spec: ChartSpec, d: SeriesData): HTMLElement {
-  const h = toHeatmap(d);
-  const th = (txt: string, onclick?: () => void) => {
-    const c = el('th', {}, txt);
-    if (onclick) {
-      c.style.cursor = 'pointer';
-      c.title = 'Clique (ou Enter) para filtrar';
-      c.tabIndex = 0;
-      c.setAttribute('role', 'button');
-      c.onclick = onclick;
-      c.onkeydown = (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onclick());
-    }
-    return c;
-  };
-  const fmt = new Intl.NumberFormat('pt-BR');
-  const table = el(
-    'table',
-    { className: 'heat' },
-    el('thead', {}, el('tr', {}, el('th', {}, ''), ...h.cols.map((c) => th(c, spec.x ? () => toggleFilter(spec.x!, c) : undefined)))),
-    el('tbody', {}, ...h.rows.map((r, ri) => el('tr', {}, th(r, spec.seriesBy ? () => toggleFilter(spec.seriesBy!, r) : undefined), ...h.cells[ri]!.map((v, ci) => {
-      const td = el('td', {}, Number.isNaN(v) ? '—' : fmt.format(v));
-      if (Number.isNaN(v)) {
-        td.className = 'nodata';
-        td.title = `${r} · ${h.cols[ci]}: sem dado (não é zero)`;
-      } else {
-        const hc = heatCell(h.max > h.min ? (v - h.min) / (h.max - h.min) : 1);
-        td.style.background = hc.bg;
-        td.style.color = hc.fg;
-        td.title = `${r} · ${h.cols[ci]}: ${fmt.format(v)}`;
-      }
-      return td;
-    })))),
-  );
-  card.dataset.heat = JSON.stringify({ rows: h.rows, cols: h.cols, cells: h.cells.map((r) => r.map((v) => (Number.isNaN(v) ? null : v))), min: h.min, max: h.max });
-  const fmtN = new Intl.NumberFormat('pt-BR');
-  card.append(el('div', { className: 'heatwrap' }, table), el('div', { className: 'heat-legend' }, el('span', {}, fmtN.format(h.min)), el('span', { className: 'grad', ariaHidden: 'true' }), el('span', {}, fmtN.format(h.max)), el('span', { className: 'muted' }, ' · listrado = sem dado (não é zero)')));
-  return card;
-}
-
-function drawSmall(card: HTMLElement, d: SeriesData): HTMLElement {
-  const sets = d.datasets ?? [{ label: 'Valor', values: d.values }];
-  const max = Math.max(1, ...sets.flatMap((s) => s.values).filter((v) => !Number.isNaN(v)));
-  const grid = el('div', { className: 'small-grid' });
-  sets.forEach((s, i) => {
-    const total = s.values.filter((v) => !Number.isNaN(v)).reduce((a, b) => a + b, 0);
-    const canvas = el('canvas');
-    grid.append(el('div', { className: 'small-cell' }, el('div', { className: 'small-title' }, el('b', {}, s.label), ` · total ${new Intl.NumberFormat('pt-BR').format(total)}`), el('div', { className: 'small-box' }, canvas)));
-    charts.push(
-      new Chart(canvas, {
-        type: 'line',
-        data: { labels: d.labels, datasets: [{ label: s.label, data: s.values.map((v) => (Number.isNaN(v) ? null : v)), borderColor: PALETTE[i % PALETTE.length], backgroundColor: PALETTE[i % PALETTE.length] + '33', fill: true, borderWidth: 2, pointRadius: 2, tension: 0.25, spanGaps: false }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 4, font: { size: 9 } } }, y: { min: 0, max, ticks: { maxTicksLimit: 3, font: { size: 9 } } } } },
-      }),
-    );
-  });
-  card.append(grid, el('p', { className: 'muted small-note' }, 'Todos os gráficos pequenos usam a mesma escala vertical, então podem ser comparados entre si.'));
-  return card;
-}
-
-function drawFunnel(card: HTMLElement, spec: ChartSpec, t: Table): HTMLElement {
-  const f = funnelData(t, spec);
-  if (!f || f.values.every((v) => v === 0)) {
-    card.append(el('p', {}, 'Sem dados suficientes para este gráfico.'));
-    return card;
-  }
-  card.append(el('p', { className: 'insight' }, el('b', {}, 'Destaque: '), `${f.labels[f.labels.length - 1]}.`));
-  card.append(el('details', { className: 'howto' }, el('summary', {}, 'Por que este gráfico e como ler'), el('p', {}, el('b', {}, 'Por que: '), spec.why ?? ''), el('p', {}, el('b', {}, 'Como ler: '), spec.howTo ?? '')));
-  const canvas = el('canvas', { role: 'img', ariaLabel: `${spec.title}. ${f.labels.join('; ')}` });
-  card.append(el('div', { className: 'box short' }, canvas));
-  card.append(dataAlt(f.labels, [{ label: 'Casos', values: f.values }]));
-  const max = maxOf(f.values, 1);
-  charts.push(
-    new Chart(canvas, {
-      type: 'bar',
-      data: { labels: f.labels, datasets: [{ label: 'Casos', data: f.values.map((v) => [-v / 2, v / 2]), backgroundColor: f.values.map((_, i) => PALETTE[i % PALETTE.length]), barThickness: 34 } as never] },
-      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${new Intl.NumberFormat('pt-BR').format(f.values[c.dataIndex]!)} casos` } } }, scales: { x: { min: -max / 2, max: max / 2, display: false }, y: { ticks: { font: { size: 12 } } } } },
-    }),
-  );
-  return card;
-}
-
-function drawBubble(card: HTMLElement, spec: ChartSpec, t: Table): HTMLElement {
-  const pts = bubbleData(t, spec);
-  if (!pts.length) {
-    card.append(el('p', {}, 'Sem dados suficientes para este gráfico.'));
-    return card;
-  }
-  const maxS = maxOf(pts.map((p) => p.size), 1);
-  const top = [...pts].sort((a, b) => b.y - a.y)[0]!;
-  card.append(el('p', { className: 'insight' }, el('b', {}, 'Destaque: '), `maior positividade em ${top.entity} (${top.y.toFixed(1).replace('.', ',')}%, ${new Intl.NumberFormat('pt-BR').format(top.x)} ${spec.bubble!.xLabel.toLowerCase()}).`));
-  card.append(el('details', { className: 'howto' }, el('summary', {}, 'Por que este gráfico e como ler'), el('p', {}, el('b', {}, 'Por que: '), spec.why ?? ''), el('p', {}, el('b', {}, 'Como ler: '), spec.howTo ?? '')));
-  const canvas = el('canvas', { role: 'img', ariaLabel: `${spec.title}. ${pts.map((p) => `${p.entity}: ${p.y.toFixed(1)}%`).join('; ')}` });
-  card.append(el('div', { className: 'box' }, canvas));
-  card.append(dataAlt(pts.map((p) => p.entity), [{ label: spec.bubble!.xLabel, values: pts.map((p) => p.x) }, { label: 'Positividade (%)', values: pts.map((p) => p.y) }, { label: spec.bubble!.sizeLabel, values: pts.map((p) => p.size) }]));
-  charts.push(
-    new Chart(canvas, {
-      type: 'bubble',
-      data: { datasets: pts.map((p, i) => ({ label: p.entity, data: [{ x: p.x, y: p.y, r: 5 + (p.size / maxS) * 22 }], backgroundColor: PALETTE[i % PALETTE.length] + 'bb', borderColor: PALETTE[i % PALETTE.length] })) },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        onClick: (_e, els) => {
-          const p = els[0] ? pts[els[0].datasetIndex] : undefined;
-          if (p && t.tidy) toggleFilter(t.tidy.entity, p.entity);
-        },
-        plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (c) => { const p = pts[c.datasetIndex]!; return `${p.entity}: ${new Intl.NumberFormat('pt-BR').format(p.x)} ${spec.bubble!.xLabel.toLowerCase()} · ${p.y.toFixed(1).replace('.', ',')}% · ${spec.bubble!.sizeLabel}: ${new Intl.NumberFormat('pt-BR').format(p.size)}`; } } } },
-        scales: { x: { beginAtZero: true, title: { display: true, text: spec.bubble!.xLabel } }, y: { min: 0, max: 100, title: { display: true, text: 'Positividade (%)' }, ticks: { callback: (v: string | number) => `${v}%` } } },
       },
     }),
   );
@@ -655,24 +506,13 @@ function downloadExcel() {
   const types = Object.fromEntries(lastProf.map((p) => [p.name, p.type]));
   const isNum = (c: string) => types[c] === 'number' || types[c] === 'integer';
   const rows = t.rows.map((r) => t.columns.map((c) => (isNum(c) && r[c] != null ? (toNumber(r[c]) ?? String(r[c])) : r[c] instanceof Date ? r[c] : (r[c] as string | number | null))));
-  const model = buildReportModel();
+  const model = buildReportModel(reportContext()!);
   const info: [string, string][] = [...model.origin, ...model.records, ...model.adjustments.map((a, i) => [`Ajuste ${i + 1}`, a] as [string, string]), ...model.kpis.map(([k, v]) => [`Indicador: ${k}`, v] as [string, string]), ['Gerado em', model.generatedAt]];
   const bytes = buildXlsx([
     { name: 'Dados', columns: t.columns.map(withUnit), rows },
     { name: 'Origem e ajustes', columns: ['Campo', 'Valor'], rows: info },
   ]);
   download(`${baseName()}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', bytes);
-}
-
-function diffBox(d: TableDiff): HTMLElement {
-  const n = (x: number) => new Intl.NumberFormat('pt-BR').format(x);
-  const items: string[] = [`Linhas: ${n(d.rows.before)} → ${n(d.rows.after)} (${d.rows.after >= d.rows.before ? '+' : ''}${n(d.rows.after - d.rows.before)})`];
-  if (d.columnsAdded.length) items.push(`Colunas novas: ${d.columnsAdded.join(', ')}`);
-  if (d.columnsRemoved.length) items.push(`Colunas que sumiram: ${d.columnsRemoved.join(', ')}`);
-  for (const s of d.sums) items.push(`Soma de “${s.col}”: ${n(s.before)} → ${n(s.after)}${s.before ? ` (${s.after >= s.before ? '+' : ''}${(((s.after - s.before) / Math.abs(s.before)) * 100).toFixed(1).replace('.', ',')}%)` : ''}`);
-  for (const v of d.newValues) items.push(`Valores novos em “${v.col}”: ${v.values.join(', ')}`);
-  for (const v of d.goneValues) items.push(`Valores que sumiram de “${v.col}”: ${v.values.join(', ')}`);
-  return el('ul', {}, ...items.map((x) => el('li', {}, x)));
 }
 
 function renderDateBar(prof: ColProfile[]) {
@@ -703,7 +543,6 @@ function renderDateBar(prof: ColProfile[]) {
   bar.replaceChildren(el('b', {}, 'Período: '), sel, ' de ', from, ' até ', to, ' ', clear, el('span', { className: 'muted' }, ' Linhas sem data nessa coluna ficam fora quando o período está ativo.'));
 }
 
-const cellText = (v: unknown) => (v instanceof Date ? v.toLocaleDateString('pt-BR') : v == null ? '—' : String(v));
 
 function renderTable() {
   if (!table) return;
@@ -915,12 +754,6 @@ async function handle(f: File) {
   await startFile(f.name, new Uint8Array(await f.arrayBuffer()));
 }
 
-function download(name: string, mime: string, content: string | Uint8Array) {
-  const a = el('a', { href: URL.createObjectURL(new Blob([content as BlobPart], { type: mime })), download: name });
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
 const csvCell = (v: unknown) => csvField(v);
 
 function captureState(): SharedState {
@@ -947,175 +780,22 @@ function exportHtml(opts: { title: string; fileName: string; readonly: boolean }
   download(`${name}.html`, 'text/html', '<!doctype html>\n' + clone.outerHTML.replace(/<canvas[^>]*><\/canvas>/g, ''));
 }
 
-/** Plano B: relatório pela impressão do navegador (usado se a geração direta do PDF falhar). */
-function openPrintReport() {
-  if (!dataset || !table) return;
-  const full = mergedTable();
-  const t = view();
-  const info = dataset.info;
-  const root = $('report');
-  const dl = (rows: [string, string][]) => el('dl', {}, ...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)]));
-  const list = (items: string[]) => (items.length ? el('ul', {}, ...items.map((x) => el('li', {}, x))) : el('p', { className: 'muted' }, 'Nenhum.'));
-
-  const live = [...document.querySelectorAll('#charts .chart')] as HTMLElement[];
-  const gallery = el('div', { className: 'charts' });
-  for (const card of live) {
-    const clone = card.cloneNode(true) as HTMLElement;
-    const orig = card.querySelectorAll('canvas');
-    clone.querySelectorAll('canvas').forEach((cv, i) => {
-      const img = document.createElement('img');
-      try {
-        img.src = snapshotPng(charts, orig[i] as HTMLCanvasElement, currentMode());
-      } catch {
-        /* sem imagem */
-      }
-      cv.replaceWith(img);
-    });
-    clone.querySelectorAll('button, select').forEach((x) => x.remove());
-    clone.querySelectorAll('.rate-pick').forEach((x) => !x.querySelector('.muted') && x.remove());
-    clone.querySelectorAll('.map').forEach((x) => x.replaceWith(el('p', { className: 'muted' }, 'Mapa omitido do relatório (depende de imagens externas); veja o painel.')));
-    clone.querySelectorAll('details').forEach((d) => d.setAttribute('open', ''));
-    gallery.append(clone);
-  }
-
-  const criteria: string[] = [];
-  for (const sp of lastSpecs) {
-    criteria.push(`${sp.title}: ${sp.description}`);
-    for (const o of sp.rate?.options ?? []) criteria.push(`${o.label}: ${o.explain}`);
-  }
-  criteria.push('Células em branco ou com marcadores de ausência (n/d, -, s/i) são “sem dado” e nunca entram como zero.', 'Somas e médias usam só as células com valor; uma série sem nenhum valor num período aparece como lacuna.');
-
-  const alerts = qualityAlerts(full, lastProf, currentLoc()).map((a) => a.text);
-  const limits = [...alerts, ...(info?.notes ?? [])];
-
-  root.replaceChildren(
-    el('h1', {}, table.title ?? table.name),
-    el('p', { className: 'muted' }, `Arquivo: ${dataset.fileName} · Relatório gerado em ${new Date().toLocaleString('pt-BR')} · Dashboard Universal ${__APP_VERSION__}`),
-    el('h2', {}, '1. Filtros, período e ajustes aplicados'),
-    list(describeState({ filters, dateRange, merges, forced, removed: [...removed], renames, units, metrics, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers } })),
-    el('h2', {}, '2. Indicadores'),
-    dl(kpis(t, lastKpiProf).map((k) => [k.label, k.hint ? `${k.value} (${k.hint})` : k.value] as [string, string])),
-    el('h2', {}, '3. Gráficos'),
-    gallery,
-    el('h2', {}, '4. Critérios de cálculo'),
-    list(criteria),
-    el('h2', {}, '5. Limitações e avisos'),
-    list(limits),
-    el('h2', {}, '6. Como reproduzir'),
-    el('p', {}, `Abra o mesmo arquivo no Dashboard Universal ${__APP_VERSION__} com as mesmas opções de leitura e os mesmos ajustes listados na seção 1, ou use o HTML compartilhado gerado a partir desta análise. Este relatório descreve o estado do painel no momento da geração.`),
-  );
-  document.body.classList.add('report-mode');
-  root.hidden = false;
-  window.addEventListener(
-    'afterprint',
-    () => {
-      document.body.classList.remove('report-mode');
-      root.hidden = true;
-      charts.forEach((c) => c.resize());
-      maps.forEach((mp) => mp.invalidateSize());
-    },
-    { once: true },
-  );
-  window.print();
-}
-
-/** Texto de cada cartão de gráfico + imagens em alta resolução, lidos da tela para montar o PDF. */
-function collectChart(card: HTMLElement): ReportChart {
-  const text = (sel: string) => (card.querySelector(sel) as HTMLElement | null)?.innerText.trim() ?? '';
-  const paragraphs: string[] = [];
-  const desc = card.children[1] as HTMLElement | undefined;
-  if (desc?.tagName === 'P') paragraphs.push(desc.innerText.trim());
-  const rate = card.querySelector('.rate-pick .muted') as HTMLElement | null;
-  if (rate) paragraphs.push(rate.innerText.trim());
-  const howto = [...card.querySelectorAll('.howto p')].map((x) => (x.textContent ?? '').trim());
-  const strip = (s: string | undefined, label: string) => (s ?? '').replace(new RegExp(`^${label}\\s*`), '');
-  const chart: ReportChart = {
-    title: text('h3'),
-    paragraphs,
-    insight: strip(text('.insight'), 'Destaque:') || undefined,
-    why: strip(howto[0], 'Por que:') || undefined,
-    howTo: strip(howto[1], 'Como ler:') || undefined,
-    images: [],
-  };
-  if (card.dataset.heat) chart.heat = JSON.parse(card.dataset.heat) as ReportChart['heat'];
-  else if (card.querySelector('.map')) chart.note = 'Mapa omitido do relatório (depende de imagens externas); veja o painel.';
-  else {
-    for (const cv of card.querySelectorAll('canvas')) {
-      const inst = charts.find((c) => c.canvas === cv);
-      let url = '';
-      try {
-        url = snapshotPng(charts, cv as HTMLCanvasElement, currentMode(), inst ? 2.5 : undefined);
-      } catch {
-        /* sem imagem */
-      }
-      if (url) chart.images.push({ title: cv.closest('.small-cell')?.querySelector('.small-title')?.textContent ?? undefined, dataUrl: url });
-    }
-  }
-  return chart;
-}
-
-function buildReportModel(): ReportModel {
-  const full = mergedTable();
-  const t = view();
-  const info = dataset!.info;
-  const n = (x: number) => new Intl.NumberFormat('pt-BR').format(x);
-  const origin: [string, string][] = [['Arquivo', dataset!.fileName]];
-  if (info) {
-    origin.push(['Formato', `.${info.format}`], ['Tamanho', formatBytes(info.bytes)]);
-    if (info.sha256) origin.push(['SHA-256 do arquivo original', info.sha256]);
-    if (info.readAt) origin.push(['Lido em', new Date(info.readAt).toLocaleString('pt-BR')]);
-    if (info.encoding) origin.push(['Codificação do texto', info.encoding]);
-    if (info.delimiter) origin.push(['Separador de colunas', delimiterName(info.delimiter)]);
-  }
-  origin.push(['Tabela analisada', `${table!.title ?? table!.name} (${n(table!.rows.length)} linhas, ${table!.columns.length} colunas)`], ['Versão do painel', __APP_VERSION__]);
-  const records: [string, string][] = [];
-  if (info) records.push(['Linhas lidas (todas as tabelas)', n(info.rowsRead)], ['Linhas ignoradas (em branco ou título)', n(info.rowsDropped)], ['Linhas não lidas (acima do limite)', n(info.truncated)]);
-  records.push(['Linhas da tabela analisada', n(table!.rows.length)], ['Linhas após filtros e período', n(t.rows.length)]);
-  const criteria: string[] = [];
-  for (const sp of lastSpecs) {
-    criteria.push(`${sp.title}: ${sp.description}`);
-    for (const o of sp.rate?.options ?? []) criteria.push(`${o.label}: ${o.explain}`);
-  }
-  criteria.push('Células em branco ou com marcadores de ausência (n/d, -, s/i) são “sem dado” e nunca entram como zero.', 'Somas e médias usam só as células com valor; uma série sem nenhum valor num período aparece como lacuna.');
-  const limits = [...qualityAlerts(full, lastProf, currentLoc()).map((a) => a.text), ...(info?.notes ?? [])];
-  const cols = t.columns.slice(0, 8);
+/** Estado atual do painel, entregue ao módulo de relatório. */
+function reportContext(): ReportContext | null {
+  if (!dataset || !table) return null;
   return {
-    title: table!.title ?? table!.name,
-    generatedAt: new Date().toLocaleString('pt-BR'),
-    version: __APP_VERSION__,
-    origin,
-    records,
-    adjustments: describeState({ filters, dateRange, merges, forced, removed: [...removed], renames, units, metrics, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers } }),
-    kpis: kpis(t, lastKpiProf).map((k) => [k.label, k.hint ? `${k.value} (${k.hint})` : k.value] as [string, string]),
-    charts: ([...document.querySelectorAll('#charts .chart')] as HTMLElement[]).map(collectChart),
-    criteria,
-    limits,
-    reproduce: `Abra o mesmo arquivo no Dashboard Universal ${__APP_VERSION__} com as mesmas opções de leitura e os mesmos ajustes listados na seção 1, ou use o HTML compartilhado gerado a partir desta análise. Este relatório descreve o estado do painel no momento da geração.`,
-    sample: { columns: cols, rows: t.rows.slice(0, 40).map((r) => cols.map((c) => cellText(r[c]))) },
+    dataset,
+    table,
+    full: mergedTable(),
+    view: view(),
+    charts,
+    maps,
+    specs: lastSpecs,
+    prof: lastProf,
+    kpiProf: lastKpiProf,
+    loc: currentLoc(),
+    state: { filters, dateRange, merges, forced, removed: [...removed], renames, units, metrics, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers } },
   };
-}
-
-/** Relatório em PDF de verdade (texto selecionável, tabelas, páginas numeradas), gerado aqui mesmo e baixado direto. */
-async function openReport() {
-  if (!dataset || !table) return;
-  const btn = $('btnReport') as HTMLButtonElement;
-  const label = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'Gerando PDF…';
-  try {
-    const model = buildReportModel();
-    const [{ default: pdfMake }, vfs] = await Promise.all([import('pdfmake/build/pdfmake'), import('pdfmake/build/vfs_fonts')]);
-    (pdfMake as unknown as { addVirtualFileSystem: (v: unknown) => void }).addVirtualFileSystem((vfs as { default?: unknown }).default ?? vfs);
-    const base = dataset.fileName.replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]+/g, '-');
-    await (pdfMake as unknown as { createPdf: (d: unknown) => { download: (n: string) => Promise<void> } }).createPdf(buildPdfDoc(model)).download(`relatorio-${base}.pdf`);
-  } catch (e) {
-    console.error(e);
-    fail('Não consegui gerar o PDF direto; abrindo o relatório para impressão (use “Salvar como PDF”).');
-    openPrintReport();
-  } finally {
-    btn.disabled = false;
-    btn.textContent = label;
-  }
 }
 
 function openShareDialog() {
@@ -1188,7 +868,10 @@ function init() {
   pf.onchange = () => pf.files?.[0] && void openProject(pf.files[0]);
   $('btnUpdate').onclick = updateData;
   $('btnXlsx').onclick = downloadExcel;
-  $('btnReport').onclick = openReport;
+  $('btnReport').onclick = () => {
+    const ctx = reportContext();
+    if (ctx) void openReport(ctx, fail);
+  };
   window.addEventListener('beforeprint', () => {
     setPrinting(true);
     printCharts(charts, true, 'light');

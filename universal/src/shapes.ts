@@ -1,7 +1,7 @@
 import { VALUE_COL } from './grid.js';
 import { toNumber } from './profile.js';
 import type { ChartSpec, ChartStyle, Table } from './types.js';
-import type { SeriesData } from './suggest.js';
+import type { SeriesData } from './analytics/chartData.js';
 import { maxOf, minOf } from './util.js';
 
 const sumOk = (a: number[]) => a.filter((v) => !Number.isNaN(v)).reduce((x, y) => x + y, 0);

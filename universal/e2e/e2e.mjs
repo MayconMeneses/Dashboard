@@ -245,6 +245,30 @@ assert.ok(pix.lightText < 10, 'sem texto claro do tema escuro: ' + pix.lightText
 assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark', 'tela continua escura');
 ok('gráficos do PDF saem com fundo branco e texto escuro mesmo no tema escuro');
 
+// 11. Dica do mapa mostra o texto do arquivo como texto, sem executar HTML
+{
+  const evil = '<img src=x onerror="window.__xss=1">';
+  const linhas = ['nome;latitude;longitude'];
+  for (let i = 0; i < 12; i++) linhas.push(`${i === 0 ? evil : 'ponto ' + i};-4.${40 + i};-40.${90 + i}`);
+  const c = linhas.join('\n');
+  writeFileSync(join(dir, 'xss.csv'), c);
+  const px = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  px.on('pageerror', (e) => errors.push(e.message));
+  await px.goto(app);
+  await px.setInputFiles('#file', join(dir, 'xss.csv'));
+  await px.waitForSelector('#preview:not([hidden]) h2');
+  await px.click('#preview button.primary');
+  await px.waitForSelector('#charts .map .leaflet-interactive', { timeout: 20000 });
+  await px.locator('#charts .map .leaflet-interactive').first().dispatchEvent('mouseover');
+  await px.waitForSelector('.leaflet-tooltip', { timeout: 5000 });
+  await px.waitForTimeout(300);
+  assert.equal(await px.evaluate(() => window.__xss), undefined, 'HTML do arquivo não pode executar na dica do mapa');
+  assert.equal(await px.evaluate(() => document.querySelectorAll('.leaflet-tooltip img').length), 0, 'sem elemento <img> criado pelo conteúdo do arquivo');
+  assert.match(await px.locator('.leaflet-tooltip').first().innerText(), /<img src=x/);
+  await px.close();
+  ok('dica do mapa trata o valor do arquivo como texto (sem executar HTML)');
+}
+
 assert.deepEqual(errors, [], 'sem erros de página: ' + errors.join(' | '));
 await browser.close();
 console.log(log.join('\n'));
