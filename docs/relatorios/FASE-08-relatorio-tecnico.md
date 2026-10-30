@@ -1,6 +1,6 @@
 # Fase 8 — Relatórios, desktop e release
 
-Status: **PENDENTE / parcial**. Entregue e testado: modelos de PDF, anexo territorial, exportação segura, modo offline, migração de preferências de projetos, benchmarks, documentação e verificações de segurança de release. **Não executado:** Electron e o instalador NSIS (critério 11).
+Status: **PENDENTE / parcial**. Entregue e testado: modelos de PDF, anexo territorial, exportação segura, modo offline, migração de preferências de projetos, benchmarks, documentação e verificações de segurança de release. Instalador NSIS **construído** e aplicativo Electron **aberto e testado desempacotado** (ver “Construção local”). **Não exercitado:** instalação real (atalhos, associação de arquivos, desinstalação) e atualização automática de ponta a ponta (critério 11 parcial).
 
 ## Matriz requisito → implementação → teste → estado
 | Requisito (prompt, Fase 8) | Implementação | Teste | Estado |
@@ -10,14 +10,21 @@ Status: **PENDENTE / parcial**. Entregue e testado: modelos de PDF, anexo territ
 | Exportação segura | Excel grava texto como `inlineStr` (nunca fórmula); CSV neutraliza `=+-@` (Fase 1); HTML compartilhável escapa `<` no JSON embutido | `release.test.ts` (Excel com 5 entradas perigosas); e2e 17 (dado com `</script><script>` não executa; mutação removendo o escape faz o e2e falhar) | PASS |
 | HTML standalone | já existia; agora verificado sem rede | e2e 6 e 17 | PASS |
 | Modo offline | cenário e2e com todas as requisições http(s) abortadas e registradas | e2e 17: CSV (pela ponte do desktop), relatório PDF, Excel, CSV, HTML compartilhado, PDF e XLSX importados → **0 requisições externas** | PASS |
-| Electron | auditoria estática de `desktop/main.cjs` (abaixo); a ponte `window.__abrirArquivo(nome, base64)` que o Electron usa foi exercitada no Chrome | e2e 17 | PARCIAL: o programa Electron **não foi executado** |
-| NSIS | `desktop/package.json` e workflow `universal-instalador.yml` existem; **não construído aqui** | — | NOT_RUN |
-| SHA-256 | atualizador confere o hash do painel baixado; relatório e prévia listam o SHA-256 de cada fonte | revisão estática; e2e 16 (prévia); `release.test.ts` | PASS (verificação) / NOT_RUN (instalador novo não gerado, `SHA256SUM.txt` não regenerado) |
+| Electron | auditoria estática de `desktop/main.cjs` (abaixo); ponte `window.__abrirArquivo` exercitada no Chrome (e2e 17) **e no próprio Electron 44.7.0** (`npm run test:desktop`) | `e2e/desktop.mjs`: painel empacotado idêntico ao compilado, tema escuro, arquivo entregue pela ponte vira painel, 0 requisições externas | PASS (aplicativo desempacotado) / NOT_RUN (menu “Arquivo → Abrir”, associação de arquivos, atualização real) |
+| NSIS | `npm ci` + `npm run dist:win` em `universal/desktop` (electron-builder 26.15.3, NSIS 3.0.4.1) gerou `Instalador-Dashboard-Universal-0.3.0.exe` | construção terminou com código 0; conteúdo inspecionado (arquivo NSIS com `app-64.7z` e desinstalador); versão e nome do produto corretos; sem assinatura | PASS (construção e inspeção) / NOT_RUN (executar o instalador) |
+| SHA-256 | atualizador confere o hash do painel baixado; relatório e prévia listam o SHA-256 de cada fonte; SHA-256 do instalador novo calculado (abaixo) | revisão estática; e2e 16 (prévia); `release.test.ts`; `desktop.mjs` (hash do painel dentro do pacote = hash de `dist/index.html`) | PASS (verificação) / NOT_RUN (`instaladores/SHA256SUM.txt` não regenerado: o instalador novo não foi para o repositório) |
 | Migração de preferências | `migrateState`/`FUNDO_PADRAO_ATE` em `project.ts`: projeto salvo antes da 0.8.0 com Esri abre sem fundo e avisa | `release.test.ts` (5 casos; mutação desligando a regra faz 3 testes falharem) | PASS |
 | E2E | 23 cenários (17 novo) | `npm run test:e2e` | PASS |
 | Benchmarks | `npm run bench` (`bench/desempenho.bench.ts`, fora do `npm test`); resultado em `docs/benchmarks/ultimo.json` | uma execução por medida, em Node | PASS (medição) |
 | README, changelog, documentação | `universal/README.md` (privacidade, PDF, recursos, testes), `universal/CHANGELOG.md` (com mudanças de comportamento e como publicar), `desktop/README.md` | revisão | PASS |
 | Auditoria final | `RELATORIO_FINAL_DASHBOARD_UNIVERSAL_2_0.md` | — | PASS (relatório) — veredito PENDENTE |
+
+## Construção local do instalador (observada em 2026-10-30)
+- Baixado: 284 pacotes npm (Electron 44.7.0 e electron-builder 26.15.3 com dependências); binário do Electron para Windows x64 (baixado pelo electron-builder); NSIS 3.0.4.1 e nsis-resources 3.4.1; 7-Zip. `npm audit` apontou 3 vulnerabilidades (1 moderada, 2 altas) nas ferramentas de build, **não analisadas**.
+- Resultado: `universal/desktop/release/Instalador-Dashboard-Universal-0.3.0.exe`, **113.205.921 bytes (~108 MB)**, SHA-256 `e50d4fa4dcd529cd926e37619ae4d7891f08008023a2f6f917d941bbdc4e2dc0`. Assinatura: **NotSigned** (esperado). Dentro do pacote (`app.asar`): só `index.html`, `main.cjs`, `package.json` e o ícone; `painelVersao` = 0.8.0 e programa 0.3.0 (a versão do programa não mudou, então o nome do arquivo é o mesmo do instalador antigo, que é outro binário).
+- Aplicativo desempacotado (`release/win-unpacked/Dashboard Universal.exe`, 235 MB): aberto com pasta de dados temporária e consulta de atualização desligada; 4 verificações passaram (`e2e/desktop.mjs`). O processo foi encerrado ao final.
+- **Não feito de propósito:** executar o instalador (cria atalhos, associações de arquivo e entradas no registro do seu Windows) e testar a atualização automática. Os arquivos gerados (`release/`, `app/`, `node_modules/`) estão no `.gitignore` e **não foram enviados ao GitHub**.
+- Observação: o `npm ci` não baixou o binário em `node_modules/electron/dist` (npm 11 bloqueia scripts de instalação não aprovados), então `npm run start` em `desktop/` exige rodar `node node_modules/electron/install.js` antes; o `dist:win` não precisa disso.
 
 ## Verificações de release que nenhum teste cobria (agora cobertas em `release.test.ts`)
 - O `<title>` do painel é o que o atualizador exige (`<title>Dashboard…`); se mudasse, **todas as cópias instaladas recusariam** a atualização.
@@ -50,4 +57,4 @@ Status: **PENDENTE / parcial**. Entregue e testado: modelos de PDF, anexo territ
 ## Limites
 - Modelos de PDF e seção territorial sem cenário e2e de clique/PDF gerado (só lógica pura).
 - Imagem do mapa (exportação cartográfica em imagem): não implementada.
-- Instalador, Electron e atualização real: ver relatório final.
+- Instalação real do `.exe`, associação de arquivos, desinstalação e atualização automática: não exercitadas (ver relatório final).

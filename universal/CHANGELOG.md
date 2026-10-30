@@ -31,7 +31,7 @@ O manifesto de atualização (`atualizacao/versao.json`) continua em 0.7.5: publ
 - O **arquivo de dados** pode ser vários: a prévia deixa de oferecer codificação/separador quando há mais de um.
 
 ### Limites conhecidos
-Sem reprojeção de coordenadas; Parquet e OCR não implementados; instalador Windows não validado nesta versão (ver relatório final); instalador e atualizador não são assinados.
+Sem reprojeção de coordenadas; Parquet e OCR não implementados; o instalador NSIS foi construído e o aplicativo Electron foi aberto e testado desempacotado, mas a **instalação real** (atalhos, associação de arquivos, desinstalação e atualização automática) não foi exercitada; instalador e atualizador não são assinados.
 
 ## Como publicar (decisão do dono, depois de integrar a branch)
 1. Integrar `feature/dashboard-universal-2` ao `main` (pull request), sem force push.

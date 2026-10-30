@@ -5,7 +5,7 @@ Estados usados: PASS, FAIL, BLOCKED, NOT_RUN, PARCIAL (parte comprovada, parte n
 
 ## Veredito: **PENDENTE — não aprovado como release**
 Um gate crítico aberto vence a média (regras 14 e 15):
-1. **Critério 11 NOT_RUN:** o Electron e o instalador Windows (NSIS) não foram executados nem construídos.
+1. **Critério 11 PARCIAL:** o instalador NSIS foi construído (113.205.921 bytes, SHA-256 `e50d4fa4…2dc0`, não assinado) e o aplicativo Electron foi aberto e testado desempacotado; **a instalação real, a associação de arquivos, a desinstalação e a atualização automática não foram exercitadas**.
 2. **Falha de segurança publicada:** a dica do mapa da 0.7.5 (em `main`) executa HTML vindo do arquivo; a correção só existe nesta branch (e2e reproduz e confirma). Enquanto a branch não for integrada e o painel publicado, os programas instalados continuam vulneráveis.
 3. **Acessibilidade (critério 13) só em parte comprovada:** faltam largura de tablet, zoom de 200%, navegação completa por teclado e simulação de daltonismo.
 
@@ -39,7 +39,7 @@ Rollback: o `main` não foi tocado nem sofreu force push; desfazer tudo é não 
 | 8 | Filtros → KPIs, gráficos, tabelas e relatórios coerentes | `main.ts`, `reports/screen.ts` | e2e 13 (KPI = tabela = 6 linhas), e2e 6/12 | KPIs, tabela e gráficos conferidos; relatório lista os filtros mas não há comparação automática dos números do PDF | PARCIAL |
 | 9 | Projetos salvos reabrem com as configurações | `project.ts` | e2e 4 e 16 | configurações, nomes, métricas e a receita da relação voltam | PASS |
 | 10 | HTML compartilhável funciona local, com privacidade | `main.ts` (`exportHtml`) | e2e 6 e 17 | abre sem rede; dado com `</script>` não executa | PASS |
-| 11 | Electron e instalador Windows funcionam | `desktop/` | auditoria estática de `main.cjs`; ponte do Electron exercitada no Chrome; workflow existe | **Electron e NSIS não executados** | NOT_RUN |
+| 11 | Electron e instalador Windows funcionam | `desktop/`, `e2e/desktop.mjs` | construção local do NSIS (código 0) e inspeção do conteúdo; `npm run test:desktop`: Electron 44.7.0 abre, painel empacotado = compilado (SHA-256), arquivo entregue pela ponte vira painel, 0 requisições externas; auditoria estática de `main.cjs` | instalador e aplicativo funcionam desempacotados; **instalar de verdade, atalhos, associação de arquivos, desinstalar e atualização real: NOT_RUN** | PARCIAL |
 | 12 | Dados privados não vão à rede por padrão | mapa sem fundo (padrão), tudo local | e2e 15 e 17 (0 requisições externas) | passa no painel; o programa instalado, por padrão, consulta o GitHub ao abrir para ver atualizações (não envia os dados do usuário, mas contacta o servidor; dá para desligar) | PASS com ressalva |
 | 13 | Interface acessível e responsiva | `design/`, `style.css` | testes de contraste WCAG, rótulos, foco, layout de celular | tablet, zoom 200%, teclado completo e daltonismo **não verificados** | PARCIAL |
 | 14 | PDF com metodologia, cálculos, unidades, fontes e limitações | `report.ts`, `reports/screen.ts` | e2e 5 (PDF real: texto selecionável, imagens, numeração) | seções de filtros, indicadores, gráficos, critérios, limitações e como reproduzir; fontes com SHA-256 | PASS |
@@ -113,7 +113,7 @@ Licenças e tamanhos dos pacotes **não foram verificados** nas páginas; nenhum
 - Resultado de ferramentas e relatórios de subagentes foram tratados como dados, não como instruções.
 
 ## O que falta para chamar de aprovado (e quem decide)
-1. **Construir e testar o instalador Windows** (Actions › “Instalador do Dashboard Universal” › *Run workflow*, ou `npm ci` + `npm run dist:win` em `universal/desktop`) e abrir o Electron para conferir menu, associação de arquivos e atualização. Exige baixar Electron, electron-builder e recursos do NSIS (centenas de MB).
+1. **Instalar o `.exe` de verdade** numa máquina ou conta de teste do Windows e conferir atalhos, associação de arquivos, “Arquivo → Abrir”, desinstalação e a atualização automática. O instalador já foi construído nesta máquina (ver `FASE-08`); o workflow do GitHub (Actions › “Instalador do Dashboard Universal”) é uma segunda construção independente.
 2. **Integrar a branch ao `main`** (pull request, sem force push) e **publicar** (`universal/CHANGELOG.md`, seção “Como publicar”) para corrigir a falha de segurança da 0.7.5 nos programas instalados.
 3. Verificar acessibilidade: tablet, zoom 200%, teclado completo e daltonismo.
 4. Decidir sobre Parquet (dependência nova), imagem do mapa e assinatura do executável.

@@ -9,6 +9,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "test:e2e": "node e2e/e2e.mjs",
+    "test:desktop": "node e2e/desktop.mjs",
     "lint": "eslint src test",
     "bench": "vitest run --config vitest.bench.config.ts"
   },
