@@ -130,7 +130,7 @@ function drawChart(spec0: ChartSpec, t: Table): HTMLElement {
   };
   card.append(el('header', {}, el('h3', {}, spec.title), x), el('p', {}, spec.description));
 
-  const rc = { card, spec, t, host, forced, basemap, onBasemap: (b: 'esri' | 'none') => ((basemap = b), render()) };
+  const rc = { card, spec, t, host, forced, basemap, onBasemap: (b: 'esri' | 'none') => ((basemap = b), render()), rerender: render };
   const byKind = registry.forKind(spec.kind)?.(rc);
   if (byKind) return byKind;
   let periodPick: HTMLElement | null = null;

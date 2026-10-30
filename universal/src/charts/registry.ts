@@ -11,6 +11,7 @@ export interface RenderContext {
   forced: Record<string, ColType>;
   basemap: 'esri' | 'none';
   onBasemap: (b: 'esri' | 'none') => void;
+  rerender: () => void;
   d?: SeriesData;
 }
 

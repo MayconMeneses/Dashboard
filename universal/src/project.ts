@@ -44,7 +44,7 @@ export function applyRenames(t: Table, renames: Record<string, string>): Table {
     ...t,
     columns,
     rows,
-    ...(t.geo ? { geo: { lat: nm(t.geo.lat), lon: nm(t.geo.lon) } } : {}),
+    ...(t.geo ? { geo: { lat: nm(t.geo.lat), lon: nm(t.geo.lon), ...(t.geo.id ? { id: nm(t.geo.id) } : {}) } } : {}),
     ...(t.tidy ? { tidy: { ...t.tidy, period: nm(t.tidy.period), entity: nm(t.tidy.entity), label: nm(t.tidy.label), value: nm(t.tidy.value), ...(t.tidy.situation ? { situation: nm(t.tidy.situation) } : {}), ...(t.tidy.agravo ? { agravo: nm(t.tidy.agravo) } : {}) } } : {}),
   };
 }

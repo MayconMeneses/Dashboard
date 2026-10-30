@@ -1,3 +1,4 @@
+import type { Geometry } from './geo/geometry.js';
 export type Cell = string | number | boolean | Date | null;
 export type Row = Record<string, Cell>;
 
@@ -6,7 +7,9 @@ export interface Table {
   columns: string[];
   rows: Row[];
   /** colunas de latitude/longitude vindas do próprio formato (KML/GeoJSON) */
-  geo?: { lat: string; lon: string };
+  geo?: { lat: string; lon: string; /** coluna com o identificador da forma em `shapes` */ id?: string };
+  /** geometrias reais (ponto, linha, polígono…) por identificador; as colunas lat/lon guardam só o ponto de referência */
+  shapes?: Record<string, Geometry>;
   /** título do bloco (linha acima do cabeçalho) e texto de contexto da planilha (ex.: município, mês) */
   title?: string;
   /** faixa de título que agrupa as colunas (ex.: “UNIDADES DOMICILIARES”) */

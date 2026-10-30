@@ -2,6 +2,8 @@ import { XMLParser } from 'fast-xml-parser';
 import { unzipSync, strFromU8 } from 'fflate';
 import Papa from 'papaparse';
 import readXlsx from 'read-excel-file/browser';
+import { attachGeometry, GEO_ID, isGeoJson } from './geo/table.js';
+import { kmlGeometry, readGeoJson } from './geo/read.js';
 import { decodeText, delimiterName, detectDelimiter } from './csv.js';
 import type { DelimiterChoice, Encoding } from './csv.js';
 import { docxToMatrix } from './docx.js';
@@ -190,7 +192,7 @@ function parseCsv(name: string, text: string, delimiter: string): Table[] {
 
 function parseJson(name: string, text: string): Table[] {
   const j = JSON.parse(text) as unknown;
-  if (j && typeof j === 'object' && (j as { type?: string }).type === 'FeatureCollection') return [geojsonTable(name, j as GeoJson)];
+  if (isGeoJson(j)) return [geojsonTable(name, j)];
   if (Array.isArray(j)) return [objectsToTable(name, j.map((x) => (x && typeof x === 'object' ? (x as Record<string, unknown>) : { valor: x })))];
   if (j && typeof j === 'object') {
     const arrays = Object.entries(j as Record<string, unknown>).filter(([, v]) => Array.isArray(v) && v.length && typeof v[0] === 'object');
@@ -200,32 +202,14 @@ function parseJson(name: string, text: string): Table[] {
   throw new Error('JSON sem lista de registros.');
 }
 
-interface GeoJson {
-  features: { properties?: Record<string, unknown> | null; geometry?: { type: string; coordinates: unknown } | null }[];
-}
-
-function centroid(g: { type: string; coordinates: unknown }): [number, number] | null {
-  const pts: [number, number][] = [];
-  const walk = (c: unknown): void => {
-    if (Array.isArray(c) && typeof c[0] === 'number') pts.push([c[0] as number, c[1] as number]);
-    else if (Array.isArray(c)) {
-      // anel de polígono: o último vértice repete o primeiro e não deve pesar duas vezes na média
-      const ring = c.length > 3 && Array.isArray(c[0]) && JSON.stringify(c[0]) === JSON.stringify(c[c.length - 1]);
-      (ring ? c.slice(0, -1) : c).forEach(walk);
-    }
-  };
-  walk(g.coordinates);
-  if (!pts.length) return null;
-  return [pts.reduce((a, p) => a + p[0], 0) / pts.length, pts.reduce((a, p) => a + p[1], 0) / pts.length];
-}
-
-function geojsonTable(name: string, g: GeoJson): Table {
-  const list = g.features.map((f) => {
-    const c = f.geometry ? centroid(f.geometry) : null;
-    return { ...(f.properties ?? {}), latitude: c ? c[1] : null, longitude: c ? c[0] : null, geometria: f.geometry?.type ?? null };
-  });
+function geojsonTable(name: string, j: unknown): Table {
+  const r = readGeoJson(j);
+  const list = r.features.map((f) => ({ ...f.properties }) as Record<string, unknown>);
+  const { shapes, notes } = attachGeometry(list, r.features.map((f) => f.geometry), r.problems);
   const t = objectsToTable(name, list);
-  t.geo = { lat: 'latitude', lon: 'longitude' };
+  t.geo = { lat: 'latitude', lon: 'longitude', id: GEO_ID };
+  t.shapes = shapes;
+  if (notes.length) t.notes = [...(t.notes ?? []), ...notes];
   return t;
 }
 
@@ -236,6 +220,7 @@ function parseKmlText(name: string, xml: string): Table[] {
   const p = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', processEntities: true, textNodeName: '#text' });
   const doc = p.parse(xml) as Record<string, unknown>;
   const list: Record<string, unknown>[] = [];
+  const geoms: ReturnType<typeof kmlGeometry>[] = [];
   const walk = (node: unknown, folder: string): void => {
     if (!node || typeof node !== 'object') return;
     const n = node as Record<string, unknown>;
@@ -245,12 +230,7 @@ function parseKmlText(name: string, xml: string): Table[] {
       if (typeof m.description === 'string') o.descricao = m.description.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       const ed = m.ExtendedData as { Data?: unknown; SimpleData?: unknown } | undefined;
       for (const d of arr(ed?.Data as { '@_name'?: string; value?: unknown }[] | undefined)) if (d['@_name']) o[d['@_name']] = d.value ?? null;
-      const coords = JSON.stringify(m).match(/"coordinates":"([^"]+)"/)?.[1] ?? '';
-      const pts = coords.split(/\s+/).map((s) => s.split(',').map(Number)).filter((a) => a.length >= 2 && Number.isFinite(a[0]) && Number.isFinite(a[1]));
-      if (pts.length) {
-        o.longitude = pts.reduce((a, q) => a + q[0]!, 0) / pts.length;
-        o.latitude = pts.reduce((a, q) => a + q[1]!, 0) / pts.length;
-      }
+      geoms.push(kmlGeometry(m));
       list.push(o);
     }
     for (const f of arr(n.Folder as unknown)) walk(f, [folder, String((f as Record<string, unknown>).name ?? '')].filter(Boolean).join(' / '));
@@ -258,8 +238,11 @@ function parseKmlText(name: string, xml: string): Table[] {
     if (n.kml) walk(n.kml, folder);
   };
   walk(doc, '');
+  const { shapes, notes } = attachGeometry(list, geoms);
   const t = objectsToTable(name, list);
-  t.geo = { lat: 'latitude', lon: 'longitude' };
+  t.geo = { lat: 'latitude', lon: 'longitude', id: GEO_ID };
+  t.shapes = shapes;
+  if (notes.length) t.notes = [...(t.notes ?? []), ...notes];
   return [t];
 }
 

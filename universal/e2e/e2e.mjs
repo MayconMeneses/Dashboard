@@ -349,6 +349,69 @@ ok('gráficos do PDF saem com fundo branco e texto escuro mesmo no tema escuro')
   ok('exploração manual valida combinações e filtro cruzado deixa KPIs e tabela coerentes');
 }
 
+// 14. Geometrias reais: polígono com buraco, mapa temático, dica sem HTML, coordenada projetada e desempenho
+{
+  const sq = (x, y, w, hole) => ({ type: 'Polygon', coordinates: [[[x, y], [x + w, y], [x + w, y + w], [x, y + w], [x, y]], ...(hole ? [[[x, y], [x + w / 2, y], [x + w / 2, y + w / 2], [x, y + w / 2], [x, y]]] : [])] });
+  const evil = '<img src=x onerror="window.__xss=1">';
+  const fc = { type: 'FeatureCollection', features: [
+    { type: 'Feature', properties: { nome: evil, pop: 10 }, geometry: sq(-41, -5, 1, true) },
+    { type: 'Feature', properties: { nome: 'B', pop: 500 }, geometry: sq(-39.5, -5, 1) },
+    { type: 'Feature', properties: { nome: 'C', pop: 90 }, geometry: sq(-38, -5, 1) },
+  ] };
+  writeFileSync(join(dir, 'poligonos.geojson'), JSON.stringify(fc));
+  const pg = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  pg.on('pageerror', (e) => errors.push(e.message));
+  await pg.goto(app);
+  await pg.setInputFiles('#file', join(dir, 'poligonos.geojson'));
+  await pg.waitForSelector('#preview:not([hidden]) h2');
+  await pg.click('#preview button.primary');
+  await pg.waitForSelector('#charts .map path.leaflet-interactive', { timeout: 20000 });
+  assert.equal(await pg.locator('#charts .map path.leaflet-interactive').count(), 3, 'três polígonos desenhados (formas reais, não pontos)');
+  assert.equal(await pg.locator('#charts .map .leaflet-interactive').count(), 3);
+  const subpaths = await pg.evaluate(() => [...document.querySelectorAll('#charts .map path.leaflet-interactive')].map((p) => (p.getAttribute('d').match(/M/g) ?? []).length));
+  assert.equal(Math.max(...subpaths), 2, 'o polígono com buraco tem dois anéis no desenho');
+  assert.match(await pg.locator('#charts .card p[role=status], #charts .chart p[role=status]').first().innerText(), /3 de 3 linha/);
+  await pg.locator('#charts .map path.leaflet-interactive').first().dispatchEvent('mouseover');
+  await pg.waitForSelector('.leaflet-tooltip', { timeout: 5000 });
+  assert.equal(await pg.evaluate(() => window.__xss), undefined, 'HTML na propriedade do polígono não executa');
+  assert.equal(await pg.evaluate(() => document.querySelectorAll('.leaflet-tooltip img').length), 0);
+  // mapa temático por medida
+  await pg.locator('select[aria-label="Colorir o mapa por"]').selectOption('pop');
+  await pg.waitForSelector('#charts .map-legend li');
+  assert.ok((await pg.locator('#charts .map-legend li').count()) >= 2, 'legenda com classes');
+  const fills = await pg.evaluate(() => new Set([...document.querySelectorAll('#charts .map path.leaflet-interactive')].map((p) => p.getAttribute('fill'))).size);
+  assert.ok(fills >= 2, 'polígonos com cores diferentes: ' + fills);
+  await pg.close();
+
+  // coordenada projetada: aviso e nada desenhado como se fosse válido
+  const proj = { type: 'FeatureCollection', features: Array.from({ length: 6 }, (_, i) => ({ type: 'Feature', properties: { n: i }, geometry: { type: 'Point', coordinates: [500000 + i, 9500000] } })) };
+  writeFileSync(join(dir, 'projetado.geojson'), JSON.stringify(proj));
+  const pp2 = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  pp2.on('pageerror', (e) => errors.push(e.message));
+  await pp2.goto(app);
+  await pp2.setInputFiles('#file', join(dir, 'projetado.geojson'));
+  await pp2.waitForSelector('#preview:not([hidden]) h2');
+  assert.match(await pp2.locator('#preview').innerText(), /WGS84/, 'a prévia avisa sobre coordenadas projetadas');
+  await pp2.close();
+
+  // desempenho: 5.000 polígonos no limite do desenho
+  const big = { type: 'FeatureCollection', features: Array.from({ length: 5000 }, (_, i) => ({ type: 'Feature', properties: { n: i, v: i % 17 }, geometry: sq(-60 + (i % 100) * 0.1, -30 + Math.floor(i / 100) * 0.1, 0.08) })) };
+  writeFileSync(join(dir, 'grande.geojson'), JSON.stringify(big));
+  const pb = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  pb.on('pageerror', (e) => errors.push(e.message));
+  await pb.goto(app);
+  await pb.setInputFiles('#file', join(dir, 'grande.geojson'));
+  await pb.waitForSelector('#preview:not([hidden]) h2');
+  const t0 = Date.now();
+  await pb.click('#preview button.primary');
+  await pb.waitForFunction(() => document.querySelectorAll('#charts .map path.leaflet-interactive').length >= 5000, null, { timeout: 60000 });
+  const ms = Date.now() - t0;
+  console.log('desempenho: 5000 polígonos desenhados em ' + ms + ' ms');
+  assert.ok(ms < 30000, 'mapa com 5.000 polígonos em menos de 30 s: ' + ms);
+  await pb.close();
+  ok('geometrias reais: polígono com buraco, mapa temático, dica sem HTML, aviso de coordenada projetada, 5.000 polígonos em ' + ms + ' ms');
+}
+
 assert.deepEqual(errors, [], 'sem erros de página: ' + errors.join(' | '));
 await browser.close();
 console.log(log.join('\n'));
