@@ -12,17 +12,13 @@ import { printCharts, setChartMode } from './design/chartTheme.js';
 import { PALETTE } from './design/palette.js';
 import { $, download, el } from './app/dom.js';
 import { columnInfo, filterNote } from './app/colsInfo.js';
+import { explorerCard } from './app/explorer.js';
 import { cellText } from './app/format.js';
 import { initShell } from './app/shell.js';
 import { diffBox } from './app/diffBox.js';
-import { drawBubble } from './charts/bubble.js';
+import { registry } from './charts/builtin.js';
 import { dataAlt } from './charts/dataAlt.js';
-import { drawFunnel } from './charts/funnel.js';
-import { drawHeatmap } from './charts/heatmap.js';
-import { drawMap } from './charts/map.js';
-import { drawScatter } from './charts/scatter.js';
 import type { ChartHost } from './charts/host.js';
-import { drawSmall } from './charts/small.js';
 import { buildReportModel, openReport } from './reports/screen.js';
 import type { ReportContext } from './reports/screen.js';
 import { currentMode, initTheme, setPrinting } from './design/theme.js';
@@ -134,12 +130,9 @@ function drawChart(spec0: ChartSpec, t: Table): HTMLElement {
   };
   card.append(el('header', {}, el('h3', {}, spec.title), x), el('p', {}, spec.description));
 
-  if (spec.kind === 'map') return drawMap(card, t, { forced, basemap, onBasemap: (b) => ((basemap = b), render()) }, host);
-  if (spec.kind === 'scatter' && spec.x && spec.y) return drawScatter(card, spec, t, host);
-
-
-  if (spec.kind === 'funnel') return drawFunnel(card, spec, t, host);
-  if (spec.kind === 'bubble') return drawBubble(card, spec, t, host);
+  const rc = { card, spec, t, host, forced, basemap, onBasemap: (b: 'esri' | 'none') => ((basemap = b), render()) };
+  const byKind = registry.forKind(spec.kind)?.(rc);
+  if (byKind) return byKind;
   let periodPick: HTMLElement | null = null;
   if (spec.kind === 'part' && spec.part && !spec.part.all && spec.x) {
     // rosca de um período: o usuário escolhe qual
@@ -190,8 +183,8 @@ function drawChart(spec0: ChartSpec, t: Table): HTMLElement {
   card.append(el('p', { className: 'insight' }, el('b', {}, 'Destaque: '), insight));
   card.append(el('details', { className: 'howto' }, el('summary', {}, 'Por que este gráfico e como ler'), el('p', {}, el('b', {}, 'Por que: '), why || 'Escolhido pelo tipo dos dados.'), ...(spec.reasons?.length ? [el('ul', {}, ...spec.reasons.map((r) => el('li', {}, r)))] : []), el('p', {}, el('b', {}, 'Como ler: '), HOWTO_SHAPE[shape] ?? spec.howTo ?? HOW_TO[spec.kind] ?? '')));
 
-  if (shape === 'heatmap') return drawHeatmap(card, spec, d, host);
-  if (shape === 'small') return drawSmall(card, d, host);
+  const byShape = registry.forShape(shape)?.({ ...rc, d });
+  if (byShape) return byShape;
 
   const canvas = el('canvas', { role: 'img', ariaLabel: `${spec.title}. ${insight}` });
   card.append(el('div', { className: 'box' }, canvas));
@@ -340,7 +333,7 @@ function render() {
   renderTools();
   const specs = suggestCharts(full, prof, Number(($('level') as HTMLSelectElement).value)).filter((s) => !removed.has(s.id));
   lastSpecs = specs;
-  $('charts').replaceChildren(...(full.noCharts ? [el('div', { className: 'card' }, el('p', {}, 'Sem gráficos: este documento não tem tabelas com colunas alinhadas, só texto. O texto extraído está na tabela abaixo; para gráficos, use o arquivo original em Excel ou CSV.'))] : specs.map((s) => drawChart(s, t))));
+  $('charts').replaceChildren(...(full.noCharts ? [el('div', { className: 'card' }, el('p', {}, 'Sem gráficos: este documento não tem tabelas com colunas alinhadas, só texto. O texto extraído está na tabela abaixo; para gráficos, use o arquivo original em Excel ou CSV.'))] : [...specs.map((s) => drawChart(s, t)), ...[explorerCard(full, prof, forced, (s) => drawChart(s, t), render)].filter((c): c is HTMLElement => c != null)]));
   renderTable();
   const th = ['Coluna (pode renomear)', 'Unidade', 'Tipo (pode corrigir)', 'Preenchidas', 'Vazias', 'Valores distintos', 'Valores inválidos', 'Papel e origem'];
   const info = columnInfo(full, prof, { renames, forced, units, merges, metrics });

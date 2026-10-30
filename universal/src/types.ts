@@ -84,7 +84,7 @@ export interface ChartSpec {
   description: string;
   x?: string;
   y?: string;
-  agg?: 'count' | 'sum' | 'mean';
+  agg?: 'count' | 'sum' | 'mean' | 'min' | 'max' | 'median';
   stack?: string;
   /** mantém a ordem original das linhas (ex.: ciclos), em vez de ordenar por valor */
   keepOrder?: boolean;

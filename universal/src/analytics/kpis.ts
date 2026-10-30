@@ -1,6 +1,7 @@
 import { toNumber } from '../profile.js';
 import type { ColProfile, Kpi, Table } from '../types.js';
 import { fmtNum } from './format.js';
+import { semanticProfile } from './semantic.js';
 import { tidyKpis } from './tidy.js';
 
 export function kpis(t: Table, prof: ColProfile[]): Kpi[] {
@@ -8,8 +9,12 @@ export function kpis(t: Table, prof: ColProfile[]): Kpi[] {
   const per = prof.find((p) => p.period && p.filled === t.rows.length && p.unique === t.rows.length);
   if (per && t.rows.length >= 2 && t.rows.length <= 40) return periodKpis(t, prof, per);
   const out: Kpi[] = [{ label: 'Registros', value: fmtNum(t.rows.length) }, { label: 'Colunas', value: String(t.columns.length) }];
-  const m = prof.find((p) => p.type === 'number' || p.type === 'integer');
-  if (m?.sum != null) out.push({ label: `Total de ${m.name}`, value: fmtNum(m.sum), hint: `média ${fmtNum(m.mean!)} · mediana ${fmtNum(m.median!)}` });
+  // só medida de verdade: código (CEP, CPF…) não tem total, e percentual/taxa pede média, não soma
+  const sem = semanticProfile(t, prof);
+  const m = prof.find((p) => (p.type === 'number' || p.type === 'integer') && sem.find((s) => s.name === p.name)?.role === 'measure');
+  const additive = m ? sem.find((s) => s.name === m.name)!.additive : true;
+  if (m?.sum != null && additive) out.push({ label: `Total de ${m.name}`, value: fmtNum(m.sum), hint: `média ${fmtNum(m.mean!)} · mediana ${fmtNum(m.median!)}` });
+  else if (m?.mean != null) out.push({ label: `Média de ${m.name}`, value: fmtNum(m.mean), hint: `mediana ${fmtNum(m.median!)} · mínimo ${fmtNum(m.min!)} · máximo ${fmtNum(m.max!)}` });
   const d = prof.find((p) => p.type === 'date');
   if (d?.minDate != null) out.push({ label: `Período (${d.name})`, value: `${new Date(d.minDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })} a ${new Date(d.maxDate!).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}` });
   const filled = prof.reduce((a, p) => a + p.filled, 0) / Math.max(1, t.rows.length * t.columns.length);

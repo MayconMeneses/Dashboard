@@ -18,7 +18,7 @@ const arquivos = listar(SRC).map((p) => ({ nome: rel(p), texto: readFileSync(p, 
 /** Limite geral por arquivo (linhas). Exceções são temporárias, com teto próprio, e só podem diminuir. */
 const LIMITE = 400;
 const EXCECOES: Record<string, number> = {
-  'main.ts': 930, // orquestração da tela; segue sendo reduzido (relatórios, projeto, prévia e tabela ainda estão aqui)
+  'main.ts': 915, // orquestração da tela; segue sendo reduzido (relatórios, projeto, prévia e tabela ainda estão aqui)
 };
 
 describe('modularidade', () => {

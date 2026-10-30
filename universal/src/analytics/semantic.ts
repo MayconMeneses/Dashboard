@@ -14,6 +14,8 @@ export interface Semantic {
   reasons: string[];
   /** o tipo foi corrigido à mão pelo usuário */
   manual: boolean;
+  /** tempo em sequência de períodos (ano, mês por extenso), não data completa */
+  period?: boolean;
 }
 
 const CODE_NAME = /(^|[\s_.-])(cep|cpf|cnpj|rg|telefone|fone|celular|matr[ií]cula|ibge|c[oó]digo|cod|id)($|[\s_.-])/i;
@@ -40,6 +42,7 @@ export function semanticOf(p: ColProfile, t: Table, forced: Record<string, ColTy
     say('Coordenada geográfica: não se soma nem se faz média.');
   } else if (p.type === 'date' || p.period) {
     out.role = 'time';
+    if (p.period) out.period = true;
     say(p.period ? 'Sequência de períodos (ano ou mês): serve de eixo de tempo.' : 'Datas: serve de eixo de tempo.');
   } else if (p.type === 'boolean') {
     out.role = 'flag';

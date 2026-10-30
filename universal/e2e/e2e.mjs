@@ -307,6 +307,48 @@ ok('gráficos do PDF saem com fundo branco e texto escuro mesmo no tema escuro')
   ok('tabela de colunas mostra papel e origem; filtro mostra o efeito nas colunas');
 }
 
+// 13. Exploração manual e filtro cruzado: KPIs, tabela e gráficos concordam
+{
+  const ufs = ['SP', 'RJ', 'MG', 'BA'];
+  const linhas = ['uf;taxa;vendas'];
+  for (let i = 0; i < 24; i++) linhas.push(`${ufs[i % 4]};${50 + (i % 5) * 10}%;${100 + i * 10}`);
+  writeFileSync(join(dir, 'explorar.csv'), linhas.join(String.fromCharCode(10)));
+  const px = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  px.on('pageerror', (e) => errors.push(e.message));
+  await px.goto(app);
+  await px.setInputFiles('#file', join(dir, 'explorar.csv'));
+  await px.waitForSelector('#preview:not([hidden]) h2');
+  await px.click('#preview button.primary');
+  await px.waitForSelector('#secExplorar canvas', { timeout: 20000 });
+  const sel = (nome) => px.locator(`#secExplorar select[aria-label="${nome}"]`);
+  // percentual: somar é recusado com explicação
+  await sel('Cálculo').selectOption('sum');
+  await px.waitForSelector('#secExplorar [role=alert]');
+  assert.match(await px.locator('#secExplorar [role=alert]').innerText(), /somar não tem significado/);
+  assert.equal(await px.locator('#secExplorar canvas').count(), 0, 'sem gráfico para combinação sem sentido');
+  // medida somável com mediana
+  await sel('Medida').selectOption('vendas');
+  await sel('Cálculo').selectOption('median');
+  await px.waitForSelector('#secExplorar canvas');
+  assert.equal(await px.locator('#secExplorar h3').nth(1).innerText(), 'Mediana de vendas por uf');
+  // filtro cruzado por clique: KPI de registros e tabela acompanham
+  const cv = px.locator('#charts canvas[aria-label^="Registros por uf"]').first();
+  await cv.scrollIntoViewIfNeeded();
+  const box = await cv.boundingBox();
+  for (const fy of [0.1, 0.18, 0.26, 0.34, 0.42, 0.5, 0.58, 0.66, 0.74, 0.82]) {
+    if (await px.locator('#chips .chip').count()) break;
+    await px.mouse.click(box.x + box.width * 0.35, box.y + box.height * fy);
+    await px.waitForTimeout(250);
+  }
+  assert.ok(await px.locator('#chips .chip').count(), 'filtro aplicado');
+  const kpiReg = await px.evaluate(() => [...document.querySelectorAll('#kpis .kpi')].find((k) => k.querySelector('span')?.textContent === 'Registros')?.querySelector('b')?.textContent);
+  assert.equal(kpiReg, '6', 'KPI de registros acompanha o filtro');
+  assert.equal(await px.locator('#tbl tbody tr').count(), 6, 'tabela mostra as mesmas 6 linhas');
+  await px.waitForSelector('#secExplorar canvas');
+  await px.close();
+  ok('exploração manual valida combinações e filtro cruzado deixa KPIs e tabela coerentes');
+}
+
 assert.deepEqual(errors, [], 'sem erros de página: ' + errors.join(' | '));
 await browser.close();
 console.log(log.join('\n'));

@@ -13,17 +13,58 @@ export interface SeriesData {
 
 export const monthKey = (ts: number) => new Date(ts).toISOString().slice(0, 7);
 
-export function agg(rows: Row[], key: (r: Row) => string | null, val: (r: Row) => number | null, how: 'count' | 'sum' | 'mean') {
-  const m = new Map<string, { n: number; s: number }>();
+export type Agg = NonNullable<ChartSpec['agg']>;
+/** Acumulador de um grupo: o suficiente para soma, média, mínimo, máximo e (guardando os valores) mediana. */
+export interface Acc {
+  n: number;
+  s: number;
+  min: number;
+  max: number;
+  vals?: number[];
+}
+
+/** Valor final de um grupo. O `switch` é exaustivo: uma métrica nova sem tratamento não compila. */
+export function finish(how: Agg, a: Acc): number {
+  switch (how) {
+    case 'count':
+    case 'sum':
+      return a.s;
+    case 'mean':
+      return a.s / a.n;
+    case 'min':
+      return a.min;
+    case 'max':
+      return a.max;
+    case 'median': {
+      const v = [...a.vals!].sort((x, y) => x - y);
+      const m = Math.floor(v.length / 2);
+      return v.length % 2 ? v[m]! : (v[m - 1]! + v[m]!) / 2;
+    }
+    default: {
+      const nunca: never = how;
+      throw new Error(`métrica desconhecida: ${String(nunca)}`);
+    }
+  }
+}
+
+const add = (e: Acc | undefined, v: number, keep: boolean): Acc => {
+  const a = e ?? { n: 0, s: 0, min: Infinity, max: -Infinity, ...(keep ? { vals: [] as number[] } : {}) };
+  a.n++;
+  a.s += v;
+  if (v < a.min) a.min = v;
+  if (v > a.max) a.max = v;
+  a.vals?.push(v);
+  return a;
+};
+
+export function agg(rows: Row[], key: (r: Row) => string | null, val: (r: Row) => number | null, how: Agg) {
+  const m = new Map<string, Acc>();
   for (const r of rows) {
     const k = key(r);
     if (k == null) continue;
     const v = how === 'count' ? 1 : val(r);
     if (v == null) continue;
-    const e = m.get(k) ?? { n: 0, s: 0 };
-    e.n++;
-    e.s += v;
-    m.set(k, e);
+    m.set(k, add(m.get(k), v, how === 'median'));
   }
   return m;
 }
@@ -80,7 +121,7 @@ export function chartData(t: Table, spec: ChartSpec): SeriesData {
     const [y0, mo0] = keys[0]!.split('-').map(Number) as [number, number];
     const [y1, mo1] = keys[keys.length - 1]!.split('-').map(Number) as [number, number];
     for (let y = y0, mo = mo0; y < y1 || (y === y1 && mo <= mo1); mo === 12 ? (y++, (mo = 1)) : mo++) labels.push(`${y}-${String(mo).padStart(2, '0')}`);
-    return { labels, values: labels.map((l) => (how === 'mean' ? (m.get(l) ? m.get(l)!.s / m.get(l)!.n : 0) : m.get(l)?.s ?? 0)) };
+    return { labels, values: labels.map((l) => (m.get(l) ? finish(how, m.get(l)!) : how === 'count' || how === 'sum' ? 0 : Number.NaN)) };
   }
   if (spec.kind === 'hist' && spec.x) {
     const v = t.rows.map((r) => toNumber(r[spec.x!] ?? null)).filter((x): x is number => x != null);
@@ -109,7 +150,7 @@ export function chartData(t: Table, spec: ChartSpec): SeriesData {
   }
   if (spec.x) {
     const m = agg(t.rows, get(spec.x), num(spec.y), how);
-    let e = [...m.entries()].map(([k, a]) => [k, how === 'mean' ? a.s / a.n : a.s] as const);
+    let e = [...m.entries()].map(([k, a]) => [k, finish(how, a)] as const);
     if (!spec.keepOrder) e = e.sort((a, b) => b[1] - a[1]).slice(0, 15);
     return { labels: e.map((x) => x[0]), values: e.map((x) => x[1]) };
   }
@@ -145,17 +186,16 @@ export function pivotData(t: Table, spec: ChartSpec): SeriesData {
     const k = r[spec.seriesBy];
     if (k != null && !seriesKeys.includes(String(k))) seriesKeys.push(String(k));
   }
+  const how: Agg = spec.agg ?? 'sum';
   const sum = (pred: (r: Row) => boolean): number => {
-    let s = 0;
-    let n = 0;
+    let acc: Acc | undefined;
     for (const r of rows) {
       if (!pred(r)) continue;
       const v = counting ? (r[x] == null ? null : 1) : toNumber(r[yCol] ?? null);
       if (v == null) continue;
-      s += v;
-      n++;
+      acc = add(acc, v, how === 'median');
     }
-    return n ? s : Number.NaN;
+    return acc ? finish(how, acc) : Number.NaN;
   };
   if (!spec.seriesBy) {
     let e = xs.map((k) => [k, sum((r) => String(r[x]) === k)] as const);
