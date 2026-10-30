@@ -2,6 +2,7 @@ import { XMLParser } from 'fast-xml-parser';
 import { unzipSync, strFromU8 } from 'fflate';
 import Papa from 'papaparse';
 import readXlsx from 'read-excel-file/browser';
+import { supportedList } from './formats.js';
 import { attachGeometry, GEO_ID, isGeoJson } from './geo/table.js';
 import { kmlGeometry, readGeoJson } from './geo/read.js';
 import { decodeText, delimiterName, detectDelimiter } from './csv.js';
@@ -333,7 +334,7 @@ export async function parseFile(fileName: string, bytes: Uint8Array, opts: Parse
       break;
     }
     default:
-      throw new Error(`Formato “.${ext(fileName)}” não suportado. Use CSV, XLSX, JSON, GeoJSON, KML ou KMZ.`);
+      throw new Error(`Formato “.${ext(fileName)}” não suportado. Use ${supportedList()}.`);
   }
   tables = tables.filter((t) => t.columns.length && t.rows.length);
   if (!tables.length) throw new Error('Nenhum dado tabular encontrado no arquivo.');

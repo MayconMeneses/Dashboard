@@ -76,6 +76,8 @@ export function buildReportModel(ctx: ReportContext): ReportModel {
     if (info.encoding) origin.push(['Codificação do texto', info.encoding]);
     if (info.delimiter) origin.push(['Separador de colunas', delimiterName(info.delimiter)]);
   }
+  if (dataset.sources) dataset.sources.forEach((src, i) => origin.push([`Fonte ${i + 1}`, `${src.fileName ?? '?'} (.${src.format}, ${formatBytes(src.bytes)})`], [`SHA-256 da fonte ${i + 1}`, src.sha256 ?? 'não calculado']));
+  if (table.joined) origin.push(['Relação entre tabelas', `${table.joined.kind === 'pontos' ? 'pontos dentro de polígonos' : `chave “${table.joined.leftKey}” = “${table.joined.rightKey}”`}: ${table.joined.left} + ${table.joined.right}`]);
   origin.push(['Tabela analisada', `${table.title ?? table.name} (${n(table.rows.length)} linhas, ${table.columns.length} colunas)`], ['Versão do painel', __APP_VERSION__]);
   const records: [string, string][] = [];
   if (info) records.push(['Linhas lidas (todas as tabelas)', n(info.rowsRead)], ['Linhas ignoradas (em branco ou título)', n(info.rowsDropped)], ['Linhas não lidas (acima do limite)', n(info.truncated)]);

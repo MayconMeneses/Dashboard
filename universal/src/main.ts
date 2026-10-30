@@ -4,28 +4,28 @@ import 'leaflet/dist/leaflet.css';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import PdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&inline';
 import { parseFile } from './parse.js';
-import type { ParseOptions } from './parse.js';
 import { inferLocale, locale, profileTable, toNumber } from './profile.js';
 import type { LocaleInfo } from './profile.js';
-import { csvField, delimiterName } from './csv.js';
+import { csvField } from './csv.js';
+import { acceptAttr } from './formats.js';
 import { printCharts, setChartMode } from './design/chartTheme.js';
 import { PALETTE } from './design/palette.js';
 import { $, download, el } from './app/dom.js';
 import { columnInfo, filterNote } from './app/colsInfo.js';
 import { explorerCard } from './app/explorer.js';
-import { cellText } from './app/format.js';
+import { cellText, TYPE_NAMES } from './app/format.js';
 import { initShell } from './app/shell.js';
-import { diffBox } from './app/diffBox.js';
+import { clearPending, handleFiles, initImport, startFile } from './app/importFlow.js';
+import { renderJoinPanel } from './app/joinPanel.js';
+import { applyJoins, stripJoined } from './join/join.js';
 import { registry } from './charts/builtin.js';
 import { dataAlt } from './charts/dataAlt.js';
 import type { ChartHost } from './charts/host.js';
 import { buildReportModel, openReport } from './reports/screen.js';
 import type { ReportContext } from './reports/screen.js';
 import { currentMode, initTheme, setPrinting } from './design/theme.js';
-import type { DelimiterChoice, Encoding } from './csv.js';
-import { formatBytes } from './report.js';
 import { compileFormula, evalAggregate, evalRow, FormulaError } from './formula.js';
-import { addMetricColumns, applyRenames, compareTables, migrateColumn, parseProject, reconcileState, serializeProject } from './project.js';
+import { addMetricColumns, applyRenames, migrateColumn, parseProject, serializeProject } from './project.js';
 import type { Metric, ProjectState } from './project.js';
 import { buildXlsx } from './xlsx.js';
 import { applyMerges } from './similar.js';
@@ -33,7 +33,7 @@ import { filterByDate, pageOf, sortRows } from './tableview.js';
 import type { SortDir } from './tableview.js';
 import { compatibleStyles, toPercent, toPareto } from './shapes.js';
 import { chartData, clickFilters, HOW_TO, HOWTO_SHAPE, insightFor, kpis, qualityAlerts, rateData, rateInsight, suggestCharts } from './suggest.js';
-import type { ChartSpec, ColProfile, ColType, Dataset, Table } from './types.js';
+import type { ChartSpec, ColProfile, ColType, Dataset, JoinSpec, Table } from './types.js';
 
 Chart.register(...registerables);
 pdfjs.GlobalWorkerOptions.workerPort = new PdfWorker();
@@ -101,7 +101,6 @@ function toggleFilter(col: string, value: string) {
   page = 1;
   render();
 }
-const TYPE_NAMES: Record<string, string> = { number: 'número', integer: 'inteiro', date: 'data', category: 'categoria', boolean: 'sim/não', text: 'texto', id: 'identificador', lat: 'latitude', lon: 'longitude' };
 
 function fail(m: string) {
   $('msg').textContent = m;
@@ -480,7 +479,7 @@ async function openProject(f: File) {
     const p = parseProject(await f.text());
     carry = { state: p.estado, label: `Projeto “${p.origem.arquivo || f.name}” (salvo em ${p.salvoEm ? new Date(p.salvoEm).toLocaleString('pt-BR') : 'data desconhecida'}, painel ${p.painel || '?'})` };
     reset();
-    pending = null;
+    clearPending();
     $('preview').hidden = true;
     $('app').hidden = true;
     $('actions').hidden = true;
@@ -578,9 +577,13 @@ function renderTable() {
 
 type SharedState = ProjectState;
 
-function load(ds: Dataset, st: SharedState = {}) {
+function load(ds0: Dataset, st: SharedState = {}) {
+  // as relações são receitas: refaz sobre as tabelas de origem (as da própria st, ou as que já estavam no conjunto)
+  const src = stripJoined(ds0);
+  const jr = applyJoins(src.ds, st.joins ?? src.joins);
+  const ds = jr.ds;
   dataset = ds;
-  pending = null;
+  clearPending();
   $('preview').hidden = true;
   removed = new Set(st.removed ?? []);
   forced = st.forced ?? {};
@@ -602,7 +605,7 @@ function load(ds: Dataset, st: SharedState = {}) {
   Object.assign(styleChoice, st.styleChoice ?? {});
   Object.assign(rateChoice, st.rateChoice ?? {});
   if (st.level) ($('level') as HTMLSelectElement).value = st.level;
-  $('msg').textContent = '';
+  $('msg').textContent = jr.dropped.join(' ');
   const sel = $('tableSel') as HTMLSelectElement;
   sel.replaceChildren(...ds.tables.map((t, i) => el('option', { value: String(i) }, `${t.title ?? t.name} (${t.rows.length})`)));
   sel.hidden = ds.tables.length < 2;
@@ -612,157 +615,26 @@ function load(ds: Dataset, st: SharedState = {}) {
   $('drop').hidden = true;
   $('app').hidden = false;
   $('actions').hidden = false;
+  renderJoinPanel({ dataset: () => dataset, confirm: confirmJoin });
   render();
 }
 
-// ---------- prévia: o usuário confere como o arquivo foi lido antes de gerar o painel ----------
-interface Pending {
-  fileName: string;
-  bytes: Uint8Array;
-  opts: ParseOptions;
-  ds: Dataset;
-  tableIndex: number;
-  forcedTmp: Record<string, ColType>;
-  sha?: string;
-  carry?: { state: ProjectState; oldTable?: Table; label: string } | null;
-}
-let pending: Pending | null = null;
-
-async function sha256(bytes: Uint8Array): Promise<string | undefined> {
-  try {
-    const h = await crypto.subtle.digest('SHA-256', bytes.slice());
-    return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('');
-  } catch {
-    return undefined;
-  }
-}
-
-async function startFile(fileName: string, bytes: Uint8Array, opts: ParseOptions = {}, keep?: Pending) {
-  try {
-    const ds = await parseFile(fileName, bytes, { ...PDF, ...opts });
-    const sha = keep?.sha ?? (await sha256(bytes));
-    ds.info = { ...ds.info!, sha256: sha, readAt: keep?.ds.info?.readAt ?? new Date().toISOString() };
-    if (!keep) {
-      const li = inferLocale(ds.tables);
-      locInfo = li;
-      locale.dateOrder = li.dateOrder;
-      locale.numbers = li.numbers;
-    }
-    const cr = keep ? keep.carry : carry;
-    carry = null;
-    let tableIndex = keep?.tableIndex ?? 0;
-    if (!keep && cr) {
-      const want = cr.oldTable?.title ?? cr.oldTable?.name;
-      const byName = want ? ds.tables.findIndex((x) => (x.title ?? x.name) === want) : -1;
-      tableIndex = byName >= 0 ? byName : cr.state.tableIndex != null && cr.state.tableIndex < ds.tables.length ? cr.state.tableIndex : 0;
-    }
-    pending = { fileName, bytes, opts, ds, tableIndex, forcedTmp: keep?.forcedTmp ?? {}, sha, carry: cr };
-    $('msg').textContent = '';
-    renderPreview();
-  } catch (e) {
-    fail(e instanceof Error ? e.message : 'Não foi possível ler o arquivo.');
-  }
-}
-
-function renderPreview() {
-  const p = pending;
-  if (!p) return;
-  const info = p.ds.info!;
-  const t = p.ds.tables[p.tableIndex]!;
-  const prof = profileTable(t, p.forcedTmp);
-  const n = (x: number) => new Intl.NumberFormat('pt-BR').format(x);
-  const box = $('preview');
-  box.hidden = false;
-  $('drop').hidden = true;
-  $('app').hidden = true;
-  $('actions').hidden = true;
-
-  const dl = (rows: [string, string][]) => el('dl', {}, ...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)]));
-  const rows: [string, string][] = [['Arquivo', p.fileName], ['Formato', `.${info.format}`], ['Tamanho', formatBytes(info.bytes)]];
-  if (info.sha256) rows.push(['SHA-256', info.sha256]);
-  if (info.encoding) rows.push(['Codificação do texto', info.encoding]);
-  if (info.delimiter) rows.push(['Separador de colunas', `${delimiterName(info.delimiter)}${info.delimiterGuessed ? ' (detectado)' : ' (escolhido)'}`]);
-  rows.push(['Tabelas encontradas', String(p.ds.tables.length)], ['Linhas lidas', n(info.rowsRead)], ['Linhas ignoradas (em branco ou título)', n(info.rowsDropped)], ['Linhas não lidas (acima do limite)', n(info.truncated)]);
-
-  const sel = <V extends string>(label: string, value: V, options: [V, string][], onChange: (v: V) => void) => {
-    const s = el('select', { ariaLabel: label }, ...options.map(([v, l]) => el('option', { value: v, selected: v === value }, l)));
-    s.onchange = () => onChange(s.value as V);
-    return el('label', {}, label + ' ', s);
-  };
-  const textual = ['csv', 'tsv', 'txt', 'json', 'geojson', 'kml'].includes(info.format);
-  const reparse = (o: ParseOptions) => void startFile(p.fileName, p.bytes, { ...p.opts, ...o }, p);
-  const controls = el('fieldset', {}, el('legend', {}, 'Se algo estiver errado, ajuste aqui'));
-  if (textual) controls.append(sel<Encoding>('Codificação', p.opts.encoding ?? 'auto', [['auto', 'Automática'], ['utf-8', 'UTF-8'], ['windows-1252', 'Windows-1252 (Excel BR)']], (v) => reparse({ encoding: v })));
-  if (['csv', 'tsv', 'txt'].includes(info.format)) controls.append(sel<DelimiterChoice>('Separador', p.opts.delimiter ?? 'auto', [['auto', 'Automático'], [',', 'Vírgula'], [';', 'Ponto e vírgula'], ['\t', 'Tabulação'], ['|', 'Barra vertical']], (v) => reparse({ delimiter: v })));
-  controls.append(
-    sel<'dmy' | 'mdy'>('Datas com barra (03/04/2024)', locale.dateOrder, [['dmy', 'dia/mês/ano'], ['mdy', 'mês/dia/ano']], (v) => ((locale.dateOrder = v), renderPreview())),
-    sel<'br' | 'us'>('Números', locale.numbers, [['br', '1.234,56 (padrão brasileiro)'], ['us', '1,234.56 (padrão americano)']], (v) => ((locale.numbers = v), renderPreview())),
-  );
-  if (p.ds.tables.length > 1) controls.append(sel<string>('Tabela / aba', String(p.tableIndex), p.ds.tables.map((tb, i) => [String(i), `${tb.title ?? tb.name} (${n(tb.rows.length)} linhas)`] as [string, string]), (v) => ((p.tableIndex = Number(v)), renderPreview())));
-
-  const alerts = qualityAlerts(t, prof, currentLoc());
-  const notes = [...info.notes.map((x) => ({ level: 'info', text: x })), ...alerts.map((a) => ({ level: a.level, text: a.text }))];
-  const notesUl = el('ul', {}, ...notes.slice(0, 16).map((x) => el('li', { className: x.level }, x.text)));
-  if (notes.length > 16) notesUl.append(el('li', { className: 'info' }, `…e mais ${notes.length - 16} aviso(s), que aparecem no painel.`));
-
-  const colRows = prof.map((c) => {
-    const s = el('select', { ariaLabel: `Tipo da coluna ${c.name}` }, ...Object.entries(TYPE_NAMES).map(([v, l]) => el('option', { value: v, selected: v === c.type }, l)));
-    s.onchange = () => {
-      p.forcedTmp = { ...p.forcedTmp, [c.name]: s.value as ColType };
-      renderPreview();
-    };
-    return el('tr', {}, el('td', {}, c.name), el('td', {}, s), el('td', {}, String(c.filled)), el('td', {}, String(c.missing)), el('td', {}, c.invalidCount ? `${c.invalidCount} (linha ${c.invalid![0]!.row}: “${c.invalid![0]!.value}”)` : '—'));
-  });
-  const sample = t.rows.slice(0, 8);
-  const go = el('button', { type: 'button', className: 'primary' }, 'Gerar painel');
-  let carryBox: HTMLElement | null = null;
-  let reconciled: ProjectState | null = null;
-  if (p.carry) {
-    const names = applyRenames(t, p.carry.state.renames ?? {}).columns;
-    const rc = reconcileState(p.carry.state, [...names, ...t.columns]);
-    reconciled = rc.state;
-    carryBox = el('div', { className: 'notice' }, el('b', {}, 'Configuração reaplicada'), el('p', {}, `${p.carry.label}. Filtros, período, ajustes, nomes, unidades e métricas compatíveis serão reaplicados a esta tabela.`));
-    if (rc.dropped.length) carryBox.append(el('p', {}, 'Descartado por não existir mais neste arquivo:'), el('ul', {}, ...rc.dropped.map((x) => el('li', { className: 'warn' }, x))));
-    if (p.carry.oldTable) carryBox.append(el('p', {}, 'O que mudou em relação ao arquivo anterior:'), diffBox(compareTables(p.carry.oldTable, t)));
-  }
-  go.onclick = () => load(p.ds, { ...(reconciled ?? {}), tableIndex: p.tableIndex, forced: { ...(reconciled?.forced ?? {}), ...p.forcedTmp }, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers } });
-  const cancel = el('button', { type: 'button' }, 'Escolher outro arquivo');
-  cancel.onclick = () => {
-    pending = null;
-    box.hidden = true;
-    $('drop').hidden = false;
-    ($('file') as HTMLInputElement).value = '';
-  };
-  box.replaceChildren(
-    el('h2', {}, 'Prévia: confira como li o arquivo'),
-    el('p', { className: 'muted' }, 'Nada foi aplicado ainda. Confira o que foi lido, corrija se preciso e só então gere o painel.'),
-    ...(carryBox ? [carryBox] : []),
-    dl(rows),
-    controls,
-    el('h3', {}, 'Avisos e decisões da leitura'),
-    notes.length ? notesUl : el('p', { className: 'muted' }, 'Nenhum aviso.'),
-    el('h3', {}, `Colunas da tabela “${t.title ?? t.name}” (${t.columns.length})`),
-    el('div', { className: 'tablewrap' }, el('table', {}, el('thead', {}, el('tr', {}, ...['Coluna', 'Tipo (pode corrigir)', 'Preenchidas', 'Vazias', 'Valores inválidos'].map((h) => el('th', {}, h)))), el('tbody', {}, ...colRows))),
-    el('h3', {}, `Primeiras ${sample.length} linhas`),
-    el('div', { className: 'tablewrap' }, el('table', {}, el('thead', {}, el('tr', {}, ...t.columns.map((c) => el('th', {}, c)))), el('tbody', {}, ...sample.map((r) => el('tr', {}, ...t.columns.map((c) => el('td', {}, cellText(r[c])))))))),
-    el('div', { className: 'btns' }, cancel, go),
-  );
-}
-
-async function handle(f: File) {
-  await startFile(f.name, new Uint8Array(await f.arrayBuffer()));
+/** Relação confirmada na tela: guarda a receita junto das demais e abre a tabela nova. */
+function confirmJoin(spec: JoinSpec) {
+  if (!dataset) return;
+  load(dataset, { ...captureState(), joins: [...stripJoined(dataset).joins, spec], tableIndex: dataset.tables.length });
 }
 
 const csvCell = (v: unknown) => csvField(v);
 
 function captureState(): SharedState {
-  return { level: ($('level') as HTMLSelectElement).value, tableIndex: dataset && table ? dataset.tables.indexOf(table) : 0, forced, filters, removed: [...removed], styleChoice: { ...styleChoice }, rateChoice: { ...rateChoice }, merges, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers }, dateRange, basemap, pageSize, renames, units, metrics };
+  return { level: ($('level') as HTMLSelectElement).value, tableIndex: dataset && table ? dataset.tables.indexOf(table) : 0, forced, filters, removed: [...removed], styleChoice: { ...styleChoice }, rateChoice: { ...rateChoice }, merges, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers }, dateRange, basemap, pageSize, renames, units, metrics, joins: dataset ? stripJoined(dataset).joins : [] };
 }
 
 /** Gera um único .html com o painel e os dados embutidos, abrindo igual ao que está na tela. */
 function exportHtml(opts: { title: string; fileName: string; readonly: boolean }) {
   if (!dataset) return;
-  const payload = JSON.stringify({ dataset, state: captureState(), readonly: opts.readonly, title: opts.title }).replace(/</g, '\\u003c');
+  const payload = JSON.stringify({ dataset: stripJoined(dataset).ds, state: captureState(), readonly: opts.readonly, title: opts.title }).replace(/</g, '\\u003c');
   const clone = document.documentElement.cloneNode(true) as HTMLElement;
   clone.querySelector('#snapshot')?.remove();
   // volta ao estado inicial: o painel recompõe tudo a partir dos dados embutidos
@@ -808,6 +680,20 @@ function openShareDialog() {
 }
 
 function init() {
+  initImport({
+    load,
+    fail,
+    currentLoc,
+    takeCarry: () => {
+      const c = carry;
+      carry = null;
+      return c;
+    },
+    setLocInfo: (li) => {
+      locInfo = li;
+    },
+    parseDefaults: PDF,
+  });
   initTheme((m) => {
     setChartMode(m);
     if (table) render();
@@ -817,13 +703,15 @@ function init() {
   const file = $<HTMLInputElement>('file');
   drop.onclick = () => file.click();
   drop.onkeydown = (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), file.click());
-  file.onchange = () => file.files?.[0] && handle(file.files[0]);
+  file.onchange = () => file.files?.length && void handleFiles([...file.files]);
+  file.multiple = true;
+  file.accept = acceptAttr();
   drop.ondragover = (e) => (e.preventDefault(), drop.classList.add('over'));
   drop.ondragleave = () => drop.classList.remove('over');
   drop.ondrop = (e) => {
     e.preventDefault();
     drop.classList.remove('over');
-    if (e.dataTransfer?.files[0]) void handle(e.dataTransfer.files[0]);
+    if (e.dataTransfer?.files.length) void handleFiles([...e.dataTransfer.files]);
   };
   $('level').onchange = () => render();
   $('tableSel').onchange = () => {
@@ -843,7 +731,7 @@ function init() {
   $('q').oninput = () => ((page = 1), renderTable());
   $('btnNew').onclick = () => {
     reset();
-    pending = null;
+    clearPending();
     $('preview').hidden = true;
     file.value = '';
     $('drop').hidden = false;

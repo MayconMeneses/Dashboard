@@ -1,7 +1,7 @@
 import { evalRow } from './formula.js';
 import { compileFormula } from './formula.js';
 import { profileTable, toNumber } from './profile.js';
-import type { ColType, Row, Table } from './types.js';
+import type { ColType, JoinSpec, Row, Table } from './types.js';
 
 export interface Metric {
   id: string;
@@ -27,6 +27,8 @@ export interface ProjectState {
   renames?: Record<string, string>;
   units?: Record<string, string>;
   metrics?: Metric[];
+  /** relações entre tabelas confirmadas pelo usuário (a receita; as linhas são refeitas ao abrir) */
+  joins?: JoinSpec[];
 }
 
 /** Renomeia colunas (inclusive no mapeamento de tabelas organizadas e de coordenadas). */

@@ -443,6 +443,79 @@ ok('gráficos do PDF saem com fundo branco e texto escuro mesmo no tema escuro')
   ok('mapa abre sem fundo e sem requisição externa; a Esri só é consultada se escolhida');
 }
 
+// 16. Vários arquivos e relação entre tabelas: análise antes de confirmar, cancelar não muda nada, a receita volta ao reabrir o projeto
+{
+  const NL = String.fromCharCode(10);
+  writeFileSync(join(dir, 'vendas.csv'), ['cod;valor', '0123;100', '0456;200', '0456;50', '0999;70', ';10'].join(NL));
+  writeFileSync(join(dir, 'bairros.csv'), ['cod;pop;nome', '0123;1000;A', '0456;2000;B', '0777;3000;C'].join(NL));
+  const arquivos = [join(dir, 'vendas.csv'), join(dir, 'bairros.csv')];
+  const pj2 = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  pj2.on('pageerror', (e) => errors.push(e.message));
+  await pj2.goto(app);
+  await pj2.setInputFiles('#file', arquivos);
+  await pj2.waitForSelector('#preview:not([hidden]) h2');
+  const prev = await pj2.locator('#preview').innerText();
+  assert.ok(prev.includes('Fonte 1') && prev.includes('Fonte 2'), 'a prévia lista as duas fontes');
+  assert.ok(prev.includes('SHA-256 da fonte 2'), 'cada fonte tem o seu SHA-256');
+  await pj2.click('#preview button.primary');
+  await pj2.waitForSelector('#secRelacionar:not([hidden])');
+  assert.equal(await pj2.locator('#tableSel option').count(), 2, 'duas tabelas, uma por arquivo');
+  // análise antes de criar qualquer coisa
+  await pj2.locator('#secRelacionar button', { hasText: 'Analisar relação' }).click();
+  await pj2.waitForSelector('#joinAnalysis');
+  const an = await pj2.locator('#joinAnalysis').innerText();
+  assert.ok(an.includes('N:1'), 'cardinalidade muitos para um: ' + an);
+  assert.ok(an.includes('0456') && an.includes('Chaves repetidas na esquerda'), 'aponta a chave repetida');
+  assert.ok(an.includes('“pop” se repete em até 2 linhas'), 'avisa que a medida do lado um se repete');
+  assert.ok(an.includes('0999') && an.includes('0777'), 'mostra exemplos sem par nos dois lados');
+  // cancelar não muda nada
+  await pj2.click('#joinCancel');
+  assert.equal(await pj2.locator('#joinAnalysis').count(), 0, 'a análise some ao cancelar');
+  assert.equal(await pj2.locator('#tableSel option').count(), 2, 'nenhuma tabela criada');
+  // confirmar cria a tabela e abre
+  await pj2.locator('#secRelacionar button', { hasText: 'Analisar relação' }).click();
+  await pj2.waitForSelector('#joinConfirm');
+  await pj2.click('#joinConfirm');
+  await pj2.waitForFunction(() => document.querySelectorAll('#tableSel option').length === 3);
+  const reg = () => pj2.evaluate(() => [...document.querySelectorAll('#kpis .kpi')].find((k) => k.querySelector('span')?.textContent === 'Registros')?.querySelector('b')?.textContent);
+  assert.equal(await reg(), '5', 'relação à esquerda mantém as 5 linhas de vendas');
+  assert.ok((await pj2.locator('#cols tbody tr input').evaluateAll((l) => l.map((i) => i.value))).includes('pop'), 'a coluna da direita entrou');
+  // projeto guarda a receita, não as linhas
+  const [pdl] = await Promise.all([pj2.waitForEvent('download'), pj2.click('#btnSaveProj')]);
+  await pdl.saveAs(join(dir, 'rel.projeto.json'));
+  const rel = JSON.parse(readFileSync(join(dir, 'rel.projeto.json'), 'utf8'));
+  assert.equal(rel.estado.joins.length, 1);
+  assert.equal(rel.estado.joins[0].leftKey, 'cod');
+  assert.ok(!JSON.stringify(rel).includes('Chaves repetidas') && JSON.stringify(rel).length < 5000, 'projeto pequeno, sem as linhas da relação');
+  await pj2.close();
+  // reabrir o projeto e os mesmos arquivos refaz a relação
+  const p5 = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  p5.on('pageerror', (e) => errors.push(e.message));
+  await p5.goto(app);
+  await p5.setInputFiles('#projFile', join(dir, 'rel.projeto.json'));
+  await p5.waitForFunction(() => document.getElementById('note')?.textContent?.includes('Projeto aberto'));
+  await p5.setInputFiles('#file', arquivos);
+  await p5.waitForSelector('#preview:not([hidden]) h2');
+  await p5.click('#preview button.primary');
+  await p5.waitForFunction(() => document.querySelectorAll('#tableSel option').length === 3);
+  const reg5 = await p5.evaluate(() => [...document.querySelectorAll('#kpis .kpi')].find((k) => k.querySelector('span')?.textContent === 'Registros')?.querySelector('b')?.textContent);
+  assert.equal(reg5, '5', 'a relação foi refeita e a tabela relacionada está aberta');
+  // abrir só um dos arquivos: a relação é descartada com o motivo
+  await p5.close();
+  const p6 = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  p6.on('pageerror', (e) => errors.push(e.message));
+  await p6.goto(app);
+  await p6.setInputFiles('#projFile', join(dir, 'rel.projeto.json'));
+  await p6.waitForFunction(() => document.getElementById('note')?.textContent?.includes('Projeto aberto'));
+  await p6.setInputFiles('#file', join(dir, 'vendas.csv'));
+  await p6.waitForSelector('#preview:not([hidden]) h2');
+  await p6.click('#preview button.primary');
+  await p6.waitForSelector('#kpis .kpi');
+  assert.ok((await p6.locator('#msg').innerText()).includes('descartada'), 'avisa que a relação foi descartada');
+  await p6.close();
+  ok('vários arquivos: análise antes de confirmar, cancelar não muda nada, projeto guarda a receita e refaz a relação');
+}
+
 assert.deepEqual(errors, [], 'sem erros de página: ' + errors.join(' | '));
 await browser.close();
 console.log(log.join('\n'));

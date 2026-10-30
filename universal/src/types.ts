@@ -2,8 +2,21 @@ import type { Geometry } from './geo/geometry.js';
 export type Cell = string | number | boolean | Date | null;
 export type Row = Record<string, Cell>;
 
+/** Relação entre tabelas: por chave (junção) ou contagem de pontos dentro de polígonos. Guarda-se a receita, não as linhas. */
+export interface JoinSpec {
+  kind: 'chave' | 'pontos';
+  /** tabelas pelo nome de exibição (título ou nome) */
+  left: string;
+  right: string;
+  leftKey: string;
+  rightKey: string;
+  how: 'left' | 'inner';
+}
+
 export interface Table {
   name: string;
+  /** tabela criada por uma relação confirmada pelo usuário (refeita ao abrir, não guardada) */
+  joined?: JoinSpec;
   columns: string[];
   rows: Row[];
   /** colunas de latitude/longitude vindas do próprio formato (KML/GeoJSON) */
@@ -26,6 +39,8 @@ export interface Table {
 }
 
 export interface ParseInfo {
+  /** nome do arquivo de origem (quando há vários arquivos abertos) */
+  fileName?: string;
   format: string;
   bytes: number;
   sha256?: string;
@@ -47,6 +62,8 @@ export interface Dataset {
   fileName: string;
   tables: Table[];
   info?: ParseInfo;
+  /** um item por arquivo de origem, quando há vários (nome, tamanho, SHA-256, notas) */
+  sources?: ParseInfo[];
 }
 
 export type ColType = 'number' | 'integer' | 'date' | 'category' | 'boolean' | 'text' | 'id' | 'lat' | 'lon';
