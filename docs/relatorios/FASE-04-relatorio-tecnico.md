@@ -25,7 +25,7 @@ Status: **PENDENTE / parcial** (itens entregues e itens não feitos listados aba
 - vitest: 104 passam (9 arquivos; 12 novos). tsc `--noUnusedLocals`, `npm run lint` e `vite build` sem erro. e2e: 18 cenários, 0 falhas (o 12 é novo). Observação: `npx eslint` direto falha neste ambiente (“could not determine executable”); o gate válido é `npm run lint`.
 - Mutação 3 (aviso do filtro desligado): o e2e 12 falha esperando `.filter-note`.
 - Mutação 1 (`aggFor` sempre soma): 2 testes falham. Mutação 2 (identificador volta a `nums`): 2 testes falham. Código restaurado depois.
-- Nenhum arquivo novo passa de 400 linhas; `main.ts` segue em 912 (teto 930); sem ciclos.
+- Nenhum arquivo novo passa de 400 linhas; `main.ts` está em 917 linhas (teto 930); sem ciclos.
 
 ## Limites e o que NÃO foi feito
 - Regras de nome (CEP, taxa, valor…) são heurísticas em português; coluna com outro nome pode ser classificada como medida comum. O usuário continua podendo corrigir o tipo.
