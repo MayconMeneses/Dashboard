@@ -1,8 +1,8 @@
 # Changelog — Dashboard Universal
 
-## 0.9.0 (em preparação, branch `feature/dashboard-universal-0.9`; **não publicada**)
+## 0.9.0 (publicada em 2026-10-30)
 
-O manifesto de atualização (`atualizacao/versao.json`) continua em 0.8.0: publicar é uma decisão separada (ver “Como publicar”). O programa de desktop passa a 0.5.0 (Parquet no “Abrir arquivo” e nas associações): essas duas mudanças só chegam com o instalador novo.
+O manifesto de atualização (`atualizacao/versao.json`) passou a 0.9.0. O programa de desktop passa a 0.5.0 (Parquet no “Abrir arquivo” e nas associações): essas duas mudanças só chegam com o instalador novo.
 
 ### Novidades
 - **Leitura de Parquet**, 100% no computador (hyparquet e hyparquet-compressors, licença MIT; sem WebAssembly próprio): nulo continua nulo, inteiro de 64 bits vira número ou texto, limite de 200 mil linhas com aviso. GeoParquet: a geometria não é desenhada (avisa).
