@@ -67,6 +67,27 @@ export interface ReportModel {
   limits: string[];
   reproduce: string;
   sample?: { columns: string[]; rows: string[][] };
+  /** tabela territorial (mapa temático em forma de tabela), para dados com coordenadas ou formas */
+  territory?: { title: string; columns: string[]; rows: string[][]; notes: string[] };
+}
+
+export type ReportTemplate = 'completo' | 'resumido';
+
+/**
+ * Modelos do relatório. “Completo” leva tudo. “Resumido” leva até 4 gráficos, sem o anexo de amostra e com a tabela territorial curta;
+ * filtros, ajustes, critérios, limitações e fontes continuam (rastreabilidade não se resume) e o texto diz o que ficou de fora.
+ */
+export function applyTemplate(m: ReportModel, tpl: ReportTemplate): ReportModel {
+  if (tpl === 'completo') return m;
+  const omitidos = Math.max(0, m.charts.length - 4);
+  const { sample: _amostra, ...resto } = m;
+  void _amostra;
+  return {
+    ...resto,
+    charts: m.charts.slice(0, 4),
+    ...(m.territory ? { territory: { ...m.territory, rows: m.territory.rows.slice(0, 10) } } : {}),
+    limits: [`Relatório resumido: ${omitidos} gráfico(s), o anexo de amostra dos dados e parte da tabela territorial ficaram de fora; gere o relatório completo para ver tudo.`, ...m.limits],
+  };
 }
 
 /** A fonte do PDF (Roboto) não tem setas, ✓ nem triângulos: troca por equivalentes simples. */
@@ -152,6 +173,13 @@ export function buildPdfDoc(m: ReportModel): TDocumentDefinitions {
       margin: [0, 0, 0, 4],
     }, {
       table: { headerRows: 1, widths: m.sample.columns.map(() => '*'), body: [m.sample.columns.map((c) => ({ text: pdfText(c), bold: true, fillColor: COLORS.head, fontSize: 8 })), ...m.sample.rows.map((r) => r.map((c) => ({ text: pdfText(c), fontSize: 8 })))] },
+      layout: 'lightHorizontalLines',
+    });
+  }
+  if (m.territory) {
+    const tr = m.territory;
+    content.push({ text: `Anexo B. ${tr.title}`, style: 'h2' }, bullets(tr.notes), {
+      table: { headerRows: 1, widths: tr.columns.map(() => '*'), body: [tr.columns.map((c) => ({ text: pdfText(c), bold: true, fillColor: COLORS.head, fontSize: 8 })), ...tr.rows.map((r) => r.map((c) => ({ text: pdfText(c), fontSize: 8 })))] },
       layout: 'lightHorizontalLines',
     });
   }

@@ -1,0 +1,38 @@
+{
+  "geradoEm": "2026-10-30T03:22:47.876Z",
+  "ambiente": {
+    "node": "v24.20.0",
+    "so": "win32",
+    "cpu": "Intel(R) Core(TM) i5-8265U CPU @ 1.60GHz",
+    "memoriaGB": 7.9
+  },
+  "observacao": "uma execução por medida, em Node; não vale para o navegador",
+  "medidas": {
+    "csv": {
+      "megabytes": 21.7,
+      "linhasNoArquivo": 300000,
+      "colunas": 12
+    },
+    "leitura_csv": {
+      "ms": 1722,
+      "linhasLidas": 200000,
+      "naoLidas": 100000
+    },
+    "perfil_colunas": {
+      "ms": 2495
+    },
+    "analise_juncao_200k_x_5k": {
+      "ms": 70,
+      "resultado": 200000
+    },
+    "juncao_200k_x_5k": {
+      "ms": 145,
+      "linhas": 200000
+    },
+    "pontos_em_poligonos_10k_x_5k": {
+      "ms": 608,
+      "dentro": 6360,
+      "fora": 3640
+    }
+  }
+}

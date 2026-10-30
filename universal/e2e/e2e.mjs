@@ -516,6 +516,67 @@ ok('gráficos do PDF saem com fundo branco e texto escuro mesmo no tema escuro')
   ok('vários arquivos: análise antes de confirmar, cancelar não muda nada, projeto guarda a receita e refaz a relação');
 }
 
+// 17. Modo offline e HTML autônomo: nenhuma requisição externa em CSV, PDF, XLSX, relatório e HTML compartilhado; dado com </script> não executa
+{
+  const { fileURLToPath } = await import('node:url');
+  const fx = (n) => fileURLToPath(new URL('../test/fixtures/' + n, import.meta.url));
+  const NL = String.fromCharCode(10);
+  const perigo = '</script><script>window.__x=1</script>';
+  const linhas = ['nome;valor;uf'];
+  for (let i = 0; i < 12; i++) linhas.push((i === 0 ? 'a' + perigo : 'n' + i) + ';' + (10 + i) + ';' + ['SP', 'RJ', 'MG'][i % 3]);
+  writeFileSync(join(dir, 'offline.csv'), linhas.join(NL));
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+  const externas = [];
+  await ctx.route(/^https?:/, (r) => {
+    externas.push(r.request().url());
+    return r.abort();
+  });
+  const nova = async () => {
+    const p = await ctx.newPage();
+    p.on('pageerror', (e) => errors.push(e.message));
+    await p.goto(app);
+    return p;
+  };
+  // ponte do aplicativo de desktop: o Electron entrega o arquivo em base64
+  const po = await nova();
+  const b64 = readFileSync(join(dir, 'offline.csv')).toString('base64');
+  await po.evaluate(([n, b]) => window.__abrirArquivo(n, b), ['offline.csv', b64]);
+  await po.waitForSelector('#preview:not([hidden]) h2');
+  await po.click('#preview button.primary');
+  await po.waitForSelector('#kpis .kpi');
+  assert.ok((await po.locator('#tbl').innerText()).includes('window.__x=1'), 'o dado aparece como texto na tabela');
+  const [rep] = await Promise.all([po.waitForEvent('download', { timeout: 60000 }), po.click('#btnReport')]);
+  assert.ok((await rep.suggestedFilename()).endsWith('.pdf'));
+  const [xl2] = await Promise.all([po.waitForEvent('download'), po.click('#btnXlsx')]);
+  assert.ok((await xl2.suggestedFilename()).endsWith('.xlsx'));
+  const [cs] = await Promise.all([po.waitForEvent('download'), po.click('#btnCsv')]);
+  assert.ok((await cs.suggestedFilename()).endsWith('.csv'));
+  // HTML compartilhável: abre sozinho, sem rede, e o dado não vira script
+  await po.click('#btnHtml');
+  await po.fill('#shTitle', 'Offline');
+  await po.fill('#shFile', 'offline');
+  const [sh] = await Promise.all([po.waitForEvent('download'), po.click('#shGo')]);
+  await sh.saveAs(join(dir, 'offline.html'));
+  const ps = await ctx.newPage();
+  ps.on('pageerror', (e) => errors.push(e.message));
+  await ps.goto(pathToFileURL(join(dir, 'offline.html')).href);
+  await ps.waitForSelector('#kpis .kpi');
+  assert.equal(await ps.evaluate(() => window.__x), undefined, 'o dado com </script> não executou no HTML compartilhado');
+  assert.ok((await ps.locator('#tbl').innerText()).includes('window.__x=1'));
+  // PDF e Excel importados (leitor de PDF e de planilha também sem rede)
+  for (const f of ['tabela-meses.pdf', 'planilha.xlsx']) {
+    const pi = await nova();
+    await pi.setInputFiles('#file', fx(f));
+    await pi.waitForSelector('#preview:not([hidden]) h2', { timeout: 30000 });
+    await pi.click('#preview button.primary');
+    await pi.waitForSelector('#kpis .kpi, #charts .chart', { timeout: 30000 });
+    await pi.close();
+  }
+  assert.deepEqual(externas, [], 'nenhuma requisição externa: ' + externas.join(', '));
+  await ctx.close();
+  ok('modo offline: CSV, PDF, XLSX, relatório e HTML compartilhável sem nenhuma requisição externa; dado com </script> não executa');
+}
+
 assert.deepEqual(errors, [], 'sem erros de página: ' + errors.join(' | '));
 await browser.close();
 console.log(log.join('\n'));

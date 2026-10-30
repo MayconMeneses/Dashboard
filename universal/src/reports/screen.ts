@@ -6,7 +6,9 @@ import { delimiterName } from '../csv.js';
 import { snapshotPng } from '../design/chartTheme.js';
 import { currentMode } from '../design/theme.js';
 import type { LocaleInfo } from '../profile.js';
-import { buildPdfDoc, describeState, formatBytes } from '../report.js';
+import { applyTemplate, buildPdfDoc, describeState, formatBytes } from '../report.js';
+import type { ReportTemplate } from '../report.js';
+import { buildTerritory } from './territory.js';
 import type { ReportChart, ReportModel } from '../report.js';
 import { kpis, qualityAlerts } from '../suggest.js';
 import type { ChartSpec, ColProfile, Dataset, Table } from '../types.js';
@@ -90,6 +92,7 @@ export function buildReportModel(ctx: ReportContext): ReportModel {
   criteria.push('Células em branco ou com marcadores de ausência (n/d, -, s/i) são “sem dado” e nunca entram como zero.', 'Somas e médias usam só as células com valor; uma série sem nenhum valor num período aparece como lacuna.');
   const limits = [...qualityAlerts(full, ctx.prof, ctx.loc).map((a) => a.text), ...(info?.notes ?? [])];
   const cols = t.columns.slice(0, 8);
+  const territory = buildTerritory(t, ctx.kpiProf);
   return {
     title: table.title ?? table.name,
     generatedAt: new Date().toLocaleString('pt-BR'),
@@ -102,6 +105,7 @@ export function buildReportModel(ctx: ReportContext): ReportModel {
     criteria,
     limits,
     reproduce: `Abra o mesmo arquivo no Dashboard Universal ${__APP_VERSION__} com as mesmas opções de leitura e os mesmos ajustes listados na seção 1, ou use o HTML compartilhado gerado a partir desta análise. Este relatório descreve o estado do painel no momento da geração.`,
+    ...(territory ? { territory } : {}),
     sample: { columns: cols, rows: t.rows.slice(0, 40).map((r) => cols.map((c) => cellText(r[c]))) },
   };
 }
@@ -184,7 +188,8 @@ export async function openReport(ctx: ReportContext, fail: (m: string) => void) 
   btn.disabled = true;
   btn.textContent = 'Gerando PDF…';
   try {
-    const model = buildReportModel(ctx);
+    const tpl = (($('reportTpl') as HTMLSelectElement | null)?.value ?? 'completo') as ReportTemplate;
+    const model = applyTemplate(buildReportModel(ctx), tpl);
     const [{ default: pdfMake }, vfs] = await Promise.all([import('pdfmake/build/pdfmake'), import('pdfmake/build/vfs_fonts')]);
     (pdfMake as unknown as { addVirtualFileSystem: (v: unknown) => void }).addVirtualFileSystem((vfs as { default?: unknown }).default ?? vfs);
     const base = dataset.fileName.replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]+/g, '-');

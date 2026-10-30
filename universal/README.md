@@ -15,7 +15,7 @@ Projeto independente do painel de triatomíneos (não altera nada dele). Recebe 
 - **Excel (.xlsx):** exporta os dados visíveis (números como números, datas, unidades) e uma aba “Origem e ajustes”.
 - **Acessibilidade:** paleta amigável a daltonismo, gráficos com tabela de dados equivalente, mapa de calor com legenda, foco visível, contraste mínimo 4,5:1 testado, rótulos para leitores de tela.
 - **Relatórios em Word com quadros por ano:** lê números sem alterar (1.920 continua 1.920), células mescladas, cabeçalhos de dois níveis, cria a coluna “Ano” a partir do título do quadro, junta os quadros por ano num quadro geral, desenha colunas por período (todos os indicadores, % separado) com linha de taxa por cima, roscas por ano, colunas empilhadas, variação e radar, mostra a variação do primeiro ao último ano e confere taxas (ex.: Cobertura = Pesquisadas ÷ Meta × 100).
-- **Relatório (PDF):** baixa direto um PDF de verdade (texto selecionável, tabelas, imagens dos gráficos em alta resolução, páginas numeradas e rodapé), gerado no próprio painel com pdfmake — sem diálogo de impressão. Se a geração falhar, abre a versão para impressão como plano B. O documento traz origem (arquivo, SHA-256, data da leitura), registros lidos/ignorados/analisados, filtros e ajustes, indicadores, gráficos, critérios de cálculo, limitações e como reproduzir. Os mapas ficam de fora (dependem de imagens externas); o mapa de calor sai como tabela colorida.
+- **Relatório (PDF):** baixa direto um PDF de verdade (texto selecionável, tabelas, imagens dos gráficos em alta resolução, páginas numeradas e rodapé), gerado no próprio painel com pdfmake — sem diálogo de impressão. Se a geração falhar, abre a versão para impressão como plano B. O documento traz origem (arquivo, SHA-256, data da leitura), registros lidos/ignorados/analisados, filtros e ajustes, indicadores, gráficos, critérios de cálculo, limitações e como reproduzir. Os mapas ficam de fora; para dados com coordenadas ou formas o PDF traz o “Anexo B. Território” (unidade, geometria, medida e classe por quantis) e o mapa de calor sai como tabela colorida. Há dois modelos: relatório completo e resumo (até 4 gráficos; filtros, critérios e limitações continuam).
 - **Qualidade:** alertas de duplicatas, colunas vazias/constantes, muitas células vazias e valores muito distantes; dispersão automática quando há correlação ≥ 0,5 entre duas colunas numéricas.
 - **Correção manual:** na tabela *Colunas reconhecidas* dá para trocar o tipo de qualquer coluna e os gráficos se refazem.
 - **Planilhas de formulário:** títulos soltos e blocos separados por linhas em branco viram uma tabela por bloco (selecionável no topo); linhas de título acima do cabeçalho são ignoradas. Tabelas em que cada linha é um rótulo único (ex.: ciclos) geram um gráfico por indicador, na ordem do arquivo.
@@ -34,7 +34,11 @@ Projeto independente do painel de triatomíneos (não altera nada dele). Recebe 
 - **Positividade sobre as colunas:** quando há situações como confirmados/descartados/notificados, as colunas por mês ganham uma linha (eixo da direita, em %) com a positividade do mesmo mês; um seletor troca a definição (confirmados ÷ concluídos, ou confirmados ÷ notificados). Meses sem casos concluídos ficam sem ponto (não é zero).
 - **Cada gráfico se explica:** descrição do que mostra, frase de **destaque calculada dos próprios dados** (maior, menor, pico, variação, pontos sem dado) e “Como ler este gráfico”.
 - **Regra de dados:** célula vazia nunca vira zero; aparece como “—” e fica fora das contas.
-- **Privacidade:** o arquivo é processado no seu computador e seus dados não vão para nenhum servidor. Acessos externos que existem: o mapa de fundo (Esri) baixa imagens e revela a região vista (há a opção “Sem mapa de fundo”), e o programa instalado consulta o GitHub para checar atualizações (dá para desligar em Ajuda).
+- **Papel de cada coluna:** além do tipo, o painel deduz o papel (medida, dimensão, tempo, identificador, geográfica…) por regras explícitas e mostra a regra na tabela de colunas e em “Por que este gráfico”. Percentual e taxa usam média (não soma); códigos como CEP não viram medida nem gráfico.
+- **Explorar por conta própria:** escolha agrupar por, medida e cálculo (contagem, soma, média, mediana, mínimo, máximo); combinações sem sentido são recusadas com explicação.
+- **Vários arquivos e relações:** abra vários arquivos juntos (tabelas “arquivo › aba”) e use *Relacionar tabelas*: a análise (cardinalidade, chaves repetidas, linhas sem par, valores que se repetem e inflam somas) aparece antes de confirmar; zeros à esquerda nunca são corrigidos sozinhos. O projeto guarda a receita e refaz a relação ao abrir. Também conta pontos dentro de polígonos.
+- **Geografia real:** GeoJSON (coleção, feição, Multi*, buracos) e KML (rotas, polígonos com furos) preservam a forma; o mapa desenha polígonos, linhas e pontos, colore por medida (quantis, legenda, “sem dado”), mostra densidade em grade e baixa GeoJSON. Só WGS84: outros sistemas de coordenadas geram aviso (não há reprojeção).
+- **Privacidade:** o arquivo é processado no seu computador e seus dados não vão para nenhum servidor. O mapa abre **sem mapa de fundo** (nenhuma requisição externa); a opção “Esri” baixa imagens e revela a região vista, e só é consultada se você escolher. O programa instalado consulta o GitHub para checar atualizações (dá para desligar em Ajuda). Projetos salvos por versões anteriores que traziam a Esri sem escolha registrada abrem sem fundo e avisam.
 - **Compartilhar:** *Baixar HTML compartilhável* gera um único arquivo com os dados embutidos; *Baixar CSV* exporta a tabela.
 
 ```bash
@@ -43,12 +47,13 @@ npm run dev      # desenvolvimento
 npm run build    # gera dist/index.html (arquivo único)
 npm test
 ```
-Próximos passos previstos: filtros interativos, mapa por polígonos e temas por assunto.
+Próximos passos previstos: leitura de Parquet (depende de decidir uma dependência nova), exportar imagem do mapa e temas por assunto.
 
 ## Instaladores (Windows)
 Prontos em [`instaladores/`](instaladores/LEIA-ME.md): versão leve (0,2 MB) e versão completa em 2 partes (junte com `JUNTAR.bat`), que se **atualiza sozinha** pelo GitHub. Para gerar de novo: `desktop/README.md`.
 
 ## Testes
 - `npm run lint` (ESLint) e `npm run typecheck`.
-- `npm test`: testes unitários (leitura de CSV, XLSX, DOCX, PDF, KML/KMZ, GeoJSON, codificação e separador, valores inválidos, datas e números regionais, categorias parecidas, gráficos, tabela e relatório).
-- `npm run build && npm run test:e2e`: teste de ponta a ponta no navegador (prévia, juntar grafias, ordenar/paginar, período, relatório, HTML compartilhável, arquivo de 120 mil linhas). Requer Chromium (`CHROME_PATH`) e o `playwright-core` da raiz do repositório; não roda no CI.
+- `npm test`: testes unitários (leitura de CSV, XLSX, DOCX, PDF, KML/KMZ, GeoJSON, codificação e separador, valores inválidos, datas e números regionais, categorias parecidas, gráficos, agregações, geometrias, junções, tabela, relatório, segurança de release e limite de tamanho dos arquivos de código).
+- `npm run bench`: medições de desempenho (uma execução, em Node); o último resultado fica em [`docs/benchmarks/ultimo.json`](../docs/benchmarks/ultimo.json).
+- `npm run build && npm run test:e2e`: teste de ponta a ponta no navegador (prévia, juntar grafias, ordenar/paginar, período, relatório, HTML compartilhável, arquivo de 120 mil linhas, tema, mapa com polígonos, vários arquivos e relação, modo offline sem requisição externa). Requer Chromium (`CHROME_PATH`) e o `playwright-core` da raiz do repositório; não roda no CI.

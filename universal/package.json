@@ -1,6 +1,6 @@
 {
   "name": "dashboard-universal",
-  "version": "0.7.5",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "test:e2e": "node e2e/e2e.mjs",
-    "lint": "eslint src test"
+    "lint": "eslint src test",
+    "bench": "vitest run --config vitest.bench.config.ts"
   },
   "dependencies": {
     "chart.js": "^4.5.1",

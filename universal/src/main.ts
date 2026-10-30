@@ -477,7 +477,7 @@ function saveProject() {
 async function openProject(f: File) {
   try {
     const p = parseProject(await f.text());
-    carry = { state: p.estado, label: `Projeto “${p.origem.arquivo || f.name}” (salvo em ${p.salvoEm ? new Date(p.salvoEm).toLocaleString('pt-BR') : 'data desconhecida'}, painel ${p.painel || '?'})` };
+    carry = { state: p.estado, label: `Projeto “${p.origem.arquivo || f.name}” (salvo em ${p.salvoEm ? new Date(p.salvoEm).toLocaleString('pt-BR') : 'data desconhecida'}, painel ${p.painel || '?'})${p.migrado ? ' ' + p.migrado.join(' ') : ''}` };
     reset();
     clearPending();
     $('preview').hidden = true;

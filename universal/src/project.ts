@@ -161,6 +161,28 @@ export interface ProjectFile {
   origem: { arquivo: string; sha256?: string; formato?: string; tabela?: string };
   leitura: { encoding?: string; delimiter?: string };
   estado: ProjectState;
+  /** ajustes feitos ao abrir um projeto de versão anterior (mostrados ao usuário) */
+  migrado?: string[];
+}
+
+/** Até esta versão (exclusive) o painel gravava o mapa de fundo da Esri em todo projeto, sem o usuário ter escolhido. */
+export const FUNDO_PADRAO_ATE = '0.8.0';
+
+const older = (v: string, than: string): boolean => {
+  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v.trim());
+  if (!m) return true; // sem versão gravada: projeto antigo
+  const a = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const b = than.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i]! < b[i]!;
+  return false;
+};
+
+/** Preferências de versões anteriores: o fundo da Esri gravado como padrão volta a “sem fundo” (privacidade); quem quiser escolhe de novo. */
+export function migrateState(estado: ProjectState, painel: string): { estado: ProjectState; migrado: string[] } {
+  if (estado.basemap === 'esri' && older(painel, FUNDO_PADRAO_ATE)) {
+    return { estado: { ...estado, basemap: 'none' }, migrado: ['O mapa de fundo da Esri (que acessa a internet) deixou de ser o padrão e este projeto antigo o trazia sem escolha registrada; ele abre sem mapa de fundo. Escolha “Esri” no mapa se quiser.'] };
+  }
+  return { estado, migrado: [] };
 }
 
 export function serializeProject(p: Omit<ProjectFile, 'tipo' | 'versao'>): string {
@@ -178,5 +200,8 @@ export function parseProject(text: string): ProjectFile {
   if (j.tipo !== PROJECT_KIND) throw new Error('Este arquivo não é um projeto do Dashboard Universal.');
   if (typeof j.versao !== 'number' || j.versao > 1) throw new Error('Este projeto foi salvo por uma versão mais nova do painel; atualize o painel para abri-lo.');
   if (!j.estado || typeof j.estado !== 'object') throw new Error('O projeto está sem as configurações (campo “estado”).');
-  return { tipo: PROJECT_KIND, versao: 1, salvoEm: String(j.salvoEm ?? ''), painel: String(j.painel ?? ''), origem: { arquivo: String(j.origem?.arquivo ?? ''), ...(j.origem?.sha256 ? { sha256: String(j.origem.sha256) } : {}), ...(j.origem?.formato ? { formato: String(j.origem.formato) } : {}), ...(j.origem?.tabela ? { tabela: String(j.origem.tabela) } : {}) }, leitura: { ...(j.leitura?.encoding ? { encoding: String(j.leitura.encoding) } : {}), ...(j.leitura?.delimiter ? { delimiter: String(j.leitura.delimiter) } : {}) }, estado: j.estado as ProjectState };
+  return { tipo: PROJECT_KIND, versao: 1, salvoEm: String(j.salvoEm ?? ''), painel: String(j.painel ?? ''), origem: { arquivo: String(j.origem?.arquivo ?? ''), ...(j.origem?.sha256 ? { sha256: String(j.origem.sha256) } : {}), ...(j.origem?.formato ? { formato: String(j.origem.formato) } : {}), ...(j.origem?.tabela ? { tabela: String(j.origem.tabela) } : {}) }, leitura: { ...(j.leitura?.encoding ? { encoding: String(j.leitura.encoding) } : {}), ...(j.leitura?.delimiter ? { delimiter: String(j.leitura.delimiter) } : {}) }, ...(() => {
+    const r = migrateState(j.estado as ProjectState, String(j.painel ?? ''));
+    return { estado: r.estado, ...(r.migrado.length ? { migrado: r.migrado } : {}) };
+  })() };
 }
