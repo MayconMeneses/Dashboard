@@ -180,6 +180,71 @@ await p3.click('#preview button.primary');
 await p3.waitForSelector('#kpis .kpi', { timeout: 60000 });
 ok(`arquivo com 120 mil linhas abre (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
 
+// 8. Tema: escuro por padrão, troca para claro, preferência lembrada (mesmo contexto = mesmo armazenamento)
+assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+const t1 = await ctx.newPage();
+t1.on('pageerror', (e) => errors.push(e.message));
+await t1.goto(app);
+assert.equal(await t1.evaluate(() => document.documentElement.dataset.theme), 'dark', 'padrão escuro');
+await t1.selectOption('#themeSel', 'light');
+assert.equal(await t1.evaluate(() => document.documentElement.dataset.theme), 'light');
+const t2 = await ctx.newPage();
+t2.on('pageerror', (e) => errors.push(e.message));
+await t2.goto(app);
+assert.equal(await t2.evaluate(() => document.documentElement.dataset.theme), 'light', 'tema claro lembrado');
+assert.equal(await t2.locator('#themeSel').inputValue(), 'light');
+await ctx.close();
+ok('tema escuro por padrão, troca para claro e preferência lembrada');
+
+// 9. Barra lateral: salta para a seção e recolhe
+const y0 = await page.evaluate(() => window.scrollY);
+await page.locator('.sidenav a', { hasText: 'Dados' }).click();
+await page.waitForTimeout(900);
+assert.ok((await page.evaluate(() => window.scrollY)) > y0, 'link "Dados" rolou a página');
+await page.click('#navToggle');
+assert.equal(await page.evaluate(() => document.getElementById('shell').classList.contains('nav-collapsed')), true);
+assert.equal(await page.getAttribute('#navToggle', 'aria-expanded'), 'false');
+await page.click('#navToggle');
+ok('barra lateral: links levam à seção e o menu recolhe/expande');
+
+// 10. Imagens dos gráficos no PDF saem em tema claro (texto escuro, fundo branco) mesmo com a tela escura
+await page.evaluate(() => {
+  const o = HTMLCanvasElement.prototype.toDataURL;
+  window.__png = [];
+  HTMLCanvasElement.prototype.toDataURL = function (...a) {
+    const r = o.apply(this, a);
+    window.__png.push(r);
+    return r;
+  };
+});
+await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.click('#btnReport')]);
+const pix = await page.evaluate(async () => {
+  const url = window.__png.find((u) => u.startsWith('data:image/png'));
+  const img = new Image();
+  img.src = url;
+  await img.decode();
+  const c = document.createElement('canvas');
+  c.width = img.width;
+  c.height = img.height;
+  const x = c.getContext('2d');
+  x.drawImage(img, 0, 0);
+  const d = x.getImageData(0, 0, c.width, c.height).data;
+  const near = (i, r, g, b) => Math.abs(d[i] - r) < 4 && Math.abs(d[i + 1] - g) < 4 && Math.abs(d[i + 2] - b) < 4;
+  let darkText = 0;
+  let lightText = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    if (near(i, 0xb7, 0xc8, 0xdd)) lightText++;
+    if (near(i, 0x2c, 0x3e, 0x57)) darkText++;
+  }
+  return { corner: [d[0], d[1], d[2], d[3]], darkText, lightText };
+});
+assert.deepEqual(pix.corner, [255, 255, 255, 255], 'fundo do gráfico no PDF é branco opaco');
+assert.ok(pix.darkText > 50, 'texto escuro presente: ' + pix.darkText);
+assert.ok(pix.lightText < 10, 'sem texto claro do tema escuro: ' + pix.lightText);
+assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark', 'tela continua escura');
+ok('gráficos do PDF saem com fundo branco e texto escuro mesmo no tema escuro');
+
 assert.deepEqual(errors, [], 'sem erros de página: ' + errors.join(' | '));
 await browser.close();
 console.log(log.join('\n'));

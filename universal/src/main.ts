@@ -8,6 +8,10 @@ import type { ParseOptions } from './parse.js';
 import { inferLocale, locale, profileTable, toNumber } from './profile.js';
 import type { LocaleInfo } from './profile.js';
 import { csvField, delimiterName } from './csv.js';
+import { printCharts, setChartMode, snapshotPng } from './design/chartTheme.js';
+import { PALETTE } from './design/palette.js';
+import { initShell } from './app/shell.js';
+import { currentMode, initTheme, setPrinting } from './design/theme.js';
 import type { DelimiterChoice, Encoding } from './csv.js';
 import { buildPdfDoc, describeState, formatBytes } from './report.js';
 import { compileFormula, evalAggregate, evalRow, FormulaError } from './formula.js';
@@ -27,7 +31,6 @@ import { heatCell, maxOf } from './util.js';
 Chart.register(...registerables);
 pdfjs.GlobalWorkerOptions.workerPort = new PdfWorker();
 const PDF = { pdfjs: pdfjs as unknown as NonNullable<Parameters<typeof parseFile>[2]>['pdfjs'] };
-const PALETTE = ['#0072B2', '#D55E00', '#009E73', '#E69F00', '#CC79A7', '#56B4E9', '#44AA99', '#882255', '#999933', '#332288'];
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 let dataset: Dataset | null = null;
@@ -962,7 +965,7 @@ function openPrintReport() {
     clone.querySelectorAll('canvas').forEach((cv, i) => {
       const img = document.createElement('img');
       try {
-        img.src = (orig[i] as HTMLCanvasElement).toDataURL('image/png');
+        img.src = snapshotPng(charts, orig[i] as HTMLCanvasElement, currentMode());
       } catch {
         /* sem imagem */
       }
@@ -1041,14 +1044,7 @@ function collectChart(card: HTMLElement): ReportChart {
       const inst = charts.find((c) => c.canvas === cv);
       let url = '';
       try {
-        if (inst) {
-          const prev = inst.options.devicePixelRatio;
-          inst.options.devicePixelRatio = 2.5;
-          inst.resize();
-          url = (cv as HTMLCanvasElement).toDataURL('image/png');
-          inst.options.devicePixelRatio = prev;
-          inst.resize();
-        } else url = (cv as HTMLCanvasElement).toDataURL('image/png');
+        url = snapshotPng(charts, cv as HTMLCanvasElement, currentMode(), inst ? 2.5 : undefined);
       } catch {
         /* sem imagem */
       }
@@ -1133,6 +1129,11 @@ function openShareDialog() {
 }
 
 function init() {
+  initTheme((m) => {
+    setChartMode(m);
+    if (table) render();
+  });
+  initShell();
   const drop = $('drop');
   const file = $<HTMLInputElement>('file');
   drop.onclick = () => file.click();
@@ -1189,8 +1190,13 @@ function init() {
   $('btnXlsx').onclick = downloadExcel;
   $('btnReport').onclick = openReport;
   window.addEventListener('beforeprint', () => {
-    charts.forEach((c) => c.resize());
+    setPrinting(true);
+    printCharts(charts, true, 'light');
     maps.forEach((mp) => mp.invalidateSize());
+  });
+  window.addEventListener('afterprint', () => {
+    setPrinting(false);
+    printCharts(charts, false, currentMode());
   });
   $('btnCsv').onclick = () => table && download(`${table.name}.csv`, 'text/csv;charset=utf-8', '﻿' + [table.columns.map(csvCell).join(';'), ...view().rows.map((r) => table!.columns.map((c) => csvCell(r[c])).join(';'))].join('\n'));
 

@@ -1,0 +1,59 @@
+/* Tokens semânticos do Dashboard Universal. Tema escuro (padrão) e claro; o JS grava data-theme em <html>. */
+:root,
+:root[data-theme='dark'] {
+  --bg-canvas: #090F1D;
+  --bg-sidebar: #0C1527;
+  --bg-surface: #111E33;
+  --bg-raised: #172840;
+  --border-subtle: #28405D;
+  --border-control: #6F8DB3;
+  --text-primary: #F3F8FF;
+  --text-secondary: #B7C8DD;
+  --text-muted: #91A8C2;
+  --accent-blue: #269DFF;
+  --accent-cyan: #28D9E8;
+  --accent-purple: #A48BFF;
+  --on-accent: #06101F;
+  --status-success: #40D7AC;
+  --status-warning: #FFC06C;
+  --status-danger: #FF7586;
+  --danger-bg: #3A1620;
+  --focus-ring: #73D7FF;
+  --radius-card: 16px;
+  --radius-control: 10px;
+  --shadow-card: 0 8px 28px rgba(0, 0, 0, .22);
+  --map-filter: brightness(.82) contrast(1.05);
+}
+
+:root[data-theme='light'] {
+  --bg-canvas: #F1F5FB;
+  --bg-sidebar: #FFFFFF;
+  --bg-surface: #FFFFFF;
+  --bg-raised: #EAF0F9;
+  --border-subtle: #C9D5E6;
+  --border-control: #6A7F9C;
+  --text-primary: #0F1B2D;
+  --text-secondary: #2C3E57;
+  --text-muted: #53657F;
+  --accent-blue: #0B63C8;
+  --accent-cyan: #00718A;
+  --accent-purple: #5B3FD0;
+  --on-accent: #FFFFFF;
+  --status-success: #0B7A5C;
+  --status-warning: #8A5300;
+  --status-danger: #B3263A;
+  --danger-bg: #FDE8EB;
+  --focus-ring: #0B63C8;
+  --shadow-card: 0 4px 16px rgba(15, 27, 45, .08);
+  --map-filter: none;
+}
+
+/* nomes curtos usados pelo restante do CSS */
+:root {
+  --bg: var(--bg-canvas);
+  --surface: var(--bg-surface);
+  --text: var(--text-primary);
+  --muted: var(--text-muted);
+  --border: var(--border-subtle);
+  --accent: var(--accent-blue);
+}
