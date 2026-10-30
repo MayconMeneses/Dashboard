@@ -1,8 +1,9 @@
 import { XMLParser } from 'fast-xml-parser';
-import { unzipSync, strFromU8 } from 'fflate';
+import { strFromU8 } from 'fflate';
 import Papa from 'papaparse';
 import readXlsx from 'read-excel-file/browser';
 import { supportedList } from './formats.js';
+import { conferirTamanhosDeclarados, lerEntradaLimitada } from './zipSeguro.js';
 import { attachGeometry, GEO_ID, isGeoJson } from './geo/table.js';
 import { kmlGeometry, readGeoJson } from './geo/read.js';
 import { decodeText, delimiterName, detectDelimiter } from './csv.js';
@@ -248,10 +249,10 @@ function parseKmlText(name: string, xml: string): Table[] {
 }
 
 async function parseKmz(name: string, bytes: Uint8Array): Promise<Table[]> {
-  const files = unzipSync(bytes, { filter: (f) => f.name.toLowerCase().endsWith('.kml') && f.originalSize < MAX_BYTES });
-  const kml = Object.keys(files).find((k) => k.toLowerCase().endsWith('.kml'));
+  // o limite vale para o que é entregue de verdade (o tamanho declarado no ZIP pode mentir)
+  const kml = lerEntradaLimitada(bytes, (n) => n.toLowerCase().endsWith('.kml'), MAX_BYTES);
   if (!kml) throw new Error('KMZ sem arquivo .kml.');
-  return parseKmlText(name, strFromU8(files[kml]!));
+  return parseKmlText(name, strFromU8(kml));
 }
 
 /** Lê qualquer formato suportado e devolve as tabelas encontradas (uma por aba/lista). */
@@ -329,6 +330,7 @@ export async function parseFile(fileName: string, bytes: Uint8Array, opts: Parse
       throw new Error('O formato antigo .doc (Word 97-2003) não é suportado. Abra no Word e use Salvar como → Documento do Word (.docx).');
     case 'xlsx': {
       const blob = new Blob([bytes as BlobPart]);
+      conferirTamanhosDeclarados(bytes, 60 * 1024 * 1024, 200 * 1024 * 1024); // uma parte gigante travaria a leitura por minutos
       const sheets = await readXlsx(blob);
       tables = sheets.flatMap((sh) => toTables(sh.sheet, sh.data as unknown as unknown[][]));
       break;

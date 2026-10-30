@@ -16,7 +16,7 @@ export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpe
   const period = !!labelCol?.period;
   const cats = prof.filter((p) => p.type === 'category' && p.unique >= 2 && p.unique < p.filled).sort((a, b) => a.unique - b.unique);
   // código numérico (CEP, CPF, IBGE…) não é medida: somar, tirar média ou fazer histograma dele não tem significado
-  const nums = prof.filter((p) => (p.type === 'number' || p.type === 'integer') && p.unique > 1 && semOf(p.name)?.role !== 'identifier');
+  const nums = prof.filter((p) => (p.type === 'number' || p.type === 'integer') && p.unique > 1 && !['identifier', 'geo'].includes(semOf(p.name)?.role ?? ''));
   const dates = prof.filter((p) => p.type === 'date');
   const bools = prof.filter((p) => p.type === 'boolean');
   const lat = prof.find((p) => p.type === 'lat');

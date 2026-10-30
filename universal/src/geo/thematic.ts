@@ -1,3 +1,7 @@
+/** Rampa sequencial (clara → escura) legível sobre o mapa claro e o escuro; “sem dado” é cinza, nunca a classe mais baixa. */
+export const RAMP = ['#d6e6f5', '#9cc3e6', '#5b9bd5', '#2b6cb0', '#12417a'];
+export const NO_DATA = '#8a97a8';
+
 /** Quebras de classe por quantis (mesma quantidade de feições por classe). Devolve até k−1 limites crescentes; valor ≤ limite cai na classe do limite. */
 export function classBreaks(values: number[], k: number): number[] {
   const v = values.filter(Number.isFinite).sort((a, b) => a - b);

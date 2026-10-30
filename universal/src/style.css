@@ -7,7 +7,7 @@ button,select,input[type=search]{font:inherit;padding:6px 10px;border:1px solid 
 button{cursor:pointer}button:hover{border-color:var(--accent)}
 main{max-width:1200px;margin:0 auto;padding:16px}
 .drop{border:2px dashed var(--border-control);border-radius:var(--radius-card);padding:48px 16px;text-align:center;cursor:pointer;background:var(--surface)}
-.drop.over,.drop:focus{border-color:var(--accent);outline:none}
+.drop.over,.drop:focus{border-color:var(--accent)}
 .muted{color:var(--muted);font-size:.9em}
 #msg:not(:empty){margin:12px 0;padding:10px 12px;border-radius:8px;background:var(--danger-bg);color:var(--status-danger);border:1px solid var(--status-danger)}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
@@ -18,7 +18,7 @@ main{max-width:1200px;margin:0 auto;padding:16px}
 .chart header{display:flex;justify-content:space-between;gap:8px}.chart h3{margin:0;font-size:.95rem}
 .chart p{margin:2px 0 8px;color:var(--muted);font-size:.85rem}
 .chart .box{position:relative;height:280px}.chart .map{height:320px;border-radius:8px}
-.chart .x{border:0;background:none;color:var(--muted);padding:0 4px}
+.chart .x{border:0;background:none;color:var(--muted);padding:0 4px;min-width:24px;min-height:24px}
 .tablewrap{overflow:auto;max-height:420px;margin-top:8px}
 table{border-collapse:collapse;width:100%;font-size:.85rem}th,td{padding:4px 8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
 th{position:sticky;top:0;background:var(--surface)}
@@ -37,7 +37,7 @@ dialog label{display:block;margin:10px 0;font-size:.9rem}dialog input[type=text]
 .dlg-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}button.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 .shared #btnNew,.shared #btnHtml,.shared #drop,.shared #btnOpenProj,.shared #btnUpdate{display:none!important}
 .small{font-size:.82rem}.datebar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px;font-size:.9rem}.datebar input[type=date]{padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font:inherit}
-button.mini{padding:2px 8px;font-size:.8rem;margin-left:4px}button.sortbtn{border:0;background:none;padding:0;font:inherit;font-weight:600;cursor:pointer;color:inherit;white-space:nowrap}
+button.mini{padding:2px 8px;font-size:.8rem;margin-left:4px}button.sortbtn{border:0;background:none;padding:2px 4px;min-width:24px;min-height:24px;font:inherit;font-weight:600;cursor:pointer;color:inherit;white-space:nowrap}
 .pager{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}.pager button:disabled{opacity:.5;cursor:default}
 #preview h2{margin-top:0}#preview dl{display:grid;grid-template-columns:max-content 1fr;gap:2px 12px;margin:8px 0}#preview dt{color:var(--muted)}#preview dd{margin:0;word-break:break-all}
 #preview fieldset{border:1px solid var(--border);border-radius:8px;margin:12px 0;padding:8px 12px}#preview legend{padding:0 6px;font-weight:600}#preview label{display:inline-block;margin:4px 12px 4px 0;font-size:.9rem}
@@ -52,9 +52,9 @@ button.mini{padding:2px 8px;font-size:.8rem;margin-left:4px}button.sortbtn{borde
 .metric-form{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.metric-form input,td input.cell-in{padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font:inherit}
 .metric-form .wide{flex:1 1 280px}.metric-form .short{width:130px}input.short{width:110px}
 .chips-cols{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}
-.data-alt{margin-top:8px;font-size:.85rem}.data-alt summary{cursor:pointer;color:var(--accent)}
+.data-alt{margin-top:8px;font-size:.85rem}.data-alt button.pick{border:0;background:none;color:var(--accent);font:inherit;font-weight:600;text-align:left;cursor:pointer;min-height:24px;min-width:24px;padding:2px 6px;text-decoration:underline}.data-alt summary{cursor:pointer;color:var(--accent)}
 .heat-legend{display:flex;gap:8px;align-items:center;font-size:.8rem;margin-top:6px}.heat-legend .grad{display:inline-block;width:120px;height:10px;border-radius:5px;background:linear-gradient(90deg,rgb(235,244,250),rgb(23,125,184));border:1px solid var(--border)}
-:focus-visible{outline:3px solid var(--focus-ring);outline-offset:2px}
+:focus-visible,input[type='date']:focus-within{outline:3px solid var(--focus-ring);outline-offset:2px}
 
 .top h1{display:flex;align-items:center;gap:10px}.top .logo{width:36px;height:36px;object-fit:contain}
 .drop{position:relative;isolation:isolate;min-height:640px;display:flex;flex-direction:column;justify-content:center;align-items:center;overflow:hidden}
@@ -84,3 +84,5 @@ body:has(#app:not([hidden])) .sidenav{display:flex}
 @media (max-width:900px){.shell{display:block}.sidenav{position:static;height:auto;width:auto;flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--border);padding:6px 8px}.navlinks{flex-direction:row}.nav-collapsed .sidenav{width:auto}.nav-collapsed .sidenav a span{display:inline}.navtoggle{display:none}.top{position:static}}
 @media print{.sidenav,.top-tools{display:none!important}.shell{display:block}.top{position:static}.kpi b{color:inherit;background:none}}
 .map-legend{list-style:none;display:flex;flex-wrap:wrap;gap:4px 14px;margin:2px 0 8px;padding:0;font-size:.82rem;color:var(--muted)}.map-legend .swatch{display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid var(--border);vertical-align:-2px}
+/* alvos de pelo menos 24 × 24 px (WCAG 2.5.8) */
+summary{min-height:24px;padding:3px 0;box-sizing:border-box}

@@ -12,6 +12,7 @@ import { printCharts, setChartMode } from './design/chartTheme.js';
 import { PALETTE } from './design/palette.js';
 import { $, download, el } from './app/dom.js';
 import { columnInfo, filterNote } from './app/colsInfo.js';
+import { filtrarPorRotulo } from './app/filtro.js';
 import { explorerCard } from './app/explorer.js';
 import { cellText, TYPE_NAMES } from './app/format.js';
 import { initShell } from './app/shell.js';
@@ -120,6 +121,14 @@ const host: ChartHost = {
   toggleFilter: (col, value) => toggleFilter(col, value),
 };
 
+/** Filtro por rótulo de gráfico: clique na barra ou botão da tabela de dados. */
+const pickLabel = (spec: ChartSpec, rotulo: string) =>
+  filtrarPorRotulo(spec, rotulo, {
+    periodoDe: dateRange.from,
+    aplicarPeriodo: (r) => ((dateRange = r), (page = 1), render()),
+    alternarFiltro: toggleFilter,
+  });
+
 function drawChart(spec0: ChartSpec, t: Table): HTMLElement {
   let spec = spec0;
   const card = el('div', { className: 'chart' });
@@ -188,7 +197,7 @@ function drawChart(spec0: ChartSpec, t: Table): HTMLElement {
 
   const canvas = el('canvas', { role: 'img', ariaLabel: `${spec.title}. ${insight}` });
   card.append(el('div', { className: 'box' }, canvas));
-  card.append(dataAlt(d.labels, d.datasets ?? [{ label: spec.y ?? 'Valor', values: d.values }]));
+  card.append(dataAlt(d.labels, d.datasets ?? [{ label: spec.y ?? 'Valor', values: d.values }], spec.x && clickFilters(spec) ? (l) => pickLabel(spec, l) : undefined));
   const donut = shape === 'donut';
   const horizontal = shape === 'hbar';
   const percent = shape === 'percent';
@@ -227,17 +236,7 @@ function drawChart(spec0: ChartSpec, t: Table): HTMLElement {
         maintainAspectRatio: false,
         onClick: (_e, els) => {
           const i = els[0]?.index;
-          if (i == null || !spec.x || labels[i] == null || !clickFilters(spec)) return;
-          const mm = spec.kind === 'line' ? /^(\d{4})-(\d{2})$/.exec(labels[i]!) : null;
-          if (mm) {
-            // gráfico de linha por mês: o clique vira filtro de período daquele mês
-            const last = new Date(Date.UTC(Number(mm[1]), Number(mm[2]), 0)).getUTCDate();
-            dateRange = dateRange.from === `${mm[1]}-${mm[2]}-01` ? {} : { col: spec.x, from: `${mm[1]}-${mm[2]}-01`, to: `${mm[1]}-${mm[2]}-${String(last).padStart(2, '0')}` };
-            page = 1;
-            render();
-            return;
-          }
-          toggleFilter(spec.x, labels[i]!);
+          if (i != null && labels[i] != null) pickLabel(spec, labels[i]!);
         },
         onHover: (e, els) => {
           const c = e.native?.target as HTMLElement | null;

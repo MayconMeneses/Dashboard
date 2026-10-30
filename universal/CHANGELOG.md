@@ -12,6 +12,8 @@ O manifesto de atualização (`atualizacao/versao.json`) continua em 0.7.5: publ
 - **Geografia real**: polígonos, linhas e pontos preservados (GeoJSON e KML), camadas, mapa temático por quantis, densidade em grade, validação de coordenadas e CRS, exportação GeoJSON.
 - **Vários arquivos e relações entre tabelas** com análise e confirmação antes de criar; a relação é guardada como receita no projeto; contagem de pontos por polígono.
 - **Relatório PDF** com dois modelos (completo e resumo) e anexo territorial; fontes com SHA-256 quando há vários arquivos.
+- **Atualização ao abrir (programa 0.4.0):** o aplicativo instalado pergunta “Atualizar agora / Depois” assim que abre, se houver painel novo; baixa só depois do “sim”, confere o SHA-256 e reabre o arquivo que estava aberto. Quem tem o programa 0.3.0 só recebe isso instalando o 0.4.0.
+- **Acessibilidade medida por teste:** teclado completo, foco visível, alvos ≥ 24 px, sem rolagem lateral até 320 px, filtro cruzado por teclado, tabela equivalente ao mapa, paleta distinguível em daltonismo.
 - **Modo offline verificado** por teste: nenhuma requisição externa em CSV, PDF, XLSX, relatório e HTML compartilhado.
 
 ### Correções
@@ -19,9 +21,15 @@ O manifesto de atualização (`atualizacao/versao.json`) continua em 0.7.5: publ
 - Exportação CSV neutraliza células que começam com `=`, `+`, `-`, `@`.
 - Dica do mapa executava HTML vindo do arquivo (**falha de segurança presente na 0.7.5 publicada**).
 - Gráficos do PDF/impressão saíam ilegíveis no tema escuro.
+- Download da atualização acima do limite era tratado como completo e gerava exceção no processo principal.
+- ZIP que mente sobre o tamanho (KMZ, DOCX) burlava o limite; XLSX com parte gigante travava por mais de um minuto.
+- `sku`, `lat_origem` e valores como “0001” entravam como medida (total de código, total de latitude).
+- Paleta de gráficos indistinguível para daltônicos (laranja × dourado).
 - Média de mês sem registro virava 0%; o destaque falava em “% do total” para médias; indicador “Total de” somava CEP e percentuais.
 
 ### Mudanças de comportamento (leia antes de atualizar)
+- **Paleta de gráficos nova** (as cores das séries mudam).
+- **Colunas de código e de coordenada** (`sku`, `lat_…`, zeros à esquerda) deixam de ser medida.
 - **Mapa de fundo padrão: nenhum.** A Esri só entra se escolhida. Projetos antigos que traziam a Esri sem escolha registrada abrem sem fundo e avisam.
 - **Latitude/longitude de polígonos e rotas**: agora o centroide ponderado por área/comprimento (antes, média dos vértices); valores mudam em arquivos poligonais.
 - **Novas colunas** em GeoJSON/KML: `id_geom` e `geometria`.

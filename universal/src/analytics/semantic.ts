@@ -18,7 +18,23 @@ export interface Semantic {
   period?: boolean;
 }
 
-const CODE_NAME = /(^|[\s_.-])(cep|cpf|cnpj|rg|telefone|fone|celular|matr[ií]cula|ibge|c[oó]digo|cod|id)($|[\s_.-])/i;
+const CODE_NAME = /(^|[\s_.-])(cep|cpf|cnpj|rg|telefone|fone|celular|matr[ií]cula|ibge|c[oó]digo|cod|id|sku|ean|gtin|pedido|protocolo|processo|inscri[cç][aã]o|nf|nfe)($|[\s_.-])/i;
+/** nome que indica coordenada (lat_origem, longitude_destino…): vale quando os valores cabem em graus */
+const COORD_NAME = /(^|[\s_.-])(lat|latitude|lon|lng|long|longitude)($|[\s_.-])/i;
+
+/** Valores como “0001” ou “01310” (zeros à esquerda): código, não quantidade — somar “01310” com “00042” não tem sentido. */
+function temZerosAEsquerda(t: Table, name: string): boolean {
+  let n = 0;
+  let com = 0;
+  for (const r of t.rows) {
+    const v = r[name];
+    if (typeof v !== 'string' || !v.trim()) continue;
+    n++;
+    if (/^0\d+$/.test(v.trim())) com++;
+    if (n >= 200) break;
+  }
+  return n > 0 && com / n >= 0.5;
+}
 const PERCENT_NAME = /(%|percentual|porcentagem|propor[cç][aã]o|taxa|[ií]ndice|cobertura|raz[aã]o)/i;
 const CURRENCY_NAME = /(valor|pre[cç]o|custo|receita|faturamento|sal[aá]rio|despesa|r\$)/i;
 const COUNT_NAME = /(qtd|quant|total|n[úu]mero de|casos|[óo]bitos|nascidos|habitantes|popula[cç][aã]o)/i;
@@ -52,9 +68,15 @@ export function semanticOf(p: ColProfile, t: Table, forced: Record<string, ColTy
     say('Quase todos os valores são distintos: identifica o registro, não é medida.');
   } else if (p.type === 'number' || p.type === 'integer') {
     const sample = firstFilled(t, p.name);
-    if (CODE_NAME.test(p.name) && (p.min ?? 0) >= 0) {
+    if (COORD_NAME.test(p.name) && (p.min ?? 0) >= -180 && (p.max ?? 0) <= 180) {
+      out.role = 'geo';
+      say(`O nome “${p.name}” e os valores (em graus) indicam uma coordenada: não se soma nem se faz média.`);
+    } else if (CODE_NAME.test(p.name) && (p.min ?? 0) >= 0) {
       out.role = 'identifier';
       say(`O nome “${p.name}” indica um código: somar ou tirar média de códigos não tem significado.`);
+    } else if (temZerosAEsquerda(t, p.name)) {
+      out.role = 'identifier';
+      say('Os valores têm zeros à esquerda (como “0001”): é um código, não uma quantidade.');
     } else {
       out.role = 'measure';
       if (p.percent || PERCENT_NAME.test(p.name)) {

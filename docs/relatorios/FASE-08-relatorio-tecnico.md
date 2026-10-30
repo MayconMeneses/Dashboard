@@ -58,3 +58,34 @@ Status: **PENDENTE / parcial**. Entregue e testado: modelos de PDF, anexo territ
 - Modelos de PDF e seção territorial sem cenário e2e de clique/PDF gerado (só lógica pura).
 - Imagem do mapa (exportação cartográfica em imagem): não implementada.
 - Instalação real do `.exe`, associação de arquivos, desinstalação e atualização automática: não exercitadas (ver relatório final).
+
+## Complemento (2026-10-30): pendências resolvidas
+Pedido do dono: “resolva esses problemas para ficar completo” e “sempre que tiver atualização, peça para atualizar assim que abrir”.
+
+### Atualização ao abrir (programa 0.4.0)
+- Lógica separada em `desktop/atualizacao.cjs` (sem Electron, testável) e usada por `main.cjs`. Ao abrir o painel, o programa lê o manifesto na hora (sem os 3 s de espera de antes) e, **se houver painel mais novo, pergunta antes de baixar**: “Atualizar agora / Depois”. “Depois” não baixa nem guarda nada e a pergunta volta na próxima abertura. Aceitando, baixa, confere o SHA-256 e o título, grava, recarrega e **reabre o arquivo que estava aberto**. Sem rede: silêncio. A opção “Verificar atualizações ao abrir” continua no menu, ligada por padrão.
+- Endurecido no mesmo passo: HTTP só para 127.0.0.1/localhost (e só em modo de teste), no máximo 5 redirecionamentos, janela com a cor do tema escuro, e um defeito antigo corrigido: um download acima do limite (ou cortado) **resolvia como se estivesse completo** e ainda gerava uma exceção não tratada no processo principal.
+- Provas: 14 testes unitários com servidor HTTP local (`test/atualizacao.test.ts`); 7 verificações no Electron empacotado (`npm run test:desktop`), com mutação (SHA-256 desligado → o teste do arquivo adulterado falha); teste que garante que todo módulo local do `main.cjs` vai dentro do pacote (`release.test.ts`).
+- **O que isto NÃO muda:** quem já tem o programa 0.3.0 instalado mantém o comportamento antigo (espera 3 s, baixa e depois pergunta; “Depois” não adia de verdade, porque o painel já foi guardado). O novo comportamento só chega com o instalador 0.4.0.
+- Instalador 0.4.0: `universal/desktop/release/Instalador-Dashboard-Universal-0.4.0.exe`, **113.208.779 bytes**, SHA-256 `2933ec692978f6aea9ed62d6e2b720a0a3036c45de30745a4fb1516879f84c06`, sem assinatura. Não foi para o repositório.
+
+### Acessibilidade medida (critério 13) — defeitos achados pelos testes e corrigidos
+| Defeito | Evidência | Correção |
+|---|---|---|
+| Paleta indistinguível para daltônicos: laranja × dourado a CIEDE2000 **2,1** (deuteranopia) e 4,3 (protanopia) | `test/daltonismo.test.ts` | paleta nova por busca: 6 cores a ≥ 13 em todas as visões (8: ≥ 9; 10: ≥ 8), mantendo contraste ≥ 3:1 sobre o escuro e o branco; medidas em `docs/benchmarks/daltonismo.json` |
+| Filtro cruzado só pelo mouse (clique no canvas) | e2e de teclado | botões na tabela de dados de cada gráfico, mesma função do clique (`app/filtro.ts`) |
+| Valores do mapa só no mouse | e2e | tabela equivalente do mapa e região nomeada |
+| Caixa de período (data) sem anel de foco ao entrar pelo Tab | e2e (computed style) | `input[type=date]:focus-within` |
+| Área de arquivo sem contorno de foco (`outline:none`) | e2e (tema claro) | contorno restaurado |
+| Alvos menores que 24×24 px: botão ✕ do gráfico (20×23), botões de ordenar (13–60×20), resumos (20 px) | e2e | tamanho mínimo de 24 px |
+Medido e aprovado: sem rolagem horizontal da página em 1280, 768 (tablet), 640 (equivale a zoom de 200%) e 320 px; 137 paradas do Tab, todas com foco visível; 91 de 91 controles visíveis alcançáveis. Exceção documentada: o link “Leaflet” da atribuição do mapa (link dentro de frase, WCAG 2.5.8).
+
+### Segurança de arquivos
+- **ZIP com tamanho declarado falso:** o filtro por tamanho declarado do `unzipSync` era burlável — um KMZ de 120 MB reais que declarava 100 bytes era descompactado inteiro e um DOCX de 100 MB (limite 60 MB) abria. Agora `src/zipSeguro.ts` descompacta em fatias de 16 KB e para ao passar do limite; as demais entradas nunca são lidas. XLSX: uma parte de 150 MB honesta travava a leitura por **72 s** e falhava; agora é recusada na hora (limites de 60 MB por parte e 200 MB no total, pelo diretório do ZIP). Testes: `test/zipSeguro.test.ts` (11).
+- **Colunas que parecem medida mas são código:** `sku`, `ean`, `pedido`… e valores com zeros à esquerda (“0001”) viram identificador; `lat_origem`, `lon_destino`… viram geográficas. Antes, o primeiro indicador do painel podia ser o “Total de sku” ou o “Total de lat_origem”. Testes: `test/fixtures-dominios.test.ts` (13, com mutação).
+
+### Fixtures
+Produtos, indicadores escolares, finanças e logística criadas (valores à mão). Limites registrados: a média simples de uma taxa difere da taxa ponderada (82,5% × 86,15% nas escolas); dois pares de coordenadas (origem e destino) não geram mapa nem fluxo.
+
+### Não feito
+Instalação real do `.exe`; itens de interface da Fase 2 (alto contraste, esqueletos, arrastar cartões, busca/período no topo, painel lateral de filtros); leitura de Parquet; Observable Plot não lido (HTTP 429). Integrar a branch ao `main` e publicar a 0.8.0 continua sendo decisão do dono (a falha de segurança da 0.7.5 só some para quem atualiza).

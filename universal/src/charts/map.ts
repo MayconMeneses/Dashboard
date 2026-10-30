@@ -64,8 +64,20 @@ export function drawMap(card: HTMLElement, t0: Table, opts: MapOptions, host: Ch
       })),
     );
   }
-  const div = el('div', { className: 'map' });
+  const div = el('div', { className: 'map', role: 'region', ariaLabel: `Mapa com ${s.drawn} feição(ões); os mesmos dados estão na tabela abaixo` });
   card.append(div);
+  // os valores do mapa só aparecem ao passar o mouse; a tabela dá o mesmo conteúdo ao teclado e ao leitor de tela
+  const fmt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
+  const linhas = res.table.slice(0, 200);
+  card.append(
+    el(
+      'details',
+      { className: 'data-alt' },
+      el('summary', {}, 'Ver os dados do mapa em tabela'),
+      el('div', { className: 'tablewrap' }, el('table', {}, el('thead', {}, el('tr', {}, ...['Nome', 'Geometria', choice.measure || 'Medida'].map((h) => el('th', {}, h)))), el('tbody', {}, ...linhas.map((l) => el('tr', {}, el('th', {}, l.nome || '—'), el('td', {}, l.tipo), el('td', {}, l.valor == null ? (choice.measure ? 'sem dado' : '—') : fmt.format(l.valor))))))),
+      ...(res.table.length > linhas.length ? [el('p', { className: 'muted' }, `Mostradas ${linhas.length} de ${res.table.length} feições; o arquivo GeoJSON baixado traz todas.`)] : []),
+    ),
+  );
   queueMicrotask(() => {
     const map = L.map(div);
     if (opts.basemap === 'esri') L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Tiles © Esri' }).addTo(map);

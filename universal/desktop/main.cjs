@@ -2,35 +2,46 @@
 const { app, BrowserWindow, Menu, dialog, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
-const crypto = require('node:crypto');
-const https = require('node:https');
-const http = require('node:http');
 
 const pkg = require('./package.json');
+const upd = require('./atualizacao.cjs');
 // A atualização troca só o painel (um HTML); o programa em si muda raramente.
-const URL_ATUALIZACAO = process.env.UNIVERSAL_UPDATE_URL || 'https://raw.githubusercontent.com/MayconMeneses/Dashboard/HEAD/universal/atualizacao';
+const OVERRIDE = process.env.UNIVERSAL_UPDATE_URL;
+const URL_ATUALIZACAO = OVERRIDE || 'https://raw.githubusercontent.com/MayconMeneses/Dashboard/HEAD/universal/atualizacao';
 const PAGINA_INSTALADORES = 'https://github.com/MayconMeneses/Dashboard/tree/HEAD/universal/instaladores';
-const MAX_HTML = 25 * 1024 * 1024;
+// Modo de teste: só quando o endereço de atualização é o próprio computador (127.0.0.1/localhost). Permite HTTP local e responder o aviso por variável de ambiente.
+const MODO_TESTE = !!OVERRIDE && upd.ehLoopback(OVERRIDE);
+const RESPOSTA_TESTE = MODO_TESTE ? process.env.UNIVERSAL_TEST_ANSWER : undefined;
 
 const EXT = ['csv', 'tsv', 'txt', 'xlsx', 'docx', 'doc', 'pdf', 'json', 'geojson', 'kml', 'kmz'];
 let win = null;
 let pending = null;
+// último arquivo entregue ao painel: se o painel for recarregado por uma atualização, ele é entregue de novo
+let ultimoArquivo = null;
 
 const fileFromArgs = (argv) => argv.slice(1).find((a) => !a.startsWith('-') && EXT.includes(path.extname(a).slice(1).toLowerCase()) && fs.existsSync(a));
 
-async function openPath(file) {
-  if (!file) return;
+// entregas ao painel em fila: uma atualização só recarrega o painel depois que a entrega em andamento terminou
+let entregaAtual = Promise.resolve();
+
+function openPath(file) {
+  if (!file) return entregaAtual;
   if (!win) {
     pending = file;
-    return;
+    return entregaAtual;
   }
-  try {
-    if (fs.statSync(file).size > 50 * 1024 * 1024) throw new Error('Arquivo maior que 50 MB.');
-    const b64 = fs.readFileSync(file).toString('base64');
-    await win.webContents.executeJavaScript(`window.__abrirArquivo(${JSON.stringify(path.basename(file))}, ${JSON.stringify(b64)})`);
-  } catch (e) {
-    dialog.showErrorBox('Não foi possível abrir o arquivo', String(e.message || e));
-  }
+  ultimoArquivo = file;
+  entregaAtual = entregaAtual.then(async () => {
+    try {
+      if (fs.statSync(file).size > 50 * 1024 * 1024) throw new Error('Arquivo maior que 50 MB.');
+      const b64 = fs.readFileSync(file).toString('base64');
+      await win.webContents.executeJavaScript(`window.__abrirArquivo(${JSON.stringify(path.basename(file))}, ${JSON.stringify(b64)})`);
+    } catch (e) {
+      ultimoArquivo = null;
+      dialog.showErrorBox('Não foi possível abrir o arquivo', String(e.message || e));
+    }
+  });
+  return entregaAtual;
 }
 
 async function pick() {
@@ -42,98 +53,56 @@ async function pick() {
   if (!r.canceled && r.filePaths[0]) await openPath(r.filePaths[0]);
 }
 
-
 // ---------- atualização automática do painel ----------
-const cmpVer = (a, b) => {
-  const x = String(a).split('.').map(Number);
-  const y = String(b).split('.').map(Number);
-  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0) ? 1 : -1;
-  return 0;
-};
-
-function baixar(url, limite) {
-  return new Promise((resolve, reject) => {
-    const permitido = url.startsWith('https://') || (process.env.UNIVERSAL_UPDATE_URL && url.startsWith('http://'));
-    if (!permitido) return reject(new Error('Endereço de atualização inválido.'));
-    const lib = url.startsWith('https://') ? https : http;
-    const req = lib.get(url, { timeout: 15000, headers: { 'User-Agent': 'DashboardUniversal/' + pkg.version, 'Cache-Control': 'no-cache' } }, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        res.resume();
-        return baixar(new URL(res.headers.location, url).toString(), limite).then(resolve, reject);
-      }
-      if (res.statusCode !== 200) {
-        res.resume();
-        return reject(new Error('HTTP ' + res.statusCode));
-      }
-      const partes = [];
-      let total = 0;
-      res.on('data', (c) => {
-        total += c.length;
-        if (total > limite) req.destroy(new Error('Arquivo grande demais.'));
-        else partes.push(c);
-      });
-      res.on('end', () => resolve(Buffer.concat(partes)));
-      res.on('error', reject);
-    });
-    req.on('timeout', () => req.destroy(new Error('Tempo esgotado.')));
-    req.on('error', reject);
-  });
-}
-
 const dirAtual = () => path.join(app.getPath('userData'), 'painel');
-const arqAtual = () => path.join(dirAtual(), 'index.html');
-const arqVersao = () => path.join(dirAtual(), 'versao.txt');
+const painelEmUso = () => upd.painelEmUso({ dirPainel: dirAtual(), embutido: path.join(__dirname, 'app', 'index.html'), versaoEmbutida: pkg.painelVersao });
 
-/** Painel em uso: o baixado (se for mais novo que o embutido) ou o embutido. */
-function painelEmUso() {
-  try {
-    const v = fs.readFileSync(arqVersao(), 'utf8').trim();
-    if (fs.existsSync(arqAtual()) && cmpVer(v, pkg.painelVersao) > 0) return { arquivo: arqAtual(), versao: v };
-  } catch {
-    /* sem atualização baixada */
-  }
-  return { arquivo: path.join(__dirname, 'app', 'index.html'), versao: pkg.painelVersao };
-}
+// no modo de teste nenhuma caixa nativa aparece (ninguém para clicar nela)
+const caixa = (opts) => (MODO_TESTE ? Promise.resolve({ response: 1 }) : dialog.showMessageBox(win, opts));
 
-/** Procura, valida e guarda uma versão nova do painel. Devolve a versão nova ou null. */
-async function verificarAtualizacao() {
-  const m = JSON.parse((await baixar(URL_ATUALIZACAO + '/versao.json', 64 * 1024)).toString('utf8'));
-  if (!/^\d+\.\d+\.\d+$/.test(m.versao) || !/^[0-9a-f]{64}$/.test(m.sha256)) throw new Error('Manifesto inválido.');
-  if (m.programaMinimo && cmpVer(pkg.version, m.programaMinimo) < 0) return { precisaNovoInstalador: true };
-  if (cmpVer(m.versao, painelEmUso().versao) <= 0) return null;
-  const html = await baixar(URL_ATUALIZACAO + '/index.html', MAX_HTML);
-  if (crypto.createHash('sha256').update(html).digest('hex') !== m.sha256) throw new Error('O arquivo baixado não confere (SHA-256).');
-  if (!html.includes('<title>Dashboard') ) throw new Error('Arquivo de atualização inesperado.');
-  fs.mkdirSync(dirAtual(), { recursive: true });
-  const tmp = arqAtual() + '.novo';
-  fs.writeFileSync(tmp, html);
-  fs.renameSync(tmp, arqAtual());
-  fs.writeFileSync(arqVersao(), m.versao);
-  return { versao: m.versao };
-}
-
+/** Pergunta assim que o programa abre; só baixa se o usuário aceitar. “Depois” não guarda nada e a pergunta volta na próxima abertura. */
 async function buscarAtualizacao(manual) {
-  try {
-    const r = await verificarAtualizacao();
-    if (r && r.precisaNovoInstalador) {
-      if (manual || !global.__avisouPrograma) {
-        global.__avisouPrograma = true;
-        const o = await dialog.showMessageBox(win, { type: 'info', message: 'Há uma versão nova do programa.', detail: 'Esta atualização exige baixar o instalador novamente.', buttons: ['Abrir página de download', 'Depois'], cancelId: 1 });
-        if (o.response === 0) shell.openExternal(PAGINA_INSTALADORES);
-      }
-    } else if (r) {
-      const o = await dialog.showMessageBox(win, { type: 'info', message: `Atualização ${r.versao} baixada.`, detail: 'Reiniciar o painel agora para usar a nova versão? (os dados abertos serão fechados)', buttons: ['Atualizar agora', 'Depois'], defaultId: 0, cancelId: 1 });
-      if (o.response === 0) win.loadFile(painelEmUso().arquivo);
-    } else if (manual) {
-      dialog.showMessageBox(win, { type: 'info', message: 'Você já está com a versão mais recente.', detail: `Painel ${painelEmUso().versao} · programa ${pkg.version}` });
+  const r = await upd.verificarEAtualizar({
+    urlBase: URL_ATUALIZACAO,
+    programa: pkg.version,
+    painelAtual: painelEmUso().versao,
+    dirPainel: dirAtual(),
+    baixarFn: (u, limite) => upd.baixar(u, limite, { permitirLoopbackHttp: MODO_TESTE, versaoPrograma: pkg.version }),
+    perguntar: async ({ versao, atual }) => {
+      if (RESPOSTA_TESTE) return RESPOSTA_TESTE === 'sim';
+      const o = await caixa({
+        type: 'question',
+        message: `Atualização disponível: painel ${versao}`,
+        detail: `Você está com o painel ${atual}. Atualizar agora?\n\nO painel será recarregado${ultimoArquivo ? '; o arquivo que está aberto será aberto de novo.' : '; dados abertos serão fechados.'}`,
+        buttons: ['Atualizar agora', 'Depois'],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      return o.response === 0;
+    },
+  });
+  if (r.acao === 'atualizado') {
+    await entregaAtual;
+    if (win) {
+      pending = ultimoArquivo;
+      win.loadFile(painelEmUso().arquivo);
     }
-  } catch (e) {
-    if (manual) dialog.showMessageBox(win, { type: 'warning', message: 'Não foi possível verificar atualizações.', detail: `${e.message}\nConfira a conexão com a internet.` });
+  } else if (r.acao === 'programa') {
+    if (manual || !global.__avisouPrograma) {
+      global.__avisouPrograma = true;
+      const o = await caixa({ type: 'info', message: 'Há uma versão nova do programa.', detail: 'Esta atualização exige baixar o instalador novamente.', buttons: ['Abrir página de download', 'Depois'], cancelId: 1 });
+      if (o.response === 0) shell.openExternal(PAGINA_INSTALADORES);
+    }
+  } else if (r.acao === 'sem-atualizacao') {
+    if (manual) caixa({ type: 'info', message: 'Você já está com a versão mais recente.', detail: `Painel ${painelEmUso().versao} · programa ${pkg.version}` });
+  } else if (r.acao === 'erro') {
+    // sem rede na abertura: silêncio; se o usuário aceitou e o download falhou, ele precisa saber
+    if (manual || r.etapa === 'download') caixa({ type: 'warning', message: r.etapa === 'download' ? 'Não foi possível baixar a atualização.' : 'Não foi possível verificar atualizações.', detail: `${r.erro}\nConfira a conexão com a internet.` });
   }
 }
 
 function createWindow() {
-  win = new BrowserWindow({ width: 1280, height: 860, title: 'Dashboard Universal', icon: path.join(__dirname, 'build', 'icon.png'), backgroundColor: '#f5f6f8', webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } });
+  win = new BrowserWindow({ width: 1280, height: 860, title: 'Dashboard Universal', icon: path.join(__dirname, 'build', 'icon.png'), backgroundColor: '#090F1D', webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } });
   win.loadFile(painelEmUso().arquivo);
   // links externos abrem no navegador; a janela nunca navega para fora
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -143,10 +112,10 @@ function createWindow() {
   win.webContents.on('will-navigate', (e, url) => {
     if (!url.startsWith('file://')) e.preventDefault();
   });
-  win.webContents.once('did-finish-load', () => {
+  win.webContents.on('did-finish-load', () => {
     if (!global.__verificou) {
       global.__verificou = true;
-      if (lerConfig().autoUpdate !== false) setTimeout(() => buscarAtualizacao(false), 3000);
+      if (lerConfig().autoUpdate !== false) buscarAtualizacao(false);
     }
     if (pending) {
       const f = pending;

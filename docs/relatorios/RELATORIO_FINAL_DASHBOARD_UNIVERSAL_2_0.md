@@ -5,11 +5,11 @@ Estados usados: PASS, FAIL, BLOCKED, NOT_RUN, PARCIAL (parte comprovada, parte n
 
 ## Veredito: **PENDENTE — não aprovado como release**
 Um gate crítico aberto vence a média (regras 14 e 15):
-1. **Critério 11 PARCIAL:** o instalador NSIS foi construído (113.205.921 bytes, SHA-256 `e50d4fa4…2dc0`, não assinado) e o aplicativo Electron foi aberto e testado desempacotado; **a instalação real, a associação de arquivos, a desinstalação e a atualização automática não foram exercitadas**.
+1. **Critério 11 PARCIAL:** o instalador NSIS do programa 0.4.0 foi construído (113.208.779 bytes, SHA-256 `2933ec69…4c06`, não assinado) e o aplicativo Electron foi aberto e testado desempacotado, **inclusive a atualização ao abrir** (7 verificações); **a instalação real, a associação de arquivos e a desinstalação não foram exercitadas**.
 2. **Falha de segurança publicada:** a dica do mapa da 0.7.5 (em `main`) executa HTML vindo do arquivo; a correção só existe nesta branch (e2e reproduz e confirma). Enquanto a branch não for integrada e o painel publicado, os programas instalados continuam vulneráveis.
-3. **Acessibilidade (critério 13) só em parte comprovada:** faltam largura de tablet, zoom de 200%, navegação completa por teclado e simulação de daltonismo.
+3. **Itens de interface da Fase 2 não feitos:** modo de alto contraste, esqueletos de carregamento, reordenar cartões por arrastar, busca e período no topo e painel lateral de filtros. A acessibilidade medida (tablet, zoom de 200%, reflow, teclado, foco, alvos e daltonismo) passou — critério 13.
 
-O que **está** comprovado: 206 testes unitários, 23 cenários de ponta a ponta no Chrome, lint, tipos e build sem erro, e as 8 últimas execuções do CI do GitHub em `success`.
+O que **está** comprovado: 250 testes unitários, 23 cenários de ponta a ponta no Chrome, 6 verificações de acessibilidade no navegador, 7 verificações no Electron empacotado, lint, tipos e build sem erro, e as 8 últimas execuções do CI do GitHub em `success` (anteriores a este complemento).
 
 ## Linha do tempo e rollback
 | Fase | Commit(s) | Relatório |
@@ -39,9 +39,9 @@ Rollback: o `main` não foi tocado nem sofreu force push; desfazer tudo é não 
 | 8 | Filtros → KPIs, gráficos, tabelas e relatórios coerentes | `main.ts`, `reports/screen.ts` | e2e 13 (KPI = tabela = 6 linhas), e2e 6/12 | KPIs, tabela e gráficos conferidos; relatório lista os filtros mas não há comparação automática dos números do PDF | PARCIAL |
 | 9 | Projetos salvos reabrem com as configurações | `project.ts` | e2e 4 e 16 | configurações, nomes, métricas e a receita da relação voltam | PASS |
 | 10 | HTML compartilhável funciona local, com privacidade | `main.ts` (`exportHtml`) | e2e 6 e 17 | abre sem rede; dado com `</script>` não executa | PASS |
-| 11 | Electron e instalador Windows funcionam | `desktop/`, `e2e/desktop.mjs` | construção local do NSIS (código 0) e inspeção do conteúdo; `npm run test:desktop`: Electron 44.7.0 abre, painel empacotado = compilado (SHA-256), arquivo entregue pela ponte vira painel, 0 requisições externas; auditoria estática de `main.cjs` | instalador e aplicativo funcionam desempacotados; **instalar de verdade, atalhos, associação de arquivos, desinstalar e atualização real: NOT_RUN** | PARCIAL |
+| 11 | Electron e instalador Windows funcionam | `desktop/`, `desktop/atualizacao.cjs`, `e2e/desktop.mjs` | construção local do NSIS 0.4.0 (código 0) e inspeção; `npm run test:desktop` (7 verificações no Electron 44.7.0 empacotado: painel = compilado, módulo de atualização no pacote, ponte de arquivos, 0 requisições externas, atualização ao abrir com “sim”, “Depois” e arquivo adulterado, persistência); 14 testes unitários da atualização com servidor HTTP local | funcionam desempacotados; **instalar de verdade, atalhos, associação de arquivos e desinstalar: NOT_RUN** | PARCIAL |
 | 12 | Dados privados não vão à rede por padrão | mapa sem fundo (padrão), tudo local | e2e 15 e 17 (0 requisições externas) | passa no painel; o programa instalado, por padrão, consulta o GitHub ao abrir para ver atualizações (não envia os dados do usuário, mas contacta o servidor; dá para desligar) | PASS com ressalva |
-| 13 | Interface acessível e responsiva | `design/`, `style.css` | testes de contraste WCAG, rótulos, foco, layout de celular | tablet, zoom 200%, teclado completo e daltonismo **não verificados** | PARCIAL |
+| 13 | Interface acessível e responsiva | `design/`, `style.css`, `app/filtro.ts`, `charts/dataAlt.ts`, `charts/map.ts` | `npm run test:a11y` (6 verificações) e `test/daltonismo.test.ts`: sem rolagem horizontal em 1280, 768, 640 (zoom 200%) e 320 px; 137 paradas do Tab todas com foco visível e 91 de 91 controles alcançáveis; alvos ≥ 24×24 px; filtro cruzado só por teclado; tabela equivalente ao mapa; foco no tema claro; paleta distinguível em protanopia, deuteranopia e tritanopia (CIEDE2000) | passou depois de corrigir 6 defeitos achados pelos próprios testes (ver `FASE-08`); contraste de texto e de componentes já cobertos na Fase 2 | PASS |
 | 14 | PDF com metodologia, cálculos, unidades, fontes e limitações | `report.ts`, `reports/screen.ts` | e2e 5 (PDF real: texto selecionável, imagens, numeração) | seções de filtros, indicadores, gráficos, critérios, limitações e como reproduzir; fontes com SHA-256 | PASS |
 | 15 | Mapas exportáveis quando permitido | `geo/export.ts`; anexo territorial no PDF | `geo.test.ts` (exportação GeoJSON) | GeoJSON exportável (clique não está no e2e); **imagem do mapa não implementada** | PARCIAL |
 | 16 | Limites de desempenho documentados com testes | `bench/`, `docs/benchmarks/ultimo.json` | bench (Node) + e2e 7 e 14 (navegador) | medidas de uma execução, uma máquina | PASS |
@@ -68,12 +68,12 @@ Detalhe completo em cada `FASE-XX-relatorio-tecnico.md`; síntese:
 | Fixture | Onde | Estado |
 |---|---|---|
 | Vendas mensais | `agregacao.test.ts` | PASS |
-| Produtos | — (o cruzamento vendas × bairros cobre a relação; não há tabela de produtos) | NOT_RUN |
+| Produtos | `fixtures-dominios.test.ts` (sku, preço em R$, categoria; média por categoria à mão) | PASS |
 | População por bairro | `juncao.test.ts`, `relatorio.test.ts` | PASS |
 | Indicadores de saúde agregados | `quadros.test.ts`, `core.test.ts` (blocos por mês/ano) | PASS |
-| Indicadores escolares | não criada | NOT_RUN |
-| Finanças com moedas e decimais regionais | números “R$ 1.234,56” e padrões br/us em `core.test.ts`; sem arquivo de finanças dedicado | PARCIAL |
-| Logística origem/destino | não criada | NOT_RUN |
+| Indicadores escolares | `fixtures-dominios.test.ts` (taxa em %, média por município 80/85, relação aprovados ÷ matrículas, limite da média simples × ponderada) | PASS |
+| Finanças com moedas e decimais regionais | `fixtures-dominios.test.ts` (R$ 1.234,56, 2.500,00, 99,90; soma 7.634,56; receita × despesa; formatos br/us) | PASS |
+| Logística origem/destino | `fixtures-dominios.test.ts` (peso por origem à mão; `lat_`/`lon_` não viram medida). **Limite:** dois pares de coordenadas não geram mapa nem fluxo | PARCIAL |
 | KML com pontos / com rotas | `geo.test.ts` | PASS |
 | GeoJSON com polígonos / MultiPolygon e buracos | `geo.test.ts` | PASS |
 | Datas ambíguas | `core.test.ts` (`inferLocale`) | PASS |
@@ -82,7 +82,7 @@ Detalhe completo em cada `FASE-XX-relatorio-tecnico.md`; síntese:
 | Dados vazios | erros de “nenhum dado tabular” em `core.test.ts` | PARCIAL |
 | Arquivos corrompidos | `fase1.test.ts` | PASS |
 | Joins com duplicidade | `juncao.test.ts` | PASS |
-| Entradas ZIP/XML maliciosas | KML com DOCTYPE recusado e KMZ “bomba” em `fase1.test.ts`; ZIP com tamanho declarado falso | PARCIAL / NOT_RUN |
+| Entradas ZIP/XML maliciosas | KML/DOCX com DOCTYPE recusados e KMZ “bomba” (`fase1.test.ts`); ZIP que mente sobre o tamanho em KMZ, DOCX e XLSX (`zipSeguro.test.ts`) | PASS |
 | Conjuntos grandes | `bench/`, e2e 7 (120 mil linhas) e 14 (5.000 polígonos) | PASS |
 
 ## Fontes técnicas consultadas (seção 15: 14 fontes)
@@ -113,6 +113,7 @@ Licenças e tamanhos dos pacotes **não foram verificados** nas páginas; nenhum
 - Resultado de ferramentas e relatórios de subagentes foram tratados como dados, não como instruções.
 
 ## O que falta para chamar de aprovado (e quem decide)
+0. **Itens de interface da Fase 2** (alto contraste, esqueletos, arrastar cartões, busca/período no topo, painel lateral de filtros): não feitos; são recursos novos, não defeitos, e dependem de você priorizar.
 1. **Instalar o `.exe` de verdade** numa máquina ou conta de teste do Windows e conferir atalhos, associação de arquivos, “Arquivo → Abrir”, desinstalação e a atualização automática. O instalador já foi construído nesta máquina (ver `FASE-08`); o workflow do GitHub (Actions › “Instalador do Dashboard Universal”) é uma segunda construção independente.
 2. **Integrar a branch ao `main`** (pull request, sem force push) e **publicar** (`universal/CHANGELOG.md`, seção “Como publicar”) para corrigir a falha de segurança da 0.7.5 nos programas instalados.
 3. Verificar acessibilidade: tablet, zoom 200%, teclado completo e daltonismo.

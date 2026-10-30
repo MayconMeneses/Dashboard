@@ -1,4 +1,5 @@
-import { strFromU8, unzipSync } from 'fflate';
+import { strFromU8 } from 'fflate';
+import { lerEntradaLimitada } from './zipSeguro.js';
 import { XMLParser } from 'fast-xml-parser';
 
 export interface DocxResult {
@@ -90,13 +91,13 @@ function fillMerged(rows: Cell2[][], labelName: string): string[][] {
 }
 
 export function docxToMatrix(bytes: Uint8Array): DocxResult {
-  let files: Record<string, Uint8Array>;
+  let doc: Uint8Array | null;
   try {
-    files = unzipSync(bytes, { filter: (f) => f.name === 'word/document.xml' && f.originalSize < MAX_XML });
-  } catch {
+    doc = lerEntradaLimitada(bytes, (n) => n === 'word/document.xml', MAX_XML);
+  } catch (e) {
+    if ((e as Error).message.includes('passa de')) throw e;
     throw new Error('Arquivo .docx inválido ou corrompido.');
   }
-  const doc = files['word/document.xml'];
   if (!doc) throw new Error('Este arquivo não parece um documento do Word (.docx).');
   const xml = strFromU8(doc);
   if (/<!DOCTYPE/i.test(xml)) throw new Error('Documento com DOCTYPE não é aceito por segurança.');

@@ -1,0 +1,77 @@
+{
+  "metodo": "Machado 2009, gravidade máxima; CIEDE2000",
+  "paleta": [
+    "#2B86D9",
+    "#C08808",
+    "#B83890",
+    "#806800",
+    "#008058",
+    "#F02068",
+    "#E058A0",
+    "#2868C8",
+    "#00A078",
+    "#C03848"
+  ],
+  "medidas": {
+    "6 séries · visão normal": {
+      "menorDistancia": 16.6,
+      "par": "#B83890 × #F02068",
+      "limite": 12
+    },
+    "6 séries · protanopia": {
+      "menorDistancia": 13.6,
+      "par": "#806800 × #008058",
+      "limite": 12
+    },
+    "6 séries · deuteranopia": {
+      "menorDistancia": 14.2,
+      "par": "#C08808 × #F02068",
+      "limite": 12
+    },
+    "6 séries · tritanopia": {
+      "menorDistancia": 13,
+      "par": "#2B86D9 × #008058",
+      "limite": 12
+    },
+    "8 séries · visão normal": {
+      "menorDistancia": 11.4,
+      "par": "#2B86D9 × #2868C8",
+      "limite": 9
+    },
+    "8 séries · protanopia": {
+      "menorDistancia": 9.7,
+      "par": "#2B86D9 × #2868C8",
+      "limite": 9
+    },
+    "8 séries · deuteranopia": {
+      "menorDistancia": 9.3,
+      "par": "#2B86D9 × #2868C8",
+      "limite": 9
+    },
+    "8 séries · tritanopia": {
+      "menorDistancia": 9.7,
+      "par": "#2B86D9 × #2868C8",
+      "limite": 9
+    },
+    "10 séries · visão normal": {
+      "menorDistancia": 11,
+      "par": "#F02068 × #C03848",
+      "limite": 8
+    },
+    "10 séries · protanopia": {
+      "menorDistancia": 9.7,
+      "par": "#2B86D9 × #2868C8",
+      "limite": 8
+    },
+    "10 séries · deuteranopia": {
+      "menorDistancia": 8.4,
+      "par": "#806800 × #C03848",
+      "limite": 8
+    },
+    "10 séries · tritanopia": {
+      "menorDistancia": 8.4,
+      "par": "#B83890 × #C03848",
+      "limite": 8
+    }
+  }
+}

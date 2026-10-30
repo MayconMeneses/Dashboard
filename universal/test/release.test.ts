@@ -1,5 +1,6 @@
 // Fase 8: segurança de release e exportação (leitura dos arquivos de empacotamento como texto; dados sintéticos).
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { unzipSync, strFromU8 } from 'fflate';
@@ -11,13 +12,21 @@ import { buildXlsx } from '../src/xlsx.js';
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ler = (p: string) => readFileSync(join(RAIZ, p), 'utf8');
 const pkg = JSON.parse(ler('package.json')) as { version: string };
-const desk = JSON.parse(ler('desktop/package.json')) as { painelVersao: string; build: { fileAssociations: { ext: string[] }[] } };
+const desk = JSON.parse(ler('desktop/package.json')) as { painelVersao: string; build: { files: string[]; fileAssociations: { ext: string[] }[] } };
 
 describe('atualização automática do painel', () => {
   it('o título do painel é o que o programa instalado exige ao baixar uma atualização', () => {
-    const exige = /includes\('(<title>[^']+)'\)/.exec(ler('desktop/main.cjs'))?.[1];
-    expect(exige, 'main.cjs deve conferir o <title> do arquivo baixado').toBeDefined();
-    expect(ler('index.html')).toContain(exige!);
+    const exige = (createRequire(import.meta.url)('../desktop/atualizacao.cjs') as { TITULO_ESPERADO: string }).TITULO_ESPERADO;
+    expect(exige).toMatch(/^<title>/);
+    expect(ler('index.html')).toContain(exige);
+  });
+  it('todo módulo local que o main.cjs carrega vai dentro do pacote do instalador (senão o app instalado quebra ao abrir)', () => {
+    const locais = ler('desktop/main.cjs')
+      .split('\n')
+      .flatMap((l) => (l.includes("require('./") && l.includes('.cjs')) ? [l.slice(l.indexOf("require('./") + 11, l.indexOf(".cjs'", l.indexOf("require('./")) + 4)] : []);
+    expect(locais).toContain('atualizacao.cjs');
+    for (const f of locais) expect(desk.build.files, f).toContain(f);
+    expect(desk.build.files).toContain('main.cjs');
   });
   it('a versão do painel embutido no instalador acompanha a do painel (senão o instalado “atualizaria” para trás)', () => {
     expect(desk.painelVersao).toBe(pkg.version);

@@ -2,15 +2,13 @@ import L from 'leaflet';
 import { bbox, parts, validateGeometry } from '../geo/geometry.js';
 import type { Geometry } from '../geo/geometry.js';
 import { centroidOf } from '../geo/geometry.js';
-import { classBreaks, classOf, gridBins } from '../geo/thematic.js';
+import { classBreaks, classOf, gridBins, NO_DATA, RAMP } from '../geo/thematic.js';
 import { PALETTE } from '../design/palette.js';
 import { toNumber } from '../profile.js';
 import type { Row, Table } from '../types.js';
 import { tooltipText } from './tooltip.js';
 
-/** Rampa sequencial (clara → escura) legível sobre o mapa claro e o escuro; “sem dado” é cinza, nunca a classe mais baixa. */
-export const RAMP = ['#d6e6f5', '#9cc3e6', '#5b9bd5', '#2b6cb0', '#12417a'];
-export const NO_DATA = '#8a97a8';
+export { NO_DATA, RAMP };
 export const MAP_CAP = 5000;
 
 export interface MapChoice {
@@ -30,6 +28,8 @@ export interface LayerResult {
   groups: Record<string, L.LayerGroup>;
   bounds: L.LatLngBounds | null;
   legend: LegendItem[];
+  /** uma linha por feição desenhada (nome, tipo de geometria, valor da medida): a versão em tabela do mapa */
+  table: { nome: string; tipo: string; valor: number | null }[];
   /** o que o desenho fez com as linhas recebidas */
   stats: { rows: number; drawn: number; noGeometry: number; invalid: number; capped: number };
 }
@@ -82,6 +82,7 @@ export function buildLayers(t: Table, rows: Row[], choice: MapChoice, cap = MAP_
   const breaks = choice.measure ? classBreaks(vals.filter((x): x is number => x != null), RAMP.length) : [];
   const colorOf = (i: number) => (!choice.measure ? PALETTE[0]! : vals[i] == null ? NO_DATA : RAMP[Math.min(classOf(vals[i]!, breaks), RAMP.length - 1)]!);
   let legend = choice.measure ? legendFor(vals, breaks, RAMP) : [];
+  const table: LayerResult['table'] = items.map(({ row, g }, i) => ({ nome: label(row), tipo: g.type, valor: vals[i] ?? null }));
   const cents: [number, number][] = [];
   let bounds: L.LatLngBounds | null = null;
   items.forEach(({ row, g }, i) => {
@@ -109,5 +110,5 @@ export function buildLayers(t: Table, rows: Row[], choice: MapChoice, cap = MAP_
     groups.Calor = L.layerGroup(bins.map((x) => L.rectangle([[x.lat, x.lon], [x.lat + cell, x.lon + cell]], { stroke: false, fillColor: RAMP[Math.min(classOf(x.count, hb), RAMP.length - 1)]!, fillOpacity: 0.7 }).bindTooltip(tooltipText(`${x.count} registro(s) nesta célula`), { sticky: true })));
     legend = legendFor(bins.map((x) => x.count), hb, RAMP).map((l) => ({ ...l, label: `${l.label} registros` }));
   }
-  return { groups, bounds, legend, stats };
+  return { groups, bounds, legend, table, stats };
 }
