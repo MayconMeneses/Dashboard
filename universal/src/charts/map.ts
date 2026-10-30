@@ -1,6 +1,7 @@
 import L from 'leaflet';
 import { download, el } from '../app/dom.js';
 import { toGeoJson } from '../geo/export.js';
+import { comFluxos, detectarPares } from '../geo/pares.js';
 import { profileTable } from '../profile.js';
 import type { ColType, Table } from '../types.js';
 import type { ChartHost } from './host.js';
@@ -15,6 +16,8 @@ export interface MapOptions {
   onBasemap: (b: 'esri' | 'none') => void;
   /** redesenha o painel (usado quando a escolha de cor ou de densidade muda) */
   rerender: () => void;
+  /** mapa de fluxos: uma linha da origem ao destino em cada registro */
+  flow?: boolean;
 }
 
 /** Escolha de cor/densidade do mapa, lembrada entre redesenhos do painel. */
@@ -27,10 +30,12 @@ const choice: MapChoice = { measure: '', heat: false };
 export function drawMap(card: HTMLElement, t0: Table, opts: MapOptions, host: ChartHost): HTMLElement {
   const prof = profileTable(t0, opts.forced);
   // colunas de coordenada pelo perfil (inclui as corrigidas à mão); a coluna de forma, se houver, vem do próprio arquivo
-  const lat = prof.find((p) => p.type === 'lat')!.name;
-  const lon = prof.find((p) => p.type === 'lon')!.name;
-  const t: Table = { ...t0, geo: { lat, lon, ...(t0.geo?.id ? { id: t0.geo.id } : {}) } };
-  const measures = prof.filter((p) => (p.type === 'number' || p.type === 'integer') && p.name !== t.geo?.lat && p.name !== t.geo?.lon);
+  const fluxo = opts.flow ? comFluxos(t0) : null;
+  const lat = prof.find((p) => p.type === 'lat')?.name ?? '';
+  const lon = prof.find((p) => p.type === 'lon')?.name ?? '';
+  const t: Table = fluxo ?? { ...t0, geo: { lat, lon, ...(t0.geo?.id ? { id: t0.geo.id } : {}) } };
+  const coord = new Set(detectarPares(t0.columns).flatMap((p) => [p.lat, p.lon]));
+  const measures = prof.filter((p) => (p.type === 'number' || p.type === 'integer') && p.name !== t.geo?.lat && p.name !== t.geo?.lon && !coord.has(p.name));
   if (choice.measure && !measures.some((m) => m.name === choice.measure)) choice.measure = '';
   const bsel = el('select', { ariaLabel: 'Mapa de fundo' }, el('option', { value: 'esri', selected: opts.basemap === 'esri' }, 'Mapa de fundo: Esri (acessa a internet)'), el('option', { value: 'none', selected: opts.basemap === 'none' }, 'Sem mapa de fundo (não acessa a internet)'));
   bsel.onchange = () => opts.onBasemap(bsel.value as 'esri' | 'none');

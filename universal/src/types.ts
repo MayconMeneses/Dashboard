@@ -104,7 +104,9 @@ export interface ChartSpec {
   description: string;
   x?: string;
   y?: string;
-  agg?: 'count' | 'sum' | 'mean' | 'min' | 'max' | 'median';
+  agg?: 'count' | 'sum' | 'mean' | 'min' | 'max' | 'median' | 'ratio';
+  /** agg 'ratio' (taxa geral): soma de `num` ÷ soma de `den` × 100 por grupo, em vez da média das taxas das linhas */
+  ratio?: { num: string; den: string };
   stack?: string;
   /** mantém a ordem original das linhas (ex.: ciclos), em vez de ordenar por valor */
   keepOrder?: boolean;
@@ -125,6 +127,8 @@ export interface ChartSpec {
   style?: ChartStyle;
   /** o que cada coluna usada é para o painel (papel e regra que decidiu), para conferência */
   reasons?: string[];
+  /** kind 'map': liga o primeiro par de coordenadas (origem) ao segundo (destino) com uma linha por registro */
+  flow?: boolean;
   /** por que o sistema escolheu este desenho (mostrado ao usuário) */
   why?: string;
   /** mantém o desenho definido em style (não é trocado pela recomendação automática) */

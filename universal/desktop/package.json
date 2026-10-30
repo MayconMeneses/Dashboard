@@ -64,7 +64,8 @@
           "json",
           "geojson",
           "kml",
-          "kmz"
+          "kmz",
+          "parquet"
         ],
         "name": "Arquivo de dados",
         "role": "Viewer"

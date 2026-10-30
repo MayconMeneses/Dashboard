@@ -17,6 +17,7 @@ export const FORMATS: FormatDef[] = [
   { exts: ['geojson'], label: 'GeoJSON', textual: true },
   { exts: ['kml'], label: 'KML', textual: true },
   { exts: ['kmz'], label: 'KMZ' },
+  { exts: ['parquet'], label: 'Parquet' },
   { exts: ['pdf'], label: 'PDF' },
   { exts: ['docx'], label: 'DOCX' },
   { exts: ['doc'], label: 'DOC', legacy: true },

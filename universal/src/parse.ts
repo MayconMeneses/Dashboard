@@ -3,6 +3,7 @@ import { strFromU8 } from 'fflate';
 import Papa from 'papaparse';
 import readXlsx from 'read-excel-file/browser';
 import { supportedList } from './formats.js';
+import { parquetToTable } from './parquet.js';
 import { conferirTamanhosDeclarados, lerEntradaLimitada } from './zipSeguro.js';
 import { attachGeometry, GEO_ID, isGeoJson } from './geo/table.js';
 import { kmlGeometry, readGeoJson } from './geo/read.js';
@@ -299,6 +300,9 @@ export async function parseFile(fileName: string, bytes: Uint8Array, opts: Parse
       break;
     case 'kmz':
       tables = await parseKmz(base, bytes);
+      break;
+    case 'parquet':
+      tables = [await parquetToTable(base, bytes)];
       break;
     case 'pdf': {
       if (!opts.pdfjs) throw new Error('Leitura de PDF indisponível neste ambiente.');

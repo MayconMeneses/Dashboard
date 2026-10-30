@@ -1,5 +1,6 @@
 import { toNumber } from '../profile.js';
 import type { ChartSpec, ColProfile, Table } from '../types.js';
+import { detectarPares } from '../geo/pares.js';
 import { findRelations } from './quality.js';
 import { aggFor, explainColumns, semanticProfile } from './semantic.js';
 import { suggestTidy } from './tidy.js';
@@ -25,6 +26,8 @@ export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpe
   let n = 0;
   const id = (k: string) => `${k}-${n++}`;
 
+  const pares = detectarPares(t.columns);
+  if (!(lat && lon) && pares.length >= 2) out.push({ id: id('map'), kind: 'map', flow: true, title: `Mapa de fluxos: ${pares[0]!.nome} → ${pares[1]!.nome}`, description: `Uma linha reta de “${pares[0]!.nome}” a “${pares[1]!.nome}” em cada registro (não é o trajeto real); cor pela medida escolhida.`, score: 94 });
   if (lat && lon) out.push({ id: id('map'), kind: 'map', title: 'Mapa dos registros', description: `Cada ponto é um registro com coordenadas (${lat.filled} de ${t.rows.length}).`, score: 95 });
 
   for (const d of dates.slice(0, 2)) {
@@ -59,6 +62,12 @@ export function suggestCharts(t: Table, prof: ColProfile[], level = 2): ChartSpe
   });
   const c0 = cats.find((c) => c.unique <= 25);
   if (c0 && nums[0] && level >= 2) out.push({ id: id('catnum'), kind: 'hbar', x: c0.name, y: nums[0].name, agg: how(nums[0].name).agg, title: `${nums[0].name} por ${c0.name}`, description: `${how(nums[0].name).word} de “${nums[0].name}” para cada valor de “${c0.name}”.`, score: 80 });
+  // taxa (%) que sai de duas colunas: o gráfico por categoria usa a taxa geral (soma ÷ soma), não a média das taxas das linhas
+  if (c0 && level >= 2) {
+    for (const r of findRelations(t, prof).filter((x) => x.bad.length === 0 && x.p !== nums[0]?.name && !semOf(x.p)?.additive).slice(0, 2)) {
+      out.push({ id: id('taxa'), kind: 'hbar', x: c0.name, y: r.p, agg: 'ratio', ratio: { num: r.a, den: r.b }, title: `${r.p} por ${c0.name} (taxa geral)`, description: `Taxa geral de “${r.p}” para cada valor de “${c0.name}”: soma de “${r.a}” ÷ soma de “${r.b}” × 100 (não a média das taxas de cada linha, que dá o mesmo peso a linhas pequenas e grandes).`, score: 79 });
+    }
+  }
   const c1 = cats.find((c) => c.name !== c0?.name && c.unique <= 8);
   if (c0 && c1 && c0.unique <= 15 && level >= 3) {
     out.push({ id: id('stack'), kind: 'pivot', style: 'stacked', x: c0.name, seriesBy: c1.name, agg: 'count', title: `${c0.name} × ${c1.name}`, description: `Quantos registros há em cada combinação de “${c0.name}” e “${c1.name}”.`, score: 55 });

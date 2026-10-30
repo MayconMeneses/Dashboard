@@ -13,7 +13,7 @@ export interface SeriesData {
 
 export const monthKey = (ts: number) => new Date(ts).toISOString().slice(0, 7);
 
-export type Agg = NonNullable<ChartSpec['agg']>;
+export type Agg = Exclude<NonNullable<ChartSpec['agg']>, 'ratio'>;
 /** Acumulador de um grupo: o suficiente para soma, média, mínimo, máximo e (guardando os valores) mediana. */
 export interface Acc {
   n: number;
@@ -69,10 +69,32 @@ export function agg(rows: Row[], key: (r: Row) => string | null, val: (r: Row) =
   return m;
 }
 
+/**
+ * Taxa geral por grupo: soma do numerador ÷ soma do denominador × 100, só com as linhas em que os dois existem (a média das taxas das linhas
+ * dá o mesmo peso a uma escola de 50 alunos e a uma de 500). Denominador zero ou ausente em todo o grupo = sem dado.
+ */
+function ratioData(t: Table, spec: ChartSpec): SeriesData {
+  const { num, den } = spec.ratio!;
+  const g = new Map<string, { n: number; d: number }>();
+  for (const r of t.rows) {
+    const k = r[spec.x!];
+    const a = toNumber(r[num] ?? null);
+    const b = toNumber(r[den] ?? null);
+    if (k == null || a == null || b == null) continue;
+    const e = g.get(String(k)) ?? { n: 0, d: 0 };
+    e.n += a;
+    e.d += b;
+    g.set(String(k), e);
+  }
+  const e = [...g].map(([k, v]) => [k, v.d > 0 ? (v.n / v.d) * 100 : Number.NaN] as const).filter(([, v]) => !Number.isNaN(v)).sort((a, b) => b[1] - a[1]).slice(0, 15);
+  return { labels: e.map((x) => x[0]), values: e.map((x) => x[1]) };
+}
+
 /** Calcula os dados de um gráfico. Valores ausentes ficam de fora (nunca viram zero). */
 export function chartData(t: Table, spec: ChartSpec): SeriesData {
   if (spec.kind === 'pivot') return pivotData(t, spec);
-  const how = spec.agg ?? 'count';
+  if (spec.agg === 'ratio' && spec.ratio && spec.x && spec.kind !== 'line') return ratioData(t, spec);
+  const how = (spec.agg ?? 'count') as Agg;
   const get = (c: string) => (r: Row) => (r[c] == null ? null : String(r[c]));
   const num = (c?: string) => (r: Row) => (c ? toNumber(r[c] ?? null) : null);
 
@@ -186,7 +208,7 @@ export function pivotData(t: Table, spec: ChartSpec): SeriesData {
     const k = r[spec.seriesBy];
     if (k != null && !seriesKeys.includes(String(k))) seriesKeys.push(String(k));
   }
-  const how: Agg = spec.agg ?? 'sum';
+  const how = (spec.agg === 'ratio' ? 'sum' : (spec.agg ?? 'sum')) as Agg;
   const sum = (pred: (r: Row) => boolean): number => {
     let acc: Acc | undefined;
     for (const r of rows) {

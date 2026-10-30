@@ -18,7 +18,7 @@ export function toGeoJson(t: Pick<Table, 'columns' | 'geo' | 'shapes'>, rows: Ro
     if (!geometry && t.geo) {
       const lat = toNumber(r[t.geo.lat] ?? null);
       const lon = toNumber(r[t.geo.lon] ?? null);
-      if (lat != null && lon != null) geometry = { type: 'Point', coordinates: [lon, lat] };
+      if (lat != null && lon != null && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) geometry = { type: 'Point', coordinates: [lon, lat] };
     }
     if (!geometry) continue;
     const properties: Record<string, unknown> = {};

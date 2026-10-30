@@ -1,6 +1,7 @@
 import { toNumber } from '../profile.js';
 import type { ColProfile, Kpi, Table } from '../types.js';
 import { fmtNum } from './format.js';
+import { findRelations } from './quality.js';
 import { semanticProfile } from './semantic.js';
 import { tidyKpis } from './tidy.js';
 
@@ -15,6 +16,21 @@ export function kpis(t: Table, prof: ColProfile[]): Kpi[] {
   const additive = m ? sem.find((s) => s.name === m.name)!.additive : true;
   if (m?.sum != null && additive) out.push({ label: `Total de ${m.name}`, value: fmtNum(m.sum), hint: `média ${fmtNum(m.mean!)} · mediana ${fmtNum(m.median!)}` });
   else if (m?.mean != null) out.push({ label: `Média de ${m.name}`, value: fmtNum(m.mean), hint: `mediana ${fmtNum(m.median!)} · mínimo ${fmtNum(m.min!)} · máximo ${fmtNum(m.max!)}` });
+  // taxa (%) que sai de duas colunas: o indicador geral é soma ÷ soma, ao lado da média simples das linhas
+  for (const r of findRelations(t, prof).filter((x) => x.bad.length === 0).slice(0, 2)) {
+    let n = 0;
+    let dd = 0;
+    for (const row of t.rows) {
+      const a = toNumber(row[r.a] ?? null);
+      const b = toNumber(row[r.b] ?? null);
+      if (a != null && b != null) {
+        n += a;
+        dd += b;
+      }
+    }
+    const media = prof.find((p) => p.name === r.p)?.mean;
+    if (dd > 0) out.push({ label: `Taxa geral: ${r.p}`, value: `${fmtNum((n / dd) * 100)}%`, hint: `soma de ${r.a} ÷ soma de ${r.b} × 100${media != null ? `; a média simples das linhas é ${fmtNum(media)}%` : ''}` });
+  }
   const d = prof.find((p) => p.type === 'date');
   if (d?.minDate != null) out.push({ label: `Período (${d.name})`, value: `${new Date(d.minDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })} a ${new Date(d.maxDate!).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}` });
   const filled = prof.reduce((a, p) => a + p.filled, 0) / Math.max(1, t.rows.length * t.columns.length);

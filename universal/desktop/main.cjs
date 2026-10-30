@@ -13,7 +13,7 @@ const PAGINA_INSTALADORES = 'https://github.com/MayconMeneses/Dashboard/tree/HEA
 const MODO_TESTE = !!OVERRIDE && upd.ehLoopback(OVERRIDE);
 const RESPOSTA_TESTE = MODO_TESTE ? process.env.UNIVERSAL_TEST_ANSWER : undefined;
 
-const EXT = ['csv', 'tsv', 'txt', 'xlsx', 'docx', 'doc', 'pdf', 'json', 'geojson', 'kml', 'kmz'];
+const EXT = ['csv', 'tsv', 'txt', 'xlsx', 'docx', 'doc', 'pdf', 'json', 'geojson', 'kml', 'kmz', 'parquet'];
 let win = null;
 let pending = null;
 // último arquivo entregue ao painel: se o painel for recarregado por uma atualização, ele é entregue de novo

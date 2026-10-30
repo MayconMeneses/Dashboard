@@ -51,12 +51,29 @@ describe('escolas: taxa (%) é média, e a relação aprovados ÷ matrículas é
     expect(alertas).toContain('taxa_aprovacao');
     expect(alertas).toMatch(/aprovados/);
   });
-  it('limite conhecido: a média simples das taxas (82,5) difere da taxa geral ponderada (86,15); o primeiro indicador é o total de matrículas (650)', async () => {
+  it('taxa geral ponderada (86,15%) ao lado da média simples das linhas (82,5%); o primeiro indicador é o total de matrículas (650)', async () => {
     const t = await csv('escolas.csv', linhas);
     const p = profileTable(t);
     expect(p.find((c) => c.name === 'taxa_aprovacao')!.mean).toBeCloseTo(82.5, 6);
-    expect((180 + 70 + 270 + 40) / (200 + 100 + 300 + 50)).toBeCloseTo(0.8615, 3);
-    expect(kpis(t, p).find((x) => x.label.startsWith('Total de'))).toMatchObject({ label: 'Total de matriculas', value: '650' });
+    const k = kpis(t, p);
+    expect(k.find((x) => x.label.startsWith('Total de'))).toMatchObject({ label: 'Total de matriculas', value: '650' });
+    const geral = k.find((x) => x.label === 'Taxa geral: taxa_aprovacao')!;
+    expect(geral.value).toBe('86,15%'); // (180+70+270+40) ÷ (200+100+300+50) × 100
+    expect(geral.hint).toContain('média simples das linhas é 82,5%');
+  });
+  it('gráfico por município usa a taxa geral (Fortaleza 250÷300 = 83,33%; Sobral 310÷350 = 88,57%), não a média das taxas (80 e 85)', async () => {
+    const t = await csv('escolas.csv', linhas);
+    const sp = suggestCharts(t, profileTable(t), 3).find((c) => c.agg === 'ratio')!;
+    expect(sp).toBeDefined();
+    expect(sp.ratio).toEqual({ num: 'aprovados', den: 'matriculas' });
+    const por = porRotulo(chartData(t, sp));
+    expect(por.Fortaleza).toBeCloseTo((250 / 300) * 100, 6);
+    expect(por.Sobral).toBeCloseTo((310 / 350) * 100, 6);
+  });
+  it('taxa geral: denominador zero ou ausente no grupo fica sem dado (não vira 0 nem infinito)', () => {
+    const t: Table = { name: 't', columns: ['g', 'a', 'b'], rows: [{ g: 'x', a: 5, b: 0 }, { g: 'y', a: 5, b: null }, { g: 'z', a: 3, b: 6 }] };
+    const d = chartData(t, spec({ x: 'g', agg: 'ratio', ratio: { num: 'a', den: 'b' } }));
+    expect(porRotulo(d)).toEqual({ z: 50 });
   });
 });
 
@@ -108,8 +125,10 @@ describe('logística origem/destino: coordenadas com sufixo não são medidas', 
     expect(porRotulo(chartData(t, spec({ x: 'origem', y: 'peso', agg: 'sum' })))).toEqual({ Fortaleza: 2300, Sobral: 500, Crato: 700 });
     expect(kpis(t, profileTable(t)).find((x) => x.label.startsWith('Total de'))?.label).toBe('Total de peso');
   });
-  it('limite conhecido: dois pares de coordenadas (origem e destino) não geram mapa nem fluxo', async () => {
+  it('dois pares de coordenadas (origem e destino) geram um mapa de fluxos', async () => {
     const t = await csv('logistica.csv', linhas);
-    expect(suggestCharts(t, profileTable(t), 3).some((c) => c.kind === 'map')).toBe(false);
+    const mapa = suggestCharts(t, profileTable(t), 3).find((c) => c.kind === 'map');
+    expect(mapa).toMatchObject({ flow: true });
+    expect(mapa!.title).toContain('origem → destino');
   });
 });

@@ -54,7 +54,7 @@ export function insightFor(spec: ChartSpec, d: SeriesData): string {
     return `Pico: ${br(top[0])} em ${d.labels[top[1]]}; mínimo: ${br(low[0])} em ${d.labels[low[1]]}.${delta}${gap}`;
   }
   // média não se soma: “% do total” só faz sentido para soma e contagem
-  const nome = spec.agg === 'mean' ? 'média' : spec.agg === 'median' ? 'mediana' : spec.agg === 'min' ? 'mínimo' : spec.agg === 'max' ? 'máximo' : '';
+  const nome = spec.agg === 'ratio' ? 'taxa geral' : spec.agg === 'mean' ? 'média' : spec.agg === 'median' ? 'mediana' : spec.agg === 'min' ? 'mínimo' : spec.agg === 'max' ? 'máximo' : '';
   if (nome) return `Maior ${nome}: ${d.labels[top[1]]} (${br(top[0])}); menor: ${d.labels[low[1]]} (${br(low[0])}).${gap}`;
   return `Maior: ${d.labels[top[1]]} (${br(top[0])}, ${br((top[0] / (total || 1)) * 100)}% do total ${br(total)}); menor: ${d.labels[low[1]]} (${br(low[0])}).${gap}`;
 }
