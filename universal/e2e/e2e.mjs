@@ -269,6 +269,44 @@ ok('gráficos do PDF saem com fundo branco e texto escuro mesmo no tema escuro')
   ok('dica do mapa trata o valor do arquivo como texto (sem executar HTML)');
 }
 
+// 12. Papel e origem das colunas e efeito do filtro aparecem na tela
+{
+  const ufs = ['SP', 'RJ', 'MG', 'BA'];
+  const linhas = ['cep;uf;vendas'];
+  for (let i = 0; i < 24; i++) linhas.push(`${10000000 + i * 7919};${ufs[i % 4]};${100 + i * 10}`);
+  writeFileSync(join(dir, 'papeis.csv'), linhas.join(String.fromCharCode(10)));
+  const pp = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  pp.on('pageerror', (e) => errors.push(e.message));
+  await pp.goto(app);
+  await pp.setInputFiles('#file', join(dir, 'papeis.csv'));
+  await pp.waitForSelector('#preview:not([hidden]) h2');
+  await pp.click('#preview button.primary');
+  await pp.waitForSelector('#cols tbody tr');
+  const linha = async (nome) => pp.evaluate((n) => [...document.querySelectorAll('#cols tbody tr')].find((tr) => tr.querySelector('input')?.value === n)?.lastElementChild?.textContent ?? null, nome);
+  assert.match(await linha('uf'), /^dimensão · Lida do arquivo sem alteração./);
+  assert.match(await linha('vendas'), /^medida · /);
+  assert.match(await linha('cep'), /^identificador · /, 'CEP é identificador');
+  assert.equal(await pp.locator('#charts .card', { hasText: 'cep' }).count(), 0, 'nenhum gráfico usa o CEP');
+  // renomear aparece na linhagem
+  const idx = await pp.evaluate(() => [...document.querySelectorAll('#cols tbody tr')].findIndex((tr) => tr.querySelector('input')?.value === 'vendas'));
+  await pp.locator('#cols tbody tr').nth(idx).locator('input').first().fill('faturamento');
+  await pp.keyboard.press('Tab');
+  await pp.waitForFunction(() => [...document.querySelectorAll('#cols tbody tr')].some((tr) => tr.querySelector('input')?.value === 'faturamento' && /Renomeada de “vendas”/.test(tr.lastElementChild.textContent)));
+  // filtro: clicar na primeira barra do gráfico por UF
+  const cv = pp.locator('#charts canvas[aria-label^="Registros por uf"]').first();
+  await cv.scrollIntoViewIfNeeded();
+  const box = await cv.boundingBox();
+  for (const fy of [0.1, 0.18, 0.26, 0.34, 0.42, 0.5, 0.58, 0.66, 0.74, 0.82]) {
+    if (await pp.locator('#chips .chip').count()) break;
+    await pp.mouse.click(box.x + box.width * 0.35, box.y + box.height * fy);
+    await pp.waitForTimeout(250);
+  }
+  assert.ok(await pp.locator('#chips .chip').count(), 'filtro aplicado pelo clique no gráfico');
+  assert.match(await pp.locator('#chips .filter-note').innerText(), /Efeito do filtro — .*“uf”: 6 de 24 preenchidas, 1 de 4 valores distintos/);
+  await pp.close();
+  ok('tabela de colunas mostra papel e origem; filtro mostra o efeito nas colunas');
+}
+
 assert.deepEqual(errors, [], 'sem erros de página: ' + errors.join(' | '));
 await browser.close();
 console.log(log.join('\n'));

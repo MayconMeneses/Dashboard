@@ -11,6 +11,7 @@ import { csvField, delimiterName } from './csv.js';
 import { printCharts, setChartMode } from './design/chartTheme.js';
 import { PALETTE } from './design/palette.js';
 import { $, download, el } from './app/dom.js';
+import { columnInfo, filterNote } from './app/colsInfo.js';
 import { cellText } from './app/format.js';
 import { initShell } from './app/shell.js';
 import { diffBox } from './app/diffBox.js';
@@ -331,6 +332,9 @@ function render() {
   });
   // tipos vêm da tabela inteira; soma, média e período acompanham as linhas filtradas
   lastKpiProf = t.rows.length === full.rows.length ? prof : profileTable(t, Object.fromEntries(prof.map((p) => [p.name, p.type])));
+  const note = Object.keys(filters).length ? filterNote(prof, lastKpiProf) : null;
+  $('chips').querySelector('.filter-note')?.remove();
+  if (note) $('chips').append(note);
   $('kpis').replaceChildren(...[...kpis(t, lastKpiProf), ...metricKpis].map((k) => el('div', { className: 'kpi', title: k.hint ?? '' }, el('b', {}, k.value), el('span', {}, k.label))));
   renderMetrics(full, t);
   renderTools();
@@ -338,7 +342,8 @@ function render() {
   lastSpecs = specs;
   $('charts').replaceChildren(...(full.noCharts ? [el('div', { className: 'card' }, el('p', {}, 'Sem gráficos: este documento não tem tabelas com colunas alinhadas, só texto. O texto extraído está na tabela abaixo; para gráficos, use o arquivo original em Excel ou CSV.'))] : specs.map((s) => drawChart(s, t))));
   renderTable();
-  const th = ['Coluna (pode renomear)', 'Unidade', 'Tipo (pode corrigir)', 'Preenchidas', 'Vazias', 'Valores distintos', 'Valores inválidos'];
+  const th = ['Coluna (pode renomear)', 'Unidade', 'Tipo (pode corrigir)', 'Preenchidas', 'Vazias', 'Valores distintos', 'Valores inválidos', 'Papel e origem'];
+  const info = columnInfo(full, prof, { renames, forced, units, merges, metrics });
   $('cols').replaceChildren(
     el('thead', {}, el('tr', {}, ...th.map((h) => el('th', {}, h)))),
     el(
@@ -360,7 +365,7 @@ function render() {
           units = unitIn.value.trim() ? { ...units, [p.name]: unitIn.value.trim() } : Object.fromEntries(Object.entries(units).filter(([k]) => k !== p.name));
           setTimeout(render, 0);
         };
-        return el('tr', {}, el('td', {}, nameIn), el('td', {}, unitIn), el('td', {}, sel), el('td', {}, String(p.filled)), el('td', {}, String(p.missing)), el('td', {}, String(p.unique)), el('td', {}, p.invalidCount ? `${p.invalidCount} (ex.: linha ${p.invalid![0]!.row}: “${p.invalid![0]!.value}”)` : '—'));
+        return el('tr', {}, el('td', {}, nameIn), el('td', {}, unitIn), el('td', {}, sel), el('td', {}, String(p.filled)), el('td', {}, String(p.missing)), el('td', {}, String(p.unique)), el('td', {}, p.invalidCount ? `${p.invalidCount} (ex.: linha ${p.invalid![0]!.row}: “${p.invalid![0]!.value}”)` : '—'), info.get(p.name) ?? el('td', {}));
       }),
     ),
   );
