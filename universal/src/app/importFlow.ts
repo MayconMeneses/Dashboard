@@ -1,6 +1,7 @@
 import { isDelimited, isTextual } from '../formats.js';
 import { mergeDatasets } from '../join/join.js';
 import { diffBox } from './diffBox.js';
+import { comEsqueleto } from './esqueleto.js';
 import { cellText, TYPE_NAMES } from './format.js';
 import { $, el } from './dom.js';
 import { delimiterName } from '../csv.js';
@@ -55,7 +56,9 @@ async function sha256(bytes: Uint8Array): Promise<string | undefined> {
   }
 }
 
-export async function startFile(fileName: string, bytes: Uint8Array, opts: ParseOptions = {}, keep?: Pending) {
+export const startFile = (fileName: string, bytes: Uint8Array, opts: ParseOptions = {}, keep?: Pending) => comEsqueleto('Lendo o arquivo…', () => lerArquivo(fileName, bytes, opts, keep));
+
+async function lerArquivo(fileName: string, bytes: Uint8Array, opts: ParseOptions, keep?: Pending) {
   try {
     const ds = await parseFile(fileName, bytes, { ...host.parseDefaults, ...opts });
     const sha = keep?.sha ?? (await sha256(bytes));
@@ -174,8 +177,9 @@ export async function handle(f: File) {
 
 
 /** Abre um ou vários arquivos. Com vários, as tabelas de todos entram no mesmo painel (nomes “arquivo › aba”) e podem ser relacionadas depois. */
-export async function handleFiles(files: File[]) {
-  if (files.length === 1) return handle(files[0]!);
+export const handleFiles = (files: File[]) => (files.length === 1 ? handle(files[0]!) : comEsqueleto('Lendo os arquivos…', () => lerVarios(files)));
+
+async function lerVarios(files: File[]) {
   try {
     const list: Dataset[] = [];
     for (const f of files) {

@@ -13,7 +13,12 @@ import { PALETTE } from './design/palette.js';
 import { $, download, el } from './app/dom.js';
 import { columnInfo, filterNote } from './app/colsInfo.js';
 import { filtrarPorRotulo } from './app/filtro.js';
+import { filtrarPorTexto } from './app/busca.js';
 import { explorerCard } from './app/explorer.js';
+import { aplicarOrdem, comId, tornarReordenavel } from './app/ordem.js';
+import type { PainelCtx } from './app/painelCtx.js';
+import { initPainel, renderPainel } from './app/painelFiltros.js';
+import { initBusca, renderChips, renderPeriodo, syncBusca } from './app/topo.js';
 import { cellText, TYPE_NAMES } from './app/format.js';
 import { initShell } from './app/shell.js';
 import { clearPending, handleFiles, initImport, startFile } from './app/importFlow.js';
@@ -52,6 +57,8 @@ let filters: Record<string, string> = {};
 let merges: Record<string, Record<string, string>> = {};
 let dateRange: { col?: string; from?: string; to?: string } = {};
 let sortState: { col: string; dir: SortDir } | null = null;
+let search = '';
+let chartOrder: string[] = [];
 let page = 1;
 let pageSize = 50;
 // padrão sem fundo: o mapa de fundo da Esri busca imagens na internet e revela a região consultada; só entra por escolha do usuário
@@ -89,12 +96,30 @@ function view(): Table {
   const base = mergedTable();
   const keys = Object.keys(filters);
   const dated = !!dateRange.col && !!(dateRange.from || dateRange.to);
-  if (!keys.length && !dated) return base;
+  if (!keys.length && !dated && !search.trim()) return base;
   let rows = base.rows;
   if (keys.length) rows = rows.filter((r) => keys.every((k) => String(r[k] ?? '') === filters[k]));
   if (dated) rows = filterByDate(rows, dateRange.col!, dateRange.from, dateRange.to);
+  if (search.trim()) rows = filtrarPorTexto(rows, base.columns, search);
   return { ...base, rows };
 }
+
+const appCtx: PainelCtx = {
+  filters: () => filters,
+  setFilter: (c, v) => {
+    const { [c]: _antigo, ...resto } = filters;
+    void _antigo;
+    filters = v == null ? resto : { ...resto, [c]: v };
+    page = 1;
+    render();
+  },
+  dateRange: () => dateRange,
+  setDateRange: (r) => ((dateRange = r), (page = 1), render()),
+  search: () => search,
+  setSearch: (v) => ((search = v), (page = 1), render()),
+  prof: () => lastProf,
+  limparTudo: () => ((filters = {}), (dateRange = {}), (search = ''), (page = 1), render()),
+};
 
 function toggleFilter(col: string, value: string) {
   if (filters[col] === value) delete filters[col];
@@ -276,14 +301,7 @@ function render() {
   $('ttl').textContent = full.title ?? full.name;
   $('ctx').textContent = full.context ?? '';
   const alerts = qualityAlerts(full, prof, currentLoc());
-  $('chips').replaceChildren(
-    ...Object.entries(filters).map(([k, v]) => {
-      const b = el('button', { type: 'button', className: 'chip', title: 'Remover este filtro' }, `${k}: ${v}  ✕`);
-      b.onclick = () => toggleFilter(k, v);
-      return b;
-    }),
-  );
-  ($('chips') as HTMLElement).hidden = !Object.keys(filters).length;
+  renderChips(appCtx);
   const mergeNotes = Object.entries(merges).map(([col, map]) => {
     const li = el('li', { className: 'info' }, `Em “${col}”, grafias unificadas por você: ${Object.entries(map).map(([a, b]) => `“${a}” → “${b}”`).join(', ')}. `);
     const undo = el('button', { type: 'button', className: 'mini' }, 'Desfazer');
@@ -313,7 +331,7 @@ function render() {
     }),
   );
   ($('alertsBox') as HTMLElement).hidden = !alerts.length && !mergeNotes.length;
-  renderDateBar(prof);
+  renderPeriodo(prof, appCtx);
   const metricKpis = metrics.flatMap((mt) => {
     try {
       const c = compileFormula(mt.formula, full.columns);
@@ -332,8 +350,11 @@ function render() {
   renderTools();
   const specs = suggestCharts(full, prof, Number(($('level') as HTMLSelectElement).value)).filter((s) => !removed.has(s.id));
   lastSpecs = specs;
-  $('charts').replaceChildren(...(full.noCharts ? [el('div', { className: 'card' }, el('p', {}, 'Sem gráficos: este documento não tem tabelas com colunas alinhadas, só texto. O texto extraído está na tabela abaixo; para gráficos, use o arquivo original em Excel ou CSV.'))] : [...specs.map((s) => drawChart(s, t)), ...[explorerCard(full, prof, forced, (s) => drawChart(s, t), render)].filter((c): c is HTMLElement => c != null)]));
+  $('charts').replaceChildren(...(full.noCharts ? [el('div', { className: 'card' }, el('p', {}, 'Sem gráficos: este documento não tem tabelas com colunas alinhadas, só texto. O texto extraído está na tabela abaixo; para gráficos, use o arquivo original em Excel ou CSV.'))] : [...aplicarOrdem(specs, chartOrder).map((s) => comId(drawChart(s, t), s.id)), ...[explorerCard(full, prof, forced, (s) => drawChart(s, t), render)].filter((c): c is HTMLElement => c != null)]));
+  tornarReordenavel($('charts'), (nova) => ((chartOrder = nova), render()));
   renderTable();
+  renderPainel(appCtx);
+  syncBusca(appCtx);
   const th = ['Coluna (pode renomear)', 'Unidade', 'Tipo (pode corrigir)', 'Preenchidas', 'Vazias', 'Valores distintos', 'Valores inválidos', 'Papel e origem'];
   const info = columnInfo(full, prof, { renames, forced, units, merges, metrics });
   $('cols').replaceChildren(
@@ -512,35 +533,6 @@ function downloadExcel() {
   download(`${baseName()}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', bytes);
 }
 
-function renderDateBar(prof: ColProfile[]) {
-  const bar = $('dateBar');
-  const dcols = prof.filter((p) => p.type === 'date');
-  bar.hidden = !dcols.length;
-  if (!dcols.length) return;
-  const col = dateRange.col && dcols.some((d) => d.name === dateRange.col) ? dateRange.col : dcols[0]!.name;
-  const cur = dcols.find((d) => d.name === col)!;
-  const iso = (ms?: number) => (ms == null ? undefined : new Date(ms).toISOString().slice(0, 10));
-  const sel = el('select', { ariaLabel: 'Coluna de data do período' }, ...dcols.map((d) => el('option', { value: d.name, selected: d.name === col }, d.name)));
-  const from = el('input', { type: 'date', value: dateRange.from ?? '', min: iso(cur.minDate), max: iso(cur.maxDate), ariaLabel: 'Período: de' });
-  const to = el('input', { type: 'date', value: dateRange.to ?? '', min: iso(cur.minDate), max: iso(cur.maxDate), ariaLabel: 'Período: até' });
-  const apply = () => {
-    dateRange = { col: sel.value, from: from.value || undefined, to: to.value || undefined };
-    page = 1;
-    setTimeout(render, 0);
-  };
-  sel.onchange = apply;
-  from.onchange = apply;
-  to.onchange = apply;
-  const clear = el('button', { type: 'button', className: 'mini' }, 'Limpar período');
-  clear.onclick = () => {
-    dateRange = {};
-    page = 1;
-    render();
-  };
-  bar.replaceChildren(el('b', {}, 'Período: '), sel, ' de ', from, ' até ', to, ' ', clear, el('span', { className: 'muted' }, ' Linhas sem data nessa coluna ficam fora quando o período está ativo.'));
-}
-
-
 function renderTable() {
   if (!table) return;
   const base = mergedTable();
@@ -591,6 +583,8 @@ function load(ds0: Dataset, st: SharedState = {}) {
   dateRange = st.dateRange ?? {};
   basemap = st.basemap ?? 'none';
   pageSize = st.pageSize ?? 50;
+  search = st.search ?? '';
+  chartOrder = st.chartOrder ?? [];
   renames = st.renames ?? {};
   units = st.units ?? {};
   metrics = st.metrics ?? [];
@@ -627,7 +621,7 @@ function confirmJoin(spec: JoinSpec) {
 const csvCell = (v: unknown) => csvField(v);
 
 function captureState(): SharedState {
-  return { level: ($('level') as HTMLSelectElement).value, tableIndex: dataset && table ? dataset.tables.indexOf(table) : 0, forced, filters, removed: [...removed], styleChoice: { ...styleChoice }, rateChoice: { ...rateChoice }, merges, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers }, dateRange, basemap, pageSize, renames, units, metrics, joins: dataset ? stripJoined(dataset).joins : [] };
+  return { level: ($('level') as HTMLSelectElement).value, tableIndex: dataset && table ? dataset.tables.indexOf(table) : 0, forced, filters, removed: [...removed], styleChoice: { ...styleChoice }, rateChoice: { ...rateChoice }, merges, locale: { dateOrder: locale.dateOrder, numbers: locale.numbers }, dateRange, basemap, pageSize, renames, units, metrics, joins: dataset ? stripJoined(dataset).joins : [], search, chartOrder };
 }
 
 /** Gera um único .html com o painel e os dados embutidos, abrindo igual ao que está na tela. */
@@ -679,6 +673,8 @@ function openShareDialog() {
 }
 
 function init() {
+  initBusca(appCtx);
+  initPainel(appCtx);
   initImport({
     load,
     fail,

@@ -48,6 +48,32 @@
   --map-filter: none;
 }
 
+/* Contraste alto: preto e branco, contornos de 2 px e foco amarelo (texto a 7:1 ou mais). */
+:root[data-theme='contrast'] {
+  --bg-canvas: #000000;
+  --bg-sidebar: #000000;
+  --bg-surface: #000000;
+  --bg-raised: #0D0D0D;
+  --border-subtle: #8A8A8A;
+  --border-control: #FFFFFF;
+  --text-primary: #FFFFFF;
+  --text-secondary: #FFFFFF;
+  --text-muted: #E6E6E6;
+  --accent-blue: #66B3FF;
+  --accent-cyan: #3DF2FF;
+  --accent-purple: #C8B6FF;
+  --on-accent: #000000;
+  --status-success: #5CFF9D;
+  --status-warning: #FFD24D;
+  --status-danger: #FF9A9A;
+  --danger-bg: #330000;
+  --focus-ring: #FFFF00;
+  --radius-card: 6px;
+  --radius-control: 6px;
+  --shadow-card: none;
+  --map-filter: none;
+}
+
 /* nomes curtos usados pelo restante do CSS */
 :root {
   --bg: var(--bg-canvas);

@@ -43,7 +43,12 @@ export async function parquetToTable(name: string, bytes: Uint8Array, maxRows = 
   }
   const columns: string[] = [];
   const seen = new Set<string>();
-  for (const o of objs.slice(0, 200)) for (const k of Object.keys(o)) if (!seen.has(k)) (seen.add(k), columns.push(k));
+  for (const o of objs.slice(0, 200))
+    for (const k of Object.keys(o)) {
+      if (seen.has(k)) continue;
+      seen.add(k);
+      columns.push(k);
+    }
   const rows: Row[] = objs.map((o) => Object.fromEntries(columns.map((c) => [c, celula(o[c])])));
   const truncated = Math.max(0, total - rows.length);
   const notes = [`Parquet lido na memória do seu computador: ${fmt(total)} linha(s), ${columns.length} coluna(s).`];

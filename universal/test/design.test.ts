@@ -24,6 +24,8 @@ const ratio = (a: string, b: string) => {
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 };
 
+const contraste = { ...dark, ...tokens(/data-theme='contrast'/) };
+
 describe.each([['escuro', dark], ['claro', light]] as const)('tema %s', (_n, t) => {
   const bgs = ['bg-canvas', 'bg-sidebar', 'bg-surface', 'bg-raised'] as const;
   it('texto comum tem contraste ≥ 4,5:1 sobre todos os fundos', () => {
@@ -68,5 +70,31 @@ describe('preferência de tema', () => {
     expect(resolveTheme('auto', true)).toBe('dark');
     expect(resolveTheme('auto', false)).toBe('light');
     expect(resolveTheme('light', true)).toBe('light');
+  });
+});
+
+describe('tema de contraste alto', () => {
+  const t = contraste;
+  const bgs = ['bg-canvas', 'bg-sidebar', 'bg-surface', 'bg-raised'] as const;
+  it('texto, destaques, bordas de controle e foco têm ≥ 7:1 (WCAG AAA) sobre todos os fundos', () => {
+    for (const fg of ['text-primary', 'text-secondary', 'text-muted', 'accent-blue', 'accent-cyan', 'accent-purple', 'status-success', 'status-warning', 'status-danger', 'border-control', 'focus-ring'] as const)
+      for (const bg of bgs) expect(ratio(t[fg]!, t[bg]!), `${fg} sobre ${bg}`).toBeGreaterThanOrEqual(7);
+    expect(ratio(t['on-accent']!, t['accent-blue']!)).toBeGreaterThanOrEqual(7);
+    expect(ratio(t['status-danger']!, t['danger-bg']!)).toBeGreaterThanOrEqual(7);
+  });
+  it('texto e grade dos gráficos acompanham os tokens; a grade (não textual) tem ≥ 3:1', () => {
+    expect(TEXT.contrast.text.toUpperCase()).toBe(t['text-secondary']);
+    expect(ratio(TEXT.contrast.text, t['bg-surface']!)).toBeGreaterThanOrEqual(7);
+    expect(ratio(TEXT.contrast.grid, t['bg-surface']!)).toBeGreaterThanOrEqual(3);
+  });
+  it('a paleta dos gráficos continua com ≥ 3:1 sobre o preto', () => {
+    for (const c of PALETTE) expect(ratio(c, t['bg-surface']!), c).toBeGreaterThanOrEqual(3);
+  });
+  it('preferência: aceita “contrast”; no automático o contraste do sistema vence o claro/escuro', () => {
+    expect(parsePref('contrast')).toBe('contrast');
+    expect(resolveTheme('contrast', false)).toBe('contrast');
+    expect(resolveTheme('auto', true, true)).toBe('contrast');
+    expect(resolveTheme('auto', false, false)).toBe('light');
+    expect(resolveTheme('auto', true)).toBe('dark');
   });
 });

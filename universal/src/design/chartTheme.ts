@@ -5,6 +5,7 @@ import type { ThemeMode } from './theme.js';
 export const TEXT: Record<ThemeMode, { text: string; grid: string }> = {
   dark: { text: '#B7C8DD', grid: '#28405D' },
   light: { text: '#2C3E57', grid: '#C9D5E6' },
+  contrast: { text: '#FFFFFF', grid: '#8A8A8A' },
 };
 
 let solid: string | null = null;

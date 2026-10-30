@@ -22,8 +22,11 @@
 <div class="content">
 <header class="top">
   <h1><img class="logo" src="/src/assets/logo-96.png" alt="" width="36" height="36"> Dashboard Universal</h1>
-  <div class="top-tools"><label class="tema">Tema <select id="themeSel" aria-label="Tema da interface"><option value="dark">Escuro</option><option value="light">Claro</option><option value="auto">Automático (sistema)</option></select></label></div>
+  <div class="top-tools"><label class="tema">Tema <select id="themeSel" aria-label="Tema da interface"><option value="dark">Escuro</option><option value="light">Claro</option><option value="contrast">Contraste alto</option><option value="auto">Automático (sistema)</option></select></label></div>
   <div class="actions" id="actions" hidden>
+    <input id="gSearch" type="search" placeholder="Buscar em todos os dados…" aria-label="Buscar em todos os dados" autocomplete="off">
+    <label>Período <select id="gPeriodo" aria-label="Período rápido"></select></label>
+    <button id="btnFiltros" type="button" aria-expanded="false" aria-controls="painelFiltros">Filtros</button>
     <label>Gráficos <select id="level"><option value="1">Menos</option><option value="2" selected>Padrão</option><option value="3">Mais</option></select></label>
     <select id="tableSel" aria-label="Aba ou tabela"></select>
     <button id="btnHtml" type="button">Gerar HTML para compartilhar</button>
@@ -41,15 +44,16 @@
 <main>
   <section id="drop" class="drop" tabindex="0" role="button" aria-label="Escolher arquivo">
     <p><strong>Arraste um arquivo aqui</strong> ou clique para escolher</p>
-    <p class="muted">CSV, Excel (XLSX), Word (DOCX) e PDF com tabelas, JSON, GeoJSON, KML ou KMZ. Os dados do arquivo são processados no seu computador e não são enviados a nenhum servidor.</p>
-    <p class="muted small">Acessos externos que existem: o <b>mapa de fundo</b> (Esri) baixa imagens de mapa e revela a região que você está vendo — dá para escolher “Sem mapa de fundo”; e o <b>programa instalado</b> consulta o GitHub para ver se há atualização do painel — dá para desligar em Ajuda.</p>
+    <p class="muted">CSV, Excel (XLSX), Word (DOCX) e PDF com tabelas, Parquet, JSON, GeoJSON, KML ou KMZ. Os dados do arquivo são processados no seu computador e não são enviados a nenhum servidor.</p>
+    <p class="muted small">Acessos externos que existem só se você escolher ou instalar: o <b>mapa de fundo da Esri</b> (opcional; o mapa abre sem fundo) baixa imagens e revela a região que você está vendo; e o <b>programa instalado</b> consulta o GitHub ao abrir para ver se há painel novo e <b>pergunta antes de baixar</b> — dá para desligar em Ajuda.</p>
     <p id="note" class="notice" role="status"></p>
     <p><button id="btnOpenProj2" type="button">Abrir um projeto salvo (.json)</button></p>
     <input id="projFile" type="file" accept=".json,application/json" hidden>
-    <input id="file" type="file" accept=".csv,.tsv,.txt,.xlsx,.docx,.doc,.pdf,.json,.geojson,.kml,.kmz" hidden>
+    <input id="file" type="file" accept=".csv,.tsv,.txt,.xlsx,.docx,.doc,.pdf,.json,.geojson,.kml,.kmz,.parquet" hidden>
   </section>
   <section id="preview" class="card" hidden aria-label="Prévia do arquivo"></section>
   <div id="msg" role="alert"></div>
+  <div id="carregando" class="carregando" hidden></div>
   <section id="app" hidden>
     <div class="titlebar"><h2 id="ttl"></h2><p id="ctx" class="muted"></p></div>
     <div id="chips" class="chips" hidden></div>
@@ -64,6 +68,10 @@
     <section class="card" id="secColunas" tabindex="-1"><h2>Colunas reconhecidas</h2><div class="tablewrap"><table id="cols"></table></div></section>
   </section>
 </main>
+<aside id="painelFiltros" class="drawer" hidden aria-labelledby="pfTitulo">
+  <header><h2 id="pfTitulo" tabindex="-1">Filtros</h2><button id="pfFechar" type="button" aria-label="Fechar o painel de filtros">✕</button></header>
+  <div id="pfCorpo"></div>
+</aside>
 </div>
 </div>
 <section id="report" hidden aria-label="Relatório"></section>

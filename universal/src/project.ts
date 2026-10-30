@@ -29,6 +29,10 @@ export interface ProjectState {
   metrics?: Metric[];
   /** relações entre tabelas confirmadas pelo usuário (a receita; as linhas são refeitas ao abrir) */
   joins?: JoinSpec[];
+  /** busca de texto do topo (vale para o painel inteiro) */
+  search?: string;
+  /** ordem dos gráficos escolhida pelo usuário (ids) */
+  chartOrder?: string[];
 }
 
 /** Renomeia colunas (inclusive no mapeamento de tabelas organizadas e de coordenadas). */

@@ -1,8 +1,31 @@
 # Changelog — Dashboard Universal
 
-## 0.8.0 (em preparação, branch `feature/dashboard-universal-2`; **não publicado**)
+## 0.9.0 (em preparação, branch `feature/dashboard-universal-0.9`; **não publicada**)
 
-O manifesto de atualização (`atualizacao/versao.json`) continua em 0.7.5: publicar é uma decisão separada (ver “Como publicar”).
+O manifesto de atualização (`atualizacao/versao.json`) continua em 0.8.0: publicar é uma decisão separada (ver “Como publicar”). O programa de desktop passa a 0.5.0 (Parquet no “Abrir arquivo” e nas associações): essas duas mudanças só chegam com o instalador novo.
+
+### Novidades
+- **Leitura de Parquet**, 100% no computador (hyparquet e hyparquet-compressors, licença MIT; sem WebAssembly próprio): nulo continua nulo, inteiro de 64 bits vira número ou texto, limite de 200 mil linhas com aviso. GeoParquet: a geometria não é desenhada (avisa).
+- **Taxa geral ponderada:** quando uma taxa (%) sai de duas colunas (por exemplo aprovados ÷ matrículas), o painel mostra a taxa geral (soma ÷ soma) ao lado da média simples das linhas e o gráfico por categoria usa a taxa geral.
+- **Mapa de fluxos:** dois pares de coordenadas (`lat_origem`/`lon_origem` e `lat_destino`/`lon_destino`) viram uma linha reta por registro.
+- **Busca e período no topo:** busca de texto (sem acento nem caixa) que vale para o painel inteiro, e seletor de período rápido (30 e 90 dias, 12 meses, este ano, ano anterior) contado a partir da data mais recente dos dados.
+- **Painel lateral de filtros:** o que está aplicado (com remover), acrescentar filtro por coluna e valor, limpar tudo; abre e fecha pelo teclado.
+- **Reordenar gráficos** por arrastar (alça) ou pelos botões ↑ ↓; a ordem vai no projeto salvo e no relatório.
+- **Tema de contraste alto** (preto e branco, foco amarelo, texto a 7:1 ou mais); no modo automático segue o pedido de contraste do sistema.
+- **Esqueleto de carregamento** ao ler arquivos e ao gerar o PDF.
+
+### Correções
+- Exportação GeoJSON incluía ponto com latitude ou longitude fora do intervalo.
+
+### Mudanças de comportamento
+- Taxa (%) calculável a partir de duas colunas ganha um indicador e um gráfico novos (“Taxa geral”).
+- Tabelas com dois pares de coordenadas passam a ter um mapa de fluxos na recomendação.
+- O seletor de tema ganha “Contraste alto”.
+
+### Limites conhecidos
+Sem reprojeção de coordenadas; OCR não implementado; GeoParquet não desenha a geometria; a linha do mapa de fluxos é reta (não é o trajeto real); a taxa geral só aparece quando a relação entre as colunas é detectada; o Observable Plot não pôde ser lido (HTTP 429).
+
+## 0.8.0 (publicada em 2026-10-30)
 
 ### Novidades
 - **Design system escuro/claro** (azul-marinho, ciano e roxo), barra lateral recolhível; PDF e impressão saem sempre em tema claro.
@@ -42,9 +65,9 @@ O manifesto de atualização (`atualizacao/versao.json`) continua em 0.7.5: publ
 Sem reprojeção de coordenadas; Parquet e OCR não implementados; o instalador NSIS foi construído e o aplicativo Electron foi aberto e testado desempacotado, mas a **instalação real** (atalhos, associação de arquivos, desinstalação e atualização automática) não foi exercitada; instalador e atualizador não são assinados.
 
 ## Como publicar (decisão do dono, depois de integrar a branch)
-1. Integrar `feature/dashboard-universal-2` ao `main` (pull request), sem force push.
+1. Integrar a branch ao `main` (pull request ou avanço simples), sem force push.
 2. `cd universal && npm run build` e, em `universal/desktop`, `npm run publicar` (gera `atualizacao/index.html` e `versao.json` com SHA-256).
-3. Conferir `atualizacao/versao.json` e fazer o commit/push do manifesto. Só então os programas instalados passam a baixar a 0.8.0.
+3. Conferir `atualizacao/versao.json` e fazer o commit/push do manifesto. Só então os programas instalados passam a oferecer a versão nova.
 4. Instalador novo (opcional): Actions › “Instalador do Dashboard Universal” › *Run workflow* (constrói o NSIS no Windows do GitHub).
 
 Rollback: não publicar o manifesto, ou voltar `atualizacao/` ao commit anterior; o `main` anterior (`91bce58`) permanece intacto até a integração.

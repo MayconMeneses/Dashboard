@@ -9,6 +9,7 @@ import type { LocaleInfo } from '../profile.js';
 import { applyTemplate, buildPdfDoc, describeState, formatBytes } from '../report.js';
 import type { ReportTemplate } from '../report.js';
 import { buildTerritory } from './territory.js';
+import { comEsqueleto } from '../app/esqueleto.js';
 import type { ReportChart, ReportModel } from '../report.js';
 import { kpis, qualityAlerts } from '../suggest.js';
 import type { ChartSpec, ColProfile, Dataset, Table } from '../types.js';
@@ -188,12 +189,14 @@ export async function openReport(ctx: ReportContext, fail: (m: string) => void) 
   btn.disabled = true;
   btn.textContent = 'Gerando PDF…';
   try {
-    const tpl = (($('reportTpl') as HTMLSelectElement | null)?.value ?? 'completo') as ReportTemplate;
-    const model = applyTemplate(buildReportModel(ctx), tpl);
-    const [{ default: pdfMake }, vfs] = await Promise.all([import('pdfmake/build/pdfmake'), import('pdfmake/build/vfs_fonts')]);
-    (pdfMake as unknown as { addVirtualFileSystem: (v: unknown) => void }).addVirtualFileSystem((vfs as { default?: unknown }).default ?? vfs);
-    const base = dataset.fileName.replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]+/g, '-');
-    await (pdfMake as unknown as { createPdf: (d: unknown) => { download: (n: string) => Promise<void> } }).createPdf(buildPdfDoc(model)).download(`relatorio-${base}.pdf`);
+    await comEsqueleto('Gerando o PDF…', async () => {
+      const tpl = (($('reportTpl') as HTMLSelectElement | null)?.value ?? 'completo') as ReportTemplate;
+      const model = applyTemplate(buildReportModel(ctx), tpl);
+      const [{ default: pdfMake }, vfs] = await Promise.all([import('pdfmake/build/pdfmake'), import('pdfmake/build/vfs_fonts')]);
+      (pdfMake as unknown as { addVirtualFileSystem: (v: unknown) => void }).addVirtualFileSystem((vfs as { default?: unknown }).default ?? vfs);
+      const base = dataset.fileName.replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]+/g, '-');
+      await (pdfMake as unknown as { createPdf: (d: unknown) => { download: (n: string) => Promise<void> } }).createPdf(buildPdfDoc(model)).download(`relatorio-${base}.pdf`);
+    });
   } catch (e) {
     console.error(e);
     fail('Não consegui gerar o PDF direto; abrindo o relatório para impressão (use “Salvar como PDF”).');

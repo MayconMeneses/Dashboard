@@ -139,6 +139,31 @@ ok('sem rolagem horizontal da página em 1280, 768 (tablet), 640 (zoom de 200%) 
   const registros = await p.evaluate(() => [...document.querySelectorAll('#kpis .kpi')].find((k) => k.querySelector('span')?.textContent === 'Registros')?.querySelector('b')?.textContent);
   assert.ok(Number(registros) > 0 && Number(registros) < 40, 'o filtro reduz os registros: ' + registros);
   ok('filtro cruzado acionado só pelo teclado (tabela de dados do gráfico): ' + registros + ' de 40 registros');
+  // painel lateral de filtros: abre pelo teclado, foco entra nele, controles ≥ 24 px, foco visível e Esc devolve o foco ao botão
+  await p.locator('#btnFiltros').focus();
+  await p.keyboard.press('Enter');
+  await p.waitForSelector('#painelFiltros:not([hidden])');
+  assert.equal(await p.evaluate(() => document.activeElement?.id), 'pfTitulo');
+  const dentro = await p.evaluate(() =>
+    [...document.querySelectorAll('#painelFiltros button, #painelFiltros select')].map((e) => {
+      const r = e.getBoundingClientRect();
+      return { n: (e.id || e.getAttribute('aria-label') || e.textContent || '').trim().slice(0, 24), w: Math.round(r.width), h: Math.round(r.height) };
+    }),
+  );
+  assert.deepEqual(dentro.filter((x) => x.w < 24 || x.h < 24), [], 'controles do painel menores que 24×24 px');
+  for (let i = 0; i < 4; i++) {
+    await p.keyboard.press('Tab');
+    const vis = await p.evaluate(() => {
+      const e = document.activeElement;
+      const cs = getComputedStyle(e);
+      return { dentro: !!e.closest('#painelFiltros'), ok: (cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) >= 2) || cs.boxShadow !== 'none' };
+    });
+    if (vis.dentro) assert.ok(vis.ok, 'foco visível dentro do painel');
+  }
+  await p.keyboard.press('Escape');
+  await p.waitForSelector('#painelFiltros', { state: 'hidden' });
+  assert.equal(await p.evaluate(() => document.activeElement?.id), 'btnFiltros');
+  ok('painel de filtros: abre e fecha pelo teclado, devolve o foco, controles ≥ 24 px e foco visível');
   await p.context().close();
 }
 

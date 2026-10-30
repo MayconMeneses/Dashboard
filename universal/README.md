@@ -2,7 +2,7 @@
 
 Projeto independente do painel de triatomíneos (não altera nada dele). Recebe um arquivo e gera sozinho indicadores, gráficos, mapa (quando há coordenadas) e tabela.
 
-- **Formatos:** CSV/TSV, Excel (XLSX, várias abas), **Word (.docx) com tabelas**, **PDF com tabelas (texto selecionável)**, JSON, GeoJSON, KML e KMZ. PDF escaneado (imagem) não é lido (não há OCR) e o formato antigo .doc não é suportado (salve como .docx).
+- **Formatos:** CSV/TSV, Excel (XLSX, várias abas), **Word (.docx) com tabelas**, **PDF com tabelas (texto selecionável)**, **Parquet**, JSON, GeoJSON, KML e KMZ. PDF escaneado (imagem) não é lido (não há OCR) e o formato antigo .doc não é suportado (salve como .docx).
 - **Automático:** reconhece colunas (número, data, categoria, sim/não, identificador, latitude/longitude) e sugere gráficos; o seletor *Gráficos* mostra menos ou mais.
 - **Prévia antes de gerar o painel:** mostra arquivo, formato, tamanho, SHA-256, codificação, separador, linhas lidas/ignoradas/não lidas, avisos e decisões da leitura, tipo de cada coluna (corrigível), valores inválidos e as primeiras linhas. Dá para trocar codificação (UTF-8/Windows-1252), separador, ordem de datas (dia/mês ou mês/dia) e formato de números (1.234,56 ou 1,234.56) antes de confirmar.
 - **Arquivos grandes:** até 200 mil linhas por tabela (50 MB); acima disso o painel avisa quantas linhas ficaram de fora.
@@ -35,6 +35,9 @@ Projeto independente do painel de triatomíneos (não altera nada dele). Recebe 
 - **Cada gráfico se explica:** descrição do que mostra, frase de **destaque calculada dos próprios dados** (maior, menor, pico, variação, pontos sem dado) e “Como ler este gráfico”.
 - **Regra de dados:** célula vazia nunca vira zero; aparece como “—” e fica fora das contas.
 - **Papel de cada coluna:** além do tipo, o painel deduz o papel (medida, dimensão, tempo, identificador, geográfica…) por regras explícitas e mostra a regra na tabela de colunas e em “Por que este gráfico”. Percentual e taxa usam média (não soma); códigos como CEP não viram medida nem gráfico.
+- **Busca, período e filtros:** busca de texto no topo (sem acento nem caixa) que vale para o painel inteiro, período rápido (30/90 dias, 12 meses, este ano, ano anterior) e um painel lateral que lista o que está aplicado e deixa acrescentar filtro por coluna e valor.
+- **Reordenar gráficos:** arraste pela alça ou use os botões ↑ ↓; a ordem fica no projeto salvo e no relatório. **Contraste alto:** tema próprio (texto a 7:1 ou mais). **Esqueleto de carregamento** ao ler arquivos e gerar o PDF.
+- **Taxa geral e fluxos:** taxa (%) que sai de duas colunas mostra também a taxa geral (soma ÷ soma, não a média das linhas); dois pares de coordenadas (origem e destino) viram um mapa de fluxos.
 - **Explorar por conta própria:** escolha agrupar por, medida e cálculo (contagem, soma, média, mediana, mínimo, máximo); combinações sem sentido são recusadas com explicação.
 - **Vários arquivos e relações:** abra vários arquivos juntos (tabelas “arquivo › aba”) e use *Relacionar tabelas*: a análise (cardinalidade, chaves repetidas, linhas sem par, valores que se repetem e inflam somas) aparece antes de confirmar; zeros à esquerda nunca são corrigidos sozinhos. O projeto guarda a receita e refaz a relação ao abrir. Também conta pontos dentro de polígonos.
 - **Geografia real:** GeoJSON (coleção, feição, Multi*, buracos) e KML (rotas, polígonos com furos) preservam a forma; o mapa desenha polígonos, linhas e pontos, colore por medida (quantis, legenda, “sem dado”), mostra densidade em grade e baixa GeoJSON. Só WGS84: outros sistemas de coordenadas geram aviso (não há reprojeção).

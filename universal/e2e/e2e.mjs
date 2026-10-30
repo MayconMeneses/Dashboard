@@ -577,6 +577,133 @@ ok('gráficos do PDF saem com fundo branco e texto escuro mesmo no tema escuro')
   ok('modo offline: CSV, PDF, XLSX, relatório e HTML compartilhável sem nenhuma requisição externa; dado com </script> não executa');
 }
 
+// 18. Busca e período no topo, painel lateral de filtros, reordenar gráficos, contraste alto, esqueleto de carregamento, Parquet e mapa de fluxos
+{
+  const NL = String.fromCharCode(10);
+  const ufs = ['São Paulo', 'Rio', 'Minas', 'Bahia', 'Ceará'];
+  const L = ['cidade;uf;valor;data'];
+  for (let i = 0; i < 40; i++) L.push(`cidade ${i};${ufs[i % 5]};${10 + i * 3};${String((i % 9) + 1).padStart(2, '0')}/${String((i % 12) + 1).padStart(2, '0')}/${i < 24 ? 2023 : 2024}`);
+  writeFileSync(join(dir, 'topo.csv'), L.join(NL));
+  const pt = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  pt.on('pageerror', (e) => errors.push(e.message));
+  await pt.goto(app);
+  await pt.setInputFiles('#file', join(dir, 'topo.csv'));
+  await pt.waitForSelector('#preview:not([hidden]) h2');
+  await pt.click('#preview button.primary');
+  await pt.waitForSelector('#charts .chart');
+  const registros = () => pt.evaluate(() => [...document.querySelectorAll('#kpis .kpi')].find((k) => k.querySelector('span')?.textContent === 'Registros')?.querySelector('b')?.textContent);
+  assert.equal(await registros(), '40');
+  // busca do topo: sem acento e sem distinguir caixa; vale para o painel inteiro
+  await pt.fill('#gSearch', 'sao paulo');
+  await pt.waitForFunction(() => [...document.querySelectorAll('#kpis .kpi')].some((k) => k.querySelector('b')?.textContent === '8' && k.querySelector('span')?.textContent === 'Registros'));
+  assert.ok((await pt.locator('#chips .chip').first().innerText()).includes('Busca: sao paulo'));
+  assert.ok((await pt.locator('#tinfo').innerText()).includes('de 40'), 'a tabela também respeita a busca');
+  await pt.locator('#chips .chip').first().click();
+  await pt.waitForFunction(() => document.querySelectorAll('#chips .chip').length === 0);
+  assert.equal(await registros(), '40');
+  assert.equal(await pt.inputValue('#gSearch'), '', 'a caixa de busca acompanha o estado');
+  // período rápido: este ano = o ano da data mais recente (2024 → 16 linhas)
+  await pt.selectOption('#gPeriodo', 'ano');
+  await pt.waitForFunction(() => [...document.querySelectorAll('#kpis .kpi')].some((k) => k.querySelector('b')?.textContent === '16' && k.querySelector('span')?.textContent === 'Registros'));
+  await pt.selectOption('#gPeriodo', 'tudo');
+  await pt.waitForFunction(() => document.querySelectorAll('#chips .chip').length === 0);
+  // painel lateral de filtros
+  await pt.click('#btnFiltros');
+  await pt.waitForSelector('#painelFiltros:not([hidden])');
+  assert.equal(await pt.evaluate(() => document.activeElement?.id), 'pfTitulo', 'o foco vai para o painel');
+  await pt.selectOption('#pfColuna', 'uf');
+  await pt.selectOption('#pfValor', 'Bahia');
+  await pt.click('#pfAplicar');
+  await pt.waitForFunction(() => document.querySelectorAll('#chips .chip').length === 1);
+  assert.equal(await registros(), '8');
+  assert.equal((await pt.locator('#btnFiltros').innerText()).trim(), 'Filtros (1)');
+  assert.ok((await pt.locator('#pfCorpo').innerText()).includes('uf: Bahia'));
+  await pt.click('#pfLimpar');
+  await pt.waitForFunction(() => document.querySelectorAll('#chips .chip').length === 0);
+  assert.equal(await registros(), '40');
+  await pt.keyboard.press('Escape');
+  await pt.waitForSelector('#painelFiltros', { state: 'hidden' });
+  assert.equal(await pt.evaluate(() => document.activeElement?.id), 'btnFiltros', 'o foco volta ao botão');
+  // reordenar os gráficos: botões (teclado) e arrastar
+  const ordem = () => pt.evaluate(() => [...document.querySelectorAll('#charts > .chart[data-id]')].map((c) => c.dataset.id));
+  const o0 = await ordem();
+  assert.ok(o0.length >= 3, 'há gráficos para reordenar: ' + o0.length);
+  await pt.locator('#charts > .chart[data-id]').first().locator('button.mover', { hasText: '↓' }).click();
+  await pt.waitForFunction((p) => document.querySelector('#charts > .chart[data-id]')?.dataset.id === p, o0[1]);
+  const o1 = await ordem();
+  assert.deepEqual(o1.slice(0, 2), [o0[1], o0[0]], 'o primeiro desceu uma posição');
+  await pt.locator('#charts > .chart[data-id]').first().scrollIntoViewIfNeeded();
+  const alca = pt.locator('#charts > .chart[data-id]').nth(1).locator('.alca');
+  await alca.dragTo(pt.locator('#charts > .chart[data-id]').first(), { targetPosition: { x: 40, y: 5 } });
+  await pt.waitForFunction((id) => document.querySelector('#charts > .chart[data-id]')?.dataset.id === id, o1[1]);
+  const o2 = await ordem();
+  assert.equal(o2[0], o1[1], 'o segundo foi arrastado para o início (voltou à ordem original)');
+  assert.deepEqual(o2.slice(0, 2), [o0[0], o0[1]]);
+  // a ordem e a busca vão no projeto salvo
+  await pt.fill('#gSearch', 'rio');
+  await pt.waitForFunction(() => document.querySelectorAll('#chips .chip').length === 1);
+  const [pj3] = await Promise.all([pt.waitForEvent('download'), pt.click('#btnSaveProj')]);
+  await pj3.saveAs(join(dir, 'topo.projeto.json'));
+  const saved = JSON.parse(readFileSync(join(dir, 'topo.projeto.json'), 'utf8'));
+  assert.equal(saved.estado.search, 'rio');
+  assert.deepEqual(saved.estado.chartOrder.slice(0, 3), (await ordem()).slice(0, 3));
+  // contraste alto
+  await pt.selectOption('#themeSel', 'contrast');
+  const cores = await pt.evaluate(() => ({ tema: document.documentElement.dataset.theme, fundo: getComputedStyle(document.body).backgroundColor, texto: getComputedStyle(document.querySelector('h2') ?? document.body).color }));
+  assert.equal(cores.tema, 'contrast');
+  assert.equal(cores.fundo, 'rgb(0, 0, 0)');
+  assert.equal(cores.texto, 'rgb(255, 255, 255)');
+  await pt.close();
+
+  // esqueleto de carregamento aparece enquanto um arquivo grande é lido
+  const pe = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  pe.on('pageerror', (e) => errors.push(e.message));
+  await pe.goto(app);
+  // a leitura bloqueia a página por um tempo: um observador registra se o esqueleto chegou a aparecer
+  await pe.evaluate(() => {
+    window.__sk = '';
+    new MutationObserver(() => {
+      const b = document.getElementById('carregando');
+      if (b && !b.hidden && b.querySelector('.sk')) window.__sk = b.textContent;
+    }).observe(document.body, { subtree: true, attributes: true, childList: true });
+  });
+  await pe.setInputFiles('#file', join(dir, 'grande.csv'));
+  await pe.waitForSelector('#preview:not([hidden]) h2', { timeout: 60000 });
+  assert.ok((await pe.evaluate(() => window.__sk)).includes('Lendo o arquivo'), 'o esqueleto apareceu durante a leitura');
+  assert.equal(await pe.locator('#carregando').isHidden(), true, 'o esqueleto some quando a prévia aparece');
+  await pe.close();
+
+  // Parquet pelo seletor de arquivo
+  const { parquetWriteBuffer } = await import('hyparquet-writer');
+  const pq = Buffer.from(new Uint8Array(parquetWriteBuffer({ columnData: [{ name: 'uf', data: ['SP', 'RJ', 'MG', 'SP', 'RJ', 'MG', 'SP', 'RJ', 'MG', 'SP', 'RJ', 'MG'], type: 'STRING' }, { name: 'valor', data: [10.5, 20, null, 5, 7, 9, 1, 2, 3, 4, 5, 6], type: 'DOUBLE' }] })));
+  writeFileSync(join(dir, 'dados.parquet'), pq);
+  const pp3 = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  pp3.on('pageerror', (e) => errors.push(e.message));
+  await pp3.goto(app);
+  await pp3.setInputFiles('#file', join(dir, 'dados.parquet'));
+  await pp3.waitForSelector('#preview:not([hidden]) h2');
+  assert.ok((await pp3.locator('#preview').innerText()).includes('.parquet'), 'a prévia mostra o formato Parquet');
+  await pp3.click('#preview button.primary');
+  await pp3.waitForSelector('#kpis .kpi');
+  const reg3 = await pp3.evaluate(() => [...document.querySelectorAll('#kpis .kpi')].find((k) => k.querySelector('span')?.textContent === 'Registros')?.querySelector('b')?.textContent);
+  assert.equal(reg3, '12');
+  await pp3.close();
+
+  // mapa de fluxos: um par origem/destino por registro
+  writeFileSync(join(dir, 'fluxos.csv'), ['origem;destino;lat_origem;lon_origem;lat_destino;lon_destino;peso', 'Fortaleza;Sobral;-3.73;-38.52;-3.69;-40.35;1200', 'Fortaleza;Crato;-3.73;-38.52;-7.23;-39.41;800', 'Sobral;Crato;-3.69;-40.35;-7.23;-39.41;500', 'Fortaleza;Sobral;-3.73;-38.52;-3.69;-40.35;300', 'Crato;Fortaleza;-7.23;-39.41;-3.73;-38.52;700'].join(NL));
+  const pf = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  pf.on('pageerror', (e) => errors.push(e.message));
+  await pf.goto(app);
+  await pf.setInputFiles('#file', join(dir, 'fluxos.csv'));
+  await pf.waitForSelector('#preview:not([hidden]) h2');
+  await pf.click('#preview button.primary');
+  await pf.waitForSelector('#charts .map path.leaflet-interactive', { timeout: 20000 });
+  assert.equal(await pf.locator('#charts .map path.leaflet-interactive').count(), 5, 'uma linha por registro');
+  assert.ok((await pf.locator('#charts p[role=status]').first().innerText()).includes('5 de 5'));
+  await pf.close();
+  ok('busca e período no topo, painel de filtros, reordenar (botões e arrastar) e salvar, contraste alto, esqueleto, Parquet e mapa de fluxos');
+}
+
 assert.deepEqual(errors, [], 'sem erros de página: ' + errors.join(' | '));
 await browser.close();
 console.log(log.join('\n'));
