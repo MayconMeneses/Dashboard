@@ -22,7 +22,7 @@ O que **está** comprovado: 206 testes unitários, 23 cenários de ponta a ponta
 | 5 (BI avançado) | `9112f20` | `FASE-05` |
 | 6 (GIS avançado) | `30419f3`, `f6e5412` | `FASE-06` |
 | 7 (importações) | `b3211f8` | `FASE-07` |
-| 8 (relatórios, desktop, release) | commit desta fase | `FASE-08` |
+| 8 (relatórios, desktop, release) | `25edecd` | `FASE-08` |
 
 Rollback: o `main` não foi tocado nem sofreu force push; desfazer tudo é não integrar a branch. O manifesto de atualização (`atualizacao/versao.json`) continua em 0.7.5, então nenhum programa instalado foi afetado. Para desfazer uma fase isolada, `git revert` do(s) commit(s) acima.
 
