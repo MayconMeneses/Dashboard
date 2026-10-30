@@ -1,1 +1,2 @@
-877f1fc2b483bfcf2c1697f2d54533501ce019a82f2203f3952766607645359c  Instalador-Dashboard-Universal-0.2.0.exe  (resultado de JUNTAR.bat)
+2933ec692978f6aea9ed62d6e2b720a0a3036c45de30745a4fb1516879f84c06  Instalador-Dashboard-Universal-0.4.0.exe  (resultado de JUNTAR.bat)
+877f1fc2b483bfcf2c1697f2d54533501ce019a82f2203f3952766607645359c  Instalador-Dashboard-Universal-0.2.0.exe  (resultado de JUNTAR-0.2.0.bat)
