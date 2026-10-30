@@ -33,13 +33,13 @@ Status: **PENDENTE / parcial**. Entregue e testado: geometrias reais preservadas
 Licenças e tamanhos de pacote **não foram verificados** (as páginas lidas não os trazem). Critério 18 mantido: nenhuma dependência adicionada.
 
 ## Verificação (observada)
-- vitest: 160 passam (12 arquivos; 26 novos em `test/geo.test.ts`). `npm run lint`, `tsc --noEmit --noUnusedLocals`, `vite build` sem erro. e2e: 20 cenários, 0 falhas (14 novo).
+- vitest: 160 passam (12 arquivos; 26 novos em `test/geo.test.ts`). `npm run lint`, `tsc --noEmit --noUnusedLocals`, `vite build` sem erro. e2e: 21 cenários, 0 falhas (14 e 15 novos).
 - Mutações (feitas e revertidas): centroide por média de vértices → 6 testes falham; dica do polígono como HTML → e2e falha (“HTML do arquivo não pode executar na dica do mapa”).
 - Desempenho (critério 16): 5.000 polígonos (quadrados sintéticos) desenhados em SVG em ~0,7 s no Chrome desta máquina (e2e 14). Medida única, uma máquina, polígonos simples de 5 vértices; não vale para polígonos com milhares de vértices. Limite do desenho mantido em 5.000 feições, informado no cartão.
 - Arquivos: `main.ts` 910 linhas (teto 915); nenhum arquivo novo acima de 400; sem ciclos.
 
 ## Limites e riscos abertos
-- **Fundo do mapa padrão é Esri (acessa a internet)** e revela a região consultada. É uma decisão anterior à Fase 6, não alterada; vai ao usuário (critério 12: “dados privados não saem por padrão”).
+- **Fundo do mapa: o padrão passou de Esri para “sem fundo”** (decisão do usuário). Projetos salvos e HTML compartilhável sem a escolha gravada também abrem sem fundo; quem gravou “Esri” continua com Esri. A Esri segue como opção no seletor (acessa a internet e revela a região consultada). Verificado no e2e 15: ao abrir o mapa, zero requisição externa; ao escolher a Esri, as imagens são pedidas (controle positivo). Mutação no padrão efetivo (`st.basemap ?? …`) faz o e2e 15 falhar. Observação: só mudar a variável inicial não bastava, pois ela é sobrescrita ao carregar o arquivo.
 - Sem reprojeção: arquivos em UTM/outro CRS são recusados no mapa com aviso, não convertidos.
 - Centroide e área são planos, em graus: servem para posicionar, não para medir distância ou área.
 - Geometrias muito detalhadas e arquivos de mais de 50 MB não foram medidos.

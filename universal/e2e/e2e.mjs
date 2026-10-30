@@ -412,6 +412,37 @@ ok('gráficos do PDF saem com fundo branco e texto escuro mesmo no tema escuro')
   ok('geometrias reais: polígono com buraco, mapa temático, dica sem HTML, aviso de coordenada projetada, 5.000 polígonos em ' + ms + ' ms');
 }
 
+// 15. Privacidade do mapa: por padrão nenhuma requisição de mapa de fundo; a Esri só é consultada se o usuário escolher
+{
+  const linhas = ['nome;latitude;longitude'];
+  for (let i = 0; i < 12; i++) linhas.push(`ponto ${i};-4.${40 + i};-40.${90 + i}`);
+  writeFileSync(join(dir, 'fundo.csv'), linhas.join(String.fromCharCode(10)));
+  const pf = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  pf.on('pageerror', (e) => errors.push(e.message));
+  const externas = [];
+  await pf.route(/arcgisonline.com/, (r) => {
+    externas.push(r.request().url());
+    return r.abort();
+  });
+  pf.on('request', (r) => {
+    if (/^https?:/.test(r.url()) && !r.url().startsWith('file:')) externas.push(r.url());
+  });
+  await pf.goto(app);
+  await pf.setInputFiles('#file', join(dir, 'fundo.csv'));
+  await pf.waitForSelector('#preview:not([hidden]) h2');
+  await pf.click('#preview button.primary');
+  await pf.waitForSelector('#charts .map .leaflet-interactive', { timeout: 20000 });
+  await pf.waitForTimeout(1500);
+  assert.equal(await pf.locator('select[aria-label="Mapa de fundo"]').inputValue(), 'none', 'padrão: sem mapa de fundo');
+  assert.deepEqual(externas, [], 'nenhuma requisição externa ao abrir o mapa: ' + externas.join(', '));
+  await pf.locator('select[aria-label="Mapa de fundo"]').selectOption('esri');
+  await pf.waitForFunction(() => document.querySelectorAll('#charts .map .leaflet-tile, #charts .map .leaflet-tile-pane').length > 0);
+  await pf.waitForTimeout(1500);
+  assert.ok(externas.some((u) => /arcgisonline/.test(u)), 'ao escolher a Esri, as imagens são pedidas (controle positivo)');
+  await pf.close();
+  ok('mapa abre sem fundo e sem requisição externa; a Esri só é consultada se escolhida');
+}
+
 assert.deepEqual(errors, [], 'sem erros de página: ' + errors.join(' | '));
 await browser.close();
 console.log(log.join('\n'));
