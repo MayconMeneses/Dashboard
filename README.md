@@ -1,5 +1,24 @@
 # Dashboard Universal
 
+<!-- portfolio-quick-view:start -->
+## Visão rápida para recrutadores | Recruiter overview
+
+**Problema:** transformar arquivos de diferentes formatos em indicadores e visualizações úteis sem preparar manualmente cada dashboard.  
+**Solução:** aplicativo que interpreta dados locais, escolhe visualizações, apresenta gráficos, tabelas e mapas quando disponíveis.  
+**Stack:** React · TypeScript · Vite · Node.js · Fastify · SQLite · Chart.js · Leaflet · Electron.
+
+**O que demonstra no código**
+- Leitura de CSV, Excel, Word, PDF com tabelas, JSON, GeoJSON, KML e KMZ.
+- Interpretação de colunas, verificações de qualidade, filtros e relatórios.
+- Distribuição para Windows, testes automatizados e workflows de CI documentados.
+
+**Diferencial de privacidade:** os arquivos do usuário são processados no computador, sem envio a um serviço remoto como parte do fluxo descrito.  
+**Veja rapidamente:** [capturas](#prints) · [destaques técnicos](#destaques-técnicos) · [instaladores e documentação](universal/).  
+**EN:** Local-first analytics dashboard that transforms multiple file formats into charts, quality checks and geospatial views.
+
+<!-- portfolio-quick-view:end -->
+
+
 **Arraste uma planilha ou um arquivo e receba um painel pronto:** indicadores, gráficos explicados, mapa (quando há coordenadas) e alertas de qualidade dos dados. Tudo roda no próprio computador, e os dados do arquivo não são enviados a nenhum servidor.
 
 Formatos: CSV, Excel, Word (.docx), PDF com tabelas, JSON, GeoJSON, KML e KMZ. Tem instalador para Windows com atualização automática. A documentação completa está em [`universal/`](universal/).
